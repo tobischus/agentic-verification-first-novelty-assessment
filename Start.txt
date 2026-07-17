@@ -1,0 +1,23 @@
+1. GROBID zurücksetzen (mit Auto-Restart gegen Abstürze)
+
+docker rm -f grobid
+docker run -d --init --ulimit core=0 -p 8070:8070 --restart unless-stopped --name grobid grobid/grobid:0.9.0-crf
+Dann ~60–120 s warten und prüfen (sollte true zeigen):
+
+
+curl http://127.0.0.1:8070/api/isalive
+true
+--restart unless-stopped lässt Docker GROBID automatisch neu starten, wenn es per OOM abstürzt → weniger „GROBID not reachable".
+
+2. Backend starten (im Projekt-Ordner, mit voller Python-Pfad)
+
+set PYTHONUTF8=1
+set UNPAYWALL_EMAIL=tobischus@gmail.com
+"C:\Users\tobis\AppData\Local\Programs\Python\Python311\python.exe" src/novelty_assessment/api.py
+Fertig, wenn Uvicorn running on http://127.0.0.1:8099 erscheint. (Voller Pfad = umgeht die conda-base-Umgebung, in der die Pakete fehlen.)
+
+3. Frontend starten (neues Terminal)
+
+cd frontend
+npm run dev
+Dann http://localhost:5173 im Browser öffnen.
