@@ -285,6 +285,38 @@ class EnhancedGrobidParser:
             return ""
         return " ".join(element.itertext()).strip()
 
+    def extract_full_text_sections(self, root: etree._ElementTree) -> List[dict]:
+        """Extract the body as a list of {"section", "text"} entries.
+
+        Sections are the top-level <div> elements of <text><body>. The head
+        (<head>) is the section title; the text is the concatenation of the
+        section's paragraphs. This is the submission's full text with sections,
+        sourced directly from GROBID (no separate OCR tool required).
+        """
+        sections: List[dict] = []
+        body = root.xpath(".//tei:text/tei:body", namespaces=self.ns)
+        if not body:
+            return sections
+
+        for div in body[0].xpath("./tei:div", namespaces=self.ns):
+            head_elems = div.xpath("./tei:head", namespaces=self.ns)
+            head = self._get_text_content(head_elems[0]).strip() if head_elems else ""
+
+            paragraphs = div.xpath(".//tei:p", namespaces=self.ns)
+            if paragraphs:
+                text = " ".join(
+                    self._get_text_content(p).strip() for p in paragraphs
+                ).strip()
+            else:
+                # No <p>: fall back to all div text minus the head.
+                text = self._get_text_content(div).strip()
+                if head and text.startswith(head):
+                    text = text[len(head):].strip()
+
+            sections.append({"section": head, "text": text})
+
+        return sections
+
     def process_single_tei_file(self, tei_file_path: str, output_file_path: str) -> ParsedPaper:
         """
         Process a single TEI file and save the result to JSON.
