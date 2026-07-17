@@ -18,11 +18,17 @@ requests>=2.28.0
 rapidfuzz>=3.0.0
 sentence-transformers>=2.2.0
 
+# Passage retrieval for the agentic claim loop (in-document BM25 over passages/sections)
+rank_bm25>=0.2.2
+
 # Scientific computing
 scikit-learn>=1.3.0
 
 # XML processing (for GROBID TEI files)
 lxml>=4.9.0
+
+# PDF processing (first-page title fallback for watermarked submissions)
+pymupdf>=1.24.0
 
 # Utilities
 python-dotenv>=1.0.0
@@ -30,3 +36,8 @@ tenacity>=8.0.0
 
 # Paper retrieval (ACL Anthology)
 acl-anthology>=0.2.0
+
+# Backend API (serves the React frontend / orchestrator)
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+python-multipart>=0.0.9
