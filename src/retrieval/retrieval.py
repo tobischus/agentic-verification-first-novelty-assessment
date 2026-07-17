@@ -21,6 +21,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from pydantic import BaseModel, Field
 from rapidfuzz import fuzz
 from sentence_transformers import SentenceTransformer
+from sklearn.cluster import KMeans
 from sklearn.metrics.pairwise import cosine_similarity
 
 logger = logging.getLogger(__name__)
@@ -28,7 +29,8 @@ logger = logging.getLogger(__name__)
 # Load environment variables
 load_dotenv()
 
-sys.path.append("/home/afzal/novelty_assessment/RankGPT")
+# RankGPT lives in the repo root (cloned alongside this project).
+sys.path.append(str(Path(__file__).resolve().parents[2] / "RankGPT"))
 
 from rank_gpt import (
     create_permutation_instruction,
@@ -69,6 +71,11 @@ class Paper:
     authors: str = ""
     novel: str = None
     cited_paper: bool = False
+    externalIds: dict = None  # S2 external ids (ArXiv/DOI/...) carried through for Step-4 PDF fetch
+    doi: str = None           # convenience copy of externalIds["DOI"], for the PDF fetch
+    relevance: float = 0.0  # SPECTER2 cosine similarity to the submission (0-1), for the UI
+    cluster: int = -1       # topical cluster id among the final related work (UI grouping)
+    cluster_label: str = ""  # human-readable cluster heading
     embedding: np.ndarray = None
 
     def __repr__(self):
@@ -79,6 +86,41 @@ class Paper:
         data = asdict(self)
         data.pop("embedding", None)
         return data
+
+
+def _abstract_shingles(text: str, n: int = 10):
+    """Set of lowercase n-word shingles of an abstract (for near-duplicate detection)."""
+    words = re.findall(r"[a-z0-9]+", (text or "").lower())
+    if len(words) < n:
+        return set()
+    return {" ".join(words[i : i + n]) for i in range(len(words) - n + 1)}
+
+
+def is_same_paper(candidate_abstract: str, submission_abstract: str,
+                  n: int = 10, min_shared: int = 2, token_ratio: float = 95.0) -> bool:
+    """True when a retrieved paper is the SAME work as the submission (e.g. an earlier
+    arXiv version that was renamed, so the title-similarity check misses it).
+
+    Two versions of one paper reuse long verbatim word runs in the abstract even after
+    heavy editing, whereas different papers -- even on the exact same topic -- essentially
+    never share a 10-word span. Empirically (real rename "Soft Prompts Go Hard" <-
+    "Self-interpreting Adversarial Images"): 9 shared 10-grams vs 0 for the closest
+    genuine related-work paper, while token-set similarity was only ~74% and could not
+    separate them. So the primary signal is shared long n-grams; a high token-set ratio
+    also catches the trivial preprint==published case where abstracts are near-identical.
+    Deliberately strict (>=2 distinct 10-word verbatim runs) so real related work is never
+    dropped -- a false positive would silently hide a legitimate paper from the reviewer.
+    """
+    ca = (candidate_abstract or "").strip()
+    sa = (submission_abstract or "").strip()
+    # ignore the S2 "No abstract available" placeholder and anything too short to judge
+    if len(ca) < 80 or len(sa) < 80 or "no abstract available" in ca.lower():
+        return False
+    shared = len(_abstract_shingles(ca, n) & _abstract_shingles(sa, n))
+    if shared >= min_shared:
+        return True
+    # near-identical abstracts (same paper, barely edited) -> very high token overlap
+    return fuzz.token_set_ratio(ca.lower(), sa.lower()) >= token_ratio
 
 
 @dataclass
@@ -150,13 +192,22 @@ class PaperRankingSystem:
         self.logger.info(f"Embedding model: {embedding_model}")
 
         # Initialize models
-        self.keyword_llm = ChatLiteLLM(model=keyword_model)
+        # temperature=0 -> deterministic keyword generation (same paper -> same queries),
+        # so retrieval is reproducible across runs.
+        self.keyword_llm = ChatLiteLLM(model=keyword_model, temperature=0)
         self.ranking_model = ranking_model
         self.embedding_model = SentenceTransformer(embedding_model)
 
         # Get API keys from environment
         self.openai_api_key = os.getenv("OPENAI_API_KEY")
         self.s2_api_key = os.getenv("SEMANTIC_SCHOLAR_API_KEY")
+
+        # Proactive throttle to respect S2's 1 req/sec (cumulative) limit.
+        # S2 advises staying *below* the threshold, so space requests >1s apart.
+        self._s2_min_interval = 1.1      # adaptive: grows on 429, eases on success
+        self._s2_floor_interval = 1.1
+        self._s2_max_interval = 8.0
+        self._s2_last_request = 0.0
 
         if not self.openai_api_key:
             self.logger.error("OPENAI_API_KEY environment variable not set")
@@ -198,24 +249,40 @@ class PaperRankingSystem:
 
         self.logger.info(f"Logging setup complete. Log file: {log_file}")
 
+    def _throttle_s2(self):
+        """Sleep so consecutive S2 requests stay >= _s2_min_interval apart."""
+        wait = self._s2_min_interval - (time.time() - self._s2_last_request)
+        if wait > 0:
+            time.sleep(wait)
+        self._s2_last_request = time.time()
+
     def _make_request_with_retry(
-        self, url: str, headers: Dict = None, max_retries: int = 3
+        self, url: str, headers: Dict = None, max_retries: int = 6
     ) -> Dict:
-        """Make HTTP request with exponential backoff retry logic."""
+        """Make HTTP request with adaptive, Retry-After-aware rate limiting."""
         self.logger.debug(f"Making request to: {url}")
 
         for attempt in range(max_retries):
             try:
+                self._throttle_s2()
                 response = requests.get(url, headers=headers)
 
                 if response.status_code == 200:
                     self.logger.debug(f"Request successful on attempt {attempt + 1}")
+                    # success -> ease spacing back toward the floor
+                    self._s2_min_interval = max(self._s2_floor_interval, self._s2_min_interval * 0.9)
                     return response.json()
                 elif response.status_code == 429:
-                    # Rate limited - exponential backoff
-                    wait_time = (2**attempt) * 5  # 5, 10, 20 seconds
+                    # Slow future requests down and wait exactly as long as S2 asks.
+                    self._s2_min_interval = min(self._s2_max_interval, self._s2_min_interval * 1.5)
+                    ra = response.headers.get("Retry-After")
+                    try:
+                        wait_time = min(30.0, float(ra)) if ra else (2**attempt) * 2
+                    except ValueError:
+                        wait_time = (2**attempt) * 2
                     self.logger.warning(
-                        f"Rate limited. Retrying in {wait_time}s (attempt {attempt + 1}/{max_retries})"
+                        f"Rate limited. Waiting {wait_time:.1f}s, spacing now "
+                        f"{self._s2_min_interval:.1f}s (attempt {attempt + 1}/{max_retries})"
                     )
                     time.sleep(wait_time)
                     continue
@@ -328,10 +395,19 @@ class PaperRankingSystem:
         else:
             self.logger.warning("No Semantic Scholar API key found - using public API")
 
+        try:
+            import progress as _progress  # optional sub-progress for the frontend
+        except Exception:
+            _progress = None
+        if _progress:
+            _progress.start_phase("Searching Semantic Scholar", len(queries))
+
         for i, query in enumerate(queries):
+            if _progress:
+                _progress.report(i, len(queries))
             try:
                 self.logger.debug(f"Processing query {i+1}/{len(queries)}: '{query}'")
-                url = f"{self.base_url}/search?query={query}&fields=title,abstract,paperId,publicationDate,year&limit={max_papers_per_query}"
+                url = f"{self.base_url}/search?query={query}&fields=title,abstract,paperId,publicationDate,year,externalIds&limit={max_papers_per_query}"
                 if year:
                     url += f"&year=-{year}"
                     self.logger.debug(f"Filtering papers before year {year}")
@@ -342,6 +418,7 @@ class PaperRankingSystem:
                     papers_count = len(data["data"])
                     self.logger.info(f"Query '{query}' returned {papers_count} papers")
                     for paper_data in data["data"]:
+                        ext_ids = paper_data.get("externalIds") or {}
                         all_papers.append(
                             Paper(
                                 paper_id=paper_data.get("paperId", "Unknown ID"),
@@ -351,6 +428,8 @@ class PaperRankingSystem:
                                 ),
                                 publication_date=paper_data.get("publicationDate", ""),
                                 year=paper_data.get("year", ""),
+                                externalIds=ext_ids,
+                                doi=ext_ids.get("DOI"),
                             )
                         )
                 else:
@@ -362,6 +441,8 @@ class PaperRankingSystem:
                 )
                 continue
 
+        if _progress:
+            _progress.report(len(queries), len(queries))
         self.logger.info(f"Total papers retrieved: {len(all_papers)}")
         return all_papers
 
@@ -376,6 +457,15 @@ class PaperRankingSystem:
             # Title similarity check
             if fuzz.ratio(paper.title.lower(), source_paper.title.lower()) >= 90:
                 self.logger.debug(f"Skipping similar title: {paper.title}")
+                return False
+
+            # Same-paper check: an earlier/renamed VERSION of the submission itself (the
+            # title check misses it when the paper was renamed between versions). Detected
+            # via shared long verbatim n-grams in the abstract.
+            if is_same_paper(paper.abstract, source_paper.abstract):
+                self.logger.info(
+                    f"Skipping the submission's own version (abstract near-duplicate): {paper.title}"
+                )
                 return False
 
             # PRIORITY 1: If both have full dates, use precise date comparison
@@ -420,8 +510,14 @@ class PaperRankingSystem:
             self.logger.debug(f"Skipping paper with no date: {paper.title}")
             return False
 
-        # Add cited papers (always include)
+        # Add cited papers (always include) -- except a cited paper that is actually the
+        # submission's own earlier/renamed version (self-citation of a prior arXiv version).
         for paper in cited_papers:
+            if is_same_paper(paper.abstract, source_paper.abstract):
+                self.logger.info(
+                    f"Skipping cited paper that is the submission's own version: {paper.title}"
+                )
+                continue
             paper.cited_paper = True  # Add this flag
             unique_papers[paper.paper_id] = paper
 
@@ -524,7 +620,18 @@ class PaperRankingSystem:
         try:
             if ranking_type == "general":
                 self.logger.debug("Using sliding windows approach for general ranking")
-                ranked_item_list, total_cost = sliding_windows(item)
+                # Upstream RankGPT's sliding_windows returns only the reranked item
+                # (no cost); Afzal's fork returned (item, cost). Adapt to upstream.
+                ranked_item_list = sliding_windows(
+                    item=item,
+                    rank_start=0,
+                    rank_end=len(papers),
+                    window_size=20,
+                    step=10,
+                    model_name=self.ranking_model,
+                    api_key=self.openai_api_key,
+                )
+                total_cost = 0.0
             else:
                 self.logger.debug("Using purpose-based ranking approach")
                 # Purpose-based ranking
@@ -555,7 +662,8 @@ class PaperRankingSystem:
                         PURPOSE_PROMPT_PREFIX + messages[3:-1] + PURPOSE_PROMPT_POST
                     )
 
-                    permutation, cost = run_llm(
+                    # Upstream run_llm returns only the permutation string (no cost).
+                    permutation = run_llm(
                         messages,
                         model_name=self.ranking_model,
                         api_key=self.openai_api_key,
@@ -567,7 +675,6 @@ class PaperRankingSystem:
 
                     end_pos = end_pos - step
                     start_pos = start_pos - step
-                    total_cost += cost
 
             # Reconstruct paper list from ranked results
             reranked_papers_list = []
@@ -619,6 +726,82 @@ class PaperRankingSystem:
                 unique_papers[paper.paper_id] = paper
 
         return list(unique_papers.values())
+
+    def cluster_papers(self, papers: List[Paper]) -> None:
+        """Group the FINAL related work into topical clusters (UI navigation aid only,
+        never a judgment input). Uses the already-computed SPECTER2 embeddings (no extra
+        model load) + KMeans; labels each cluster via the LLM (keyword fallback)."""
+        papers = [p for p in papers if p is not None]
+        n = len(papers)
+        if n == 0:
+            return
+        try:
+            if n < 4:
+                for p in papers:
+                    p.cluster = 0
+            else:
+                embs = np.array(
+                    [p.embedding if p.embedding is not None else np.zeros(768) for p in papers],
+                    dtype=float,
+                )
+                norms = np.linalg.norm(embs, axis=1, keepdims=True)
+                norms[norms == 0] = 1.0
+                embs = embs / norms  # L2-normalize -> KMeans approximates cosine k-means
+                k = max(2, min(5, round(n / 4)))
+                labels = KMeans(n_clusters=k, random_state=0, n_init=10).fit_predict(embs)
+                for p, c in zip(papers, labels):
+                    p.cluster = int(c)
+            groups = {}
+            for p in papers:
+                groups.setdefault(p.cluster, []).append(p.title)
+            names = self._label_clusters(groups)
+            for p in papers:
+                p.cluster_label = names.get(p.cluster, f"Cluster {p.cluster + 1}")
+            self.logger.info(f"Clustered {n} related-work papers into {len(groups)} groups")
+        except Exception as e:
+            self.logger.warning(f"Clustering failed ({e}); related work left unclustered")
+
+    def _label_clusters(self, groups: Dict[int, List[str]]) -> Dict[int, str]:
+        """Map cluster id -> a concise topic label (LLM, with a keyword fallback)."""
+        import collections
+        import re
+
+        _STOP = {
+            "using", "based", "with", "from", "that", "this", "into", "over", "via",
+            "models", "model", "language", "large", "approach", "approaches", "method",
+            "methods", "framework", "towards", "learning", "neural", "networks",
+        }
+
+        def keywords(titles):
+            words = re.findall(r"[A-Za-z][A-Za-z\-]{3,}", " ".join(titles).lower())
+            common = collections.Counter(w for w in words if w not in _STOP).most_common(3)
+            return ", ".join(w for w, _ in common).title() if common else "Related work"
+
+        out = {cid: keywords(titles) for cid, titles in groups.items()}
+        try:
+            listing = "\n\n".join(
+                f"Group {cid}:\n- " + "\n- ".join(t[:160] for t in titles[:8])
+                for cid, titles in groups.items()
+            )
+            prompt = (
+                "Below are groups of related scientific paper titles. Give EACH group a "
+                "concise topic label (3-6 words, no quotes). Return ONLY a JSON object "
+                'mapping the group number (as a string) to its label, e.g. {"0": "Graph '
+                'retrieval methods"}.\n\n' + listing
+            )
+            llm = ChatOpenAI(model_name="gpt-4.1", temperature=0, api_key=self.openai_api_key)
+            resp = llm.invoke(prompt).content
+            m = re.search(r"\{.*\}", resp, re.S)
+            if m:
+                for k, v in json.loads(m.group(0)).items():
+                    try:
+                        if v and str(v).strip():
+                            out[int(k)] = str(v).strip()
+                    except (ValueError, TypeError):
+                        pass
+        except Exception as e:
+            self.logger.warning(f"Cluster labeling via LLM failed ({e}); using keywords")
+        return out
 
     def save_results(self, results: RankingResults) -> None:
         """Save results directly to results_dir."""
@@ -732,6 +915,10 @@ class PaperRankingSystem:
             similarity_scores = self.compute_similarity_scores(
                 source_paper.embedding, [p.embedding for p in all_papers]
             )
+            # Persist the similarity as a 0-1 relevance score for the frontend.
+            for i, p in enumerate(all_papers):
+                if i < len(similarity_scores):
+                    p.relevance = round(float(similarity_scores[i]), 4)
 
             top_n_papers = self.filter_top_n_papers(
                 all_papers, similarity_scores, top_n_similarity
@@ -740,17 +927,27 @@ class PaperRankingSystem:
                 f"Filtered to top {len(top_n_papers)} papers by similarity"
             )
 
-            # Step 6: Perform RankGPT ranking
+            # Step 6: Perform RankGPT ranking (two passes: general + purpose)
             self.logger.info("Step 6: Performing RankGPT ranking")
+            try:
+                import progress as _progress  # optional sub-progress for the frontend
+            except Exception:
+                _progress = None
+            if _progress:
+                _progress.start_phase("Ranking candidates", 2)
             general_ranked, cost1 = self.rankgpt_rerank(
                 source_paper, top_n_papers, "general"
             )
             total_cost += cost1
+            if _progress:
+                _progress.report(1, 2)
 
             purpose_ranked, cost2 = self.rankgpt_rerank(
                 source_paper, top_n_papers, "purpose"
             )
             total_cost += cost2
+            if _progress:
+                _progress.report(2, 2)
 
             # Step 7: Combine rankings
             self.logger.info("Step 7: Combining rankings")
@@ -758,6 +955,9 @@ class PaperRankingSystem:
                 general_ranked, purpose_ranked, combination_k
             )
             self.logger.info(f"Final ranking contains {len(final_ranked)} papers")
+
+            # Step 8: Cluster the final related work into topical groups (UI grouping)
+            self.cluster_papers(final_ranked)
             cited_count, non_cited_count = self.count_cited_papers(final_ranked)
             self.logger.info(
                 f"Final ranking: {cited_count} cited + {non_cited_count} non-cited = {len(final_ranked)} total"
@@ -851,13 +1051,23 @@ def process_for_pipeline(data_dir: str, submission_id: str) -> bool:
     )
     
     try:
-        # Create source paper
+        # Create source paper.
+        # The submission date drives the "prior work" cutoff: papers published in/after
+        # it are filtered out (S2 &year=- param + is_valid_paper). It is extracted from
+        # the PDF header during document processing (grobid_client._resolve_date) and
+        # stored in {id}.json. If the PDF carries no date (e.g. anonymous submissions),
+        # we fall back to *today* -- the paper is "under review now", so recent work is
+        # still valid prior work. NEVER hardcode a past year: that silently drops the
+        # most relevant recent literature.
+        _today = datetime.now()
+        sub_year = str(submission_data.get("year") or _today.year)
+        sub_pub_date = submission_data.get("publication_date") or _today.strftime("%Y-%m-%d")
         source_paper = Paper(
             paper_id=submission_id,
             title=submission_data["title"],
             abstract=submission_data.get("abstract", ""),
-            year="2024",
-            publication_date="2024-10-01",
+            year=sub_year,
+            publication_date=sub_pub_date,
         )
         
         # Process cited papers
