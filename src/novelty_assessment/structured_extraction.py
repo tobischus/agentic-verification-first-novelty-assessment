@@ -5,7 +5,6 @@ import textwrap
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field
 from langchain_openai import ChatOpenAI
-from langchain.prompts import ChatPromptTemplate
 from dotenv import load_dotenv
 
 # Load environment variables
