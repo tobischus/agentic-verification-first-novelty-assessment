@@ -137,3 +137,16 @@ dmypy.json
 # Project files
 sketch*
 arxiv2025_assessing_paper_novelty/sketch*
+
+
+/RankGPT
+
+/data
+
+/docs
+
+/test
+
+*.pdf
+
+TODO
