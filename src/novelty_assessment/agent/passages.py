@@ -13,11 +13,17 @@ Chunking supports the two source shapes in this repo:
 with an abstract/intro fallback for papers that have no full text.
 """
 import re
+import threading
 from typing import List, Optional
 
 import numpy as np
 
 _WORD = re.compile(r"[a-z0-9]+")
+
+# One SPECTER2 model is shared across all PassageIndex instances (and across parallel
+# deep-dive threads), so every call into it is serialized -- concurrent forward passes
+# on one torch model are not guaranteed safe.
+_EMB_LOCK = threading.Lock()
 
 
 def _tok(text: str) -> List[str]:
@@ -93,6 +99,7 @@ class PassageIndex:
         self.chunks = chunks or []
         self._bm25 = None
         self._emb = None
+        self._emb_built = False
         self._embedder = embedder
         if self.chunks:
             try:
@@ -101,12 +108,26 @@ class PassageIndex:
                 self._bm25 = BM25Okapi([_tok(c["text"]) for c in self.chunks])
             except Exception:
                 self._bm25 = None
-            if embedder is not None:
-                try:
-                    e = embedder.encode([c["text"] for c in self.chunks], convert_to_numpy=True)
-                    self._emb = e / (np.linalg.norm(e, axis=1, keepdims=True) + 1e-9)
-                except Exception:
-                    self._emb = None
+
+    def _ensure_emb(self):
+        """Encode the chunks with SPECTER2 -- LAZILY, on the first semantic search only.
+
+        Section-based deep dives (section_menu / read_sections) never call search(), so
+        they now skip this entirely; previously every deep-dived paper's full text was
+        embedded eagerly at construction, which on a CPU-only machine dominated the run
+        (the slow "Batches" progress bars). Only read_paper(query=...) -- the abstract
+        fallback for papers without usable sections -- actually needs the embeddings."""
+        if self._emb_built:
+            return
+        self._emb_built = True
+        if self._embedder is None or not self.chunks:
+            return
+        try:
+            with _EMB_LOCK:
+                e = self._embedder.encode([c["text"] for c in self.chunks], convert_to_numpy=True)
+            self._emb = e / (np.linalg.norm(e, axis=1, keepdims=True) + 1e-9)
+        except Exception:
+            self._emb = None
 
     def __bool__(self) -> bool:
         return bool(self.chunks)
@@ -115,6 +136,7 @@ class PassageIndex:
         """Top-k passages for a query (trimmed for context economy)."""
         if not self.chunks:
             return []
+        self._ensure_emb()
         n = len(self.chunks)
         # lexical scores, normalized to [0, 1]
         bm = None
@@ -126,7 +148,8 @@ class PassageIndex:
         cos = None
         if self._emb is not None and self._embedder is not None:
             try:
-                q = self._embedder.encode([query], convert_to_numpy=True)[0]
+                with _EMB_LOCK:
+                    q = self._embedder.encode([query], convert_to_numpy=True)[0]
                 q = q / (np.linalg.norm(q) + 1e-9)
                 cos = (self._emb @ q + 1.0) / 2.0
             except Exception:
