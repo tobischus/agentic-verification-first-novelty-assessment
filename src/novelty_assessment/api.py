@@ -595,9 +595,8 @@ def _assemble_claim(entry, meta):
         # section-based understanding of what the SUBMISSION does for this claim
         # (verified-quote segments), shown between the claim box and the evidence
         "claim_realization": entry.get("claim_realization", []),
-        "claim_sections_used": entry.get("claim_sections_used", []),
         "explore": explore, "verify": verify,
-        # wall-clock breakdown per phase (rerank/understand_submission/triage/deep_dive/
+        # wall-clock breakdown per phase (understand_submission/triage/deep_dive/
         # reentry/other/total + per-deep-dive-paper parse-vs-compare split) so the reviewer
         # can see what makes a claim slow -- rendered as a timing panel in the Review UI.
         "timings": entry.get("timings"),
@@ -659,6 +658,16 @@ def _persist_claim_cost(sid: str, cid: str, cost: dict):
         pass
 
 
+def _snapshot_cache(sid: str):
+    """Best-effort: fold this submission's freshly-written downstream artefacts (Artifact A,
+    conclusion, agent cost) into the per-PDF cache, so a re-upload of the same paper restores
+    the finished agent results instead of re-running the (slow, paid) per-claim agent."""
+    try:
+        NoveltyPipeline(DATA_DIR, sid).snapshot_cache()
+    except Exception:
+        pass
+
+
 def _assembled_for(sid: str, cid: str):
     """Assemble one finished claim's Explore/Evidence view from artifact_a."""
     sub = _sub_dir(sid)
@@ -705,6 +714,9 @@ def _claim_worker(sid: str, cid: str):
             a_path.write_text(json.dumps(a, ensure_ascii=False, indent=2), encoding="utf-8")
 
         _persist_claim_cost(sid, cid, entry.get("cost", {}))
+        # Fold the just-written Artifact A + cost into the per-PDF cache so a re-upload of
+        # this paper restores this claim's agent result instead of recomputing it.
+        _snapshot_cache(sid)
         _write_live(sid, cid, {
             "status": "done", "claim_id": cid,
             "step": len(entry.get("trajectory", []) or []), "max_steps": budgets["max_steps"],
@@ -1033,6 +1045,7 @@ def generate_conclusion(sid: str):
         _conclusion_path(sid).write_text(json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
     except Exception:
         pass
+    _snapshot_cache(sid)  # cache the finished conclusion alongside the agent results
     return doc
 
 

@@ -92,28 +92,49 @@ try:
 except Exception:
     _progress = None
 
-# Upstream outputs cached per PDF-hash so a re-upload of the SAME paper reuses the
-# expensive document_processing + claim_extraction + retrieval work instead of redoing
-# it. Files are restored into the new (versioned) submission dir, so those stages are
-# skipped by idempotency. Everything from artifact_a on still runs fresh.
+# Outputs cached per PDF-hash so a re-upload of the SAME paper reuses prior work instead
+# of redoing it. Restored into the new (versioned) submission dir, so the corresponding
+# stages are skipped by idempotency.
+#   UPSTREAM (stages 1-4): the expensive document_processing + claim_extraction + retrieval.
+#   DOWNSTREAM (agent results + everything synthesised from them): the per-claim Artifact A,
+#     the synthesis/judge, the overall conclusion, the agent cost and the exported report.
+# Downstream files are written AFTER stage 4 -- by the on-demand review in api.py or the
+# batch run_agentic_claims() -- so the cache is refreshed again at those points
+# (api.py._snapshot_cache / run_agentic_claims -> snapshot_cache), not only after
+# retrieval/fetch_pdfs. This lets a re-upload of a fully-reviewed paper restore the
+# finished assessment instead of re-running the slow, paid per-claim agent.
 _CACHEABLE = [
+    # upstream (stages 1-4)
     "{id}.json",                                    # metadata + S2-enriched cited papers
     "{id}_fulltext.json",
     "{id}_quality.json",
     "{id}.grobid.tei.xml",
     "{id}_claims.json",
+    "{id}_pdf_status.json",                         # fetch_pdfs' idempotency marker: caching
+                                                    # it makes fetch_pdfs SKIP on a cache hit,
+                                                    # so _save_to_cache() (which rewrites
+                                                    # cached_id) is NOT re-triggered on every
+                                                    # re-upload -> cached_id stays stable and
+                                                    # the downstream artefacts never get
+                                                    # orphaned under a stale prefix.
     "related_work_data/ranked_papers.json",
     "related_work_data/all_retrieved_papers.json",
     "related_work_data/metadata.json",
+    # downstream (agent results + everything derived from them)
+    "{id}_artifact_a.json",                         # the per-claim agent evidence ledger
+    "{id}_artifact_b.json",
+    "{id}_judge.json",
+    "{id}_conclusion.json",
+    "{id}_agent_cost.json",
+    "{id}_report.md",
 ]
 
 # Directory trees cached as-is (files keyed by paper_id, NOT by submission id -> no rewrite).
-# Caching these lets a re-upload of the SAME PDF reuse the downloaded PDFs (no
-# re-download). grobid_fulltext is included too so that any full text ALREADY parsed
-# on demand during a prior review session (see agent/tools.py ensure_fulltext) is also
-# reused -- but since parsing now happens lazily per deep dive, most of it is produced
-# AFTER the pipeline stage that snapshots the cache, so a re-upload typically still
-# re-parses deep-dived papers via GROBID (the download step is what's reliably skipped).
+# Caching these lets a re-upload of the SAME PDF reuse the downloaded PDFs (no re-download)
+# and any full text ALREADY parsed on demand during a prior review (agent/tools.py
+# ensure_fulltext). Parsing happens lazily per deep dive, i.e. AFTER stage 4 -- but the
+# review now refreshes the cache after each claim (api.py._snapshot_cache), so the
+# GROBID full text of deep-dived papers is snapshotted then and reused on re-upload.
 _CACHEABLE_DIRS = [
     "related_work_data/pdfs",
     "related_work_data/grobid_fulltext",
@@ -196,8 +217,11 @@ class NoveltyPipeline:
 
         elif name == "claim_extraction":
             sys.path.insert(0, _HERE)
-            from claim_extraction import ClaimExtractor
-            ClaimExtractor(model_name=self.model).extract(self.data_dir, self.submission_id)
+            from claim_extraction import DEFAULT_EXTRACTION_MODEL, ClaimExtractor
+            # NOT self.model: extraction uses its own (stronger) model -- see
+            # claim_extraction.DEFAULT_EXTRACTION_MODEL for why.
+            ClaimExtractor(model_name=DEFAULT_EXTRACTION_MODEL).extract(
+                self.data_dir, self.submission_id)
 
         elif name == "retrieval":
             sys.path.insert(0, _RETRIEVAL)
@@ -412,8 +436,8 @@ class NoveltyPipeline:
             if dst.exists():
                 continue  # never overwrite anything already in this run
             dst.parent.mkdir(parents=True, exist_ok=True)
-            if src.suffix == ".json":
-                # rewrite the cached submission_id so paths/fields match this run
+            if src.suffix in (".json", ".md"):
+                # rewrite the cached submission_id so paths/fields/report headers match this run
                 dst.write_text(
                     src.read_text(encoding="utf-8").replace(cached_id, self.submission_id),
                     encoding="utf-8",
@@ -446,21 +470,47 @@ class NoveltyPipeline:
             )
 
     def _save_to_cache(self):
-        """Snapshot this run's upstream outputs into the per-PDF cache for fast re-runs."""
+        """Snapshot this run's outputs into the per-PDF cache for fast re-runs.
+
+        Cached files are stored under this run's submission_id prefix, and cached_id is
+        updated to match. To avoid orphaning artefacts already cached under a PREVIOUS
+        cached_id that this run did NOT reproduce in its own dir (e.g. a snapshot taken
+        after fetch_pdfs, before the review agent has run), those are carried forward under
+        the new prefix (with the id rewritten) instead of being left stranded."""
         if not self.use_cache:
             return
         h = self._pdf_hash()
         if not h:
             return
         cdir = self._cache_dir(h)
+        files = cdir / "files"
+        prev_id = None
+        meta_path = cdir / "_cache_meta.json"
+        if meta_path.exists():
+            try:
+                prev_id = json.loads(meta_path.read_text(encoding="utf-8")).get("cached_id")
+            except Exception:
+                prev_id = None
         try:
             for tmpl in _CACHEABLE:
                 src = self.sub_dir / tmpl.format(id=self.submission_id)
-                if not src.exists():
-                    continue
-                dst = cdir / "files" / tmpl.format(id=self.submission_id)
-                dst.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(src, dst)
+                dst = files / tmpl.format(id=self.submission_id)
+                if src.exists():
+                    dst.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(src, dst)
+                elif prev_id and prev_id != self.submission_id and not dst.exists():
+                    # not produced this run -> carry the previously cached copy forward so
+                    # the cached_id switch below doesn't strand it under the old prefix
+                    old = files / tmpl.format(id=prev_id)
+                    if old.exists():
+                        dst.parent.mkdir(parents=True, exist_ok=True)
+                        if old.suffix in (".json", ".md"):
+                            dst.write_text(
+                                old.read_text(encoding="utf-8").replace(prev_id, self.submission_id),
+                                encoding="utf-8",
+                            )
+                        else:
+                            shutil.copy2(old, dst)
             # Mirror cached directory trees (PDFs + GROBID full text) into the cache.
             for d in _CACHEABLE_DIRS:
                 src_dir = self.sub_dir / d
@@ -478,9 +528,16 @@ class NoveltyPipeline:
                             "saved": time.strftime("%Y-%m-%d %H:%M:%S")}),
                 encoding="utf-8",
             )
-            logger.info(f"[{self.submission_id}] cached upstream outputs ({h}) for fast re-runs")
+            logger.info(f"[{self.submission_id}] cached outputs ({h}) for fast re-runs")
         except Exception as exc:
             logger.warning(f"cache save failed: {exc}")
+
+    def snapshot_cache(self):
+        """Public entry point to refresh the per-PDF cache. Called after the DOWNSTREAM
+        artefacts (Artifact A + everything synthesised from it) are written by the
+        on-demand review (api.py) or the batch agentic run, so those results are cached
+        too -- not just the upstream stages snapshotted during run()."""
+        self._save_to_cache()
 
     # ------------------------------ run ------------------------------- #
 
@@ -609,6 +666,9 @@ class NoveltyPipeline:
         ArtifactBBuilder(model_name=self.model).build(self.data_dir, self.submission_id)
         Judge(model_name=self.model).judge(self.data_dir, self.submission_id)
         report = build_report(self.data_dir, self.submission_id)
+        # Fold the finished agent results + synthesis/judge/report into the per-PDF cache,
+        # so a re-upload of this paper restores them instead of re-running the agent.
+        self._save_to_cache()
         logger.info(f"[{self.submission_id}] agentic claims + report done ({len(entries)} claims)")
         return report
 
