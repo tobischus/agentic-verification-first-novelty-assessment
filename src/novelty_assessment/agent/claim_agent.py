@@ -161,6 +161,13 @@ class conclude_comparison(BaseModel):
 
 # ------------------------------ prompts ---------------------------------- #
 
+# How much of each abstract the triage sees. The previous 400-char cut truncated EVERY
+# abstract in the corpus (measured: 1270/1270 pool abstracts are longer; median 1461) and
+# removed exactly the part that states the contribution, because abstracts open with
+# background -- papers were rejected for information the system already had. 2500 keeps all
+# but 1 of those 1270 intact; a 30-abstract batch is then ~19k tokens.
+_TRIAGE_ABSTRACT_CHARS = 2500
+
 _TRIAGE_PROMPT = """Triage prior-work papers against ONE claimed contribution using ONLY their abstracts, to decide which need a deeper full-text comparison.
 
 overlap_degree measures whether the paper PRESENTS (part of) the SAME CONTRIBUTION as the claim -- NOT whether it is on the same topic or similar to the submission overall. Topical similarity alone is NEVER more than superficial.
@@ -412,12 +419,16 @@ class ClaimNoveltyAgent:
 
     def _triage(self, tb: ClaimToolbox, claim: dict, papers: List[dict]):
         """One batched abstract-triage call; chunked so arbitrarily large pools stay
-        within a sane prompt size (30 abstracts per call)."""
+        within a sane prompt size (30 abstracts per call).
+
+        Abstracts enter the listing essentially in full (_TRIAGE_ABSTRACT_CHARS): this is
+        the ONLY evidence the triage gets, and everything it rejects here is never read."""
         by_id, pt, ct = {}, 0, 0
         for i in range(0, len(papers), 30):
             chunk = papers[i:i + 30]
             listing = "\n".join(
-                f"{p['paper_id']} :: {p['title']} :: {(p.get('abstract') or '(no abstract)')[:400]}"
+                f"{p['paper_id']} :: {p['title']} :: "
+                f"{(p.get('abstract') or '(no abstract)')[:_TRIAGE_ABSTRACT_CHARS]}"
                 for p in chunk)
             parsed, a, b = self._struct(_Triage, _TRIAGE_PROMPT.format(claim=self._claim_str(claim)[:1500], papers=listing))
             pt += a; ct += b
