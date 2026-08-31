@@ -399,7 +399,6 @@ export default function ReviewWalkthrough({ submissionId, onFinish }) {
           <div className="rv-h sm"><span className="rv-ic">📝</span><h4>What the submission does for this claim</h4></div>
           <p className="muted rv-sub">Read from the submission's own sections about this contribution (not its results). Quotes are verbatim from your paper.</p>
           <Realization segments={data.claim_realization} />
-          <SectionsBox sections={data.claim_sections_used} />
         </div>
       )}
 

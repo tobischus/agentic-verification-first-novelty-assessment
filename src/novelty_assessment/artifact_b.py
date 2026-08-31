@@ -86,12 +86,6 @@ class ArtifactBBuilder:
             lines.append(f"### Claim {e['claim_id']}: {e['claim_name']}")
             lines.append(f'Claimed contribution (verbatim): "{e["claim_text"]}"')
             lines.append(f"Prior-work papers examined for this claim: {e['candidates_examined']}")
-            if not e.get("evidence_sufficient", True):
-                lines.append(
-                    "NOTE: the evidence for this claim was found INSUFFICIENT within the examined "
-                    "scope (coverage/budget limit) -> novelty is UNDETERMINED; the verdict must be uncertain."
-                )
-
             comps = e["comparisons"]
             refuters = [c for c in comps if c["refutation_status"] == "can_refute"]
             others = [c for c in comps if c["refutation_status"] != "can_refute"]
@@ -135,19 +129,6 @@ class ArtifactBBuilder:
             lines.append("")
         return "\n".join(lines)
 
-    @staticmethod
-    def _apply_sufficiency(verdict: dict, evidence_sufficient: bool) -> dict:
-        """Insufficient-evidence semantics: a claim whose evidence was found insufficient
-        must NOT carry a confident verdict downstream (DR-2.0 'unclear' default)."""
-        if not evidence_sufficient and verdict.get("verdict") != "uncertain":
-            verdict = dict(verdict)
-            verdict["verdict"] = "uncertain"
-            verdict["rationale"] = (
-                "Evidence was insufficient within the examined scope, so novelty cannot be "
-                "determined here (treated as uncertain). " + verdict.get("rationale", "")
-            )
-        return verdict
-
     def build_one(self, entry: dict) -> dict:
         """Synthesize the verdict for a SINGLE claim's Artifact-A entry (on-demand)."""
         evidence = self._format_evidence({"claims": [entry]})
@@ -158,7 +139,7 @@ class ArtifactBBuilder:
         else:
             v = {"claim_id": entry["claim_id"], "claim_name": entry["claim_name"],
                  "verdict": "uncertain", "rationale": "", "challenging_papers": []}
-        return self._apply_sufficiency(v, entry.get("evidence_sufficient", True))
+        return v
 
     def build(self, data_dir: str, submission_id: str) -> dict:
         sub_dir = Path(data_dir) / submission_id
@@ -168,11 +149,7 @@ class ArtifactBBuilder:
         prompt = ARTIFACT_B_PROMPT.format(evidence=evidence)
         result = self.llm.with_structured_output(ArtifactB).invoke(prompt)
 
-        suff = {e["claim_id"]: e.get("evidence_sufficient", True) for e in artifact_a["claims"]}
-        per_claim = [
-            self._apply_sufficiency(v.model_dump(), suff.get(v.claim_id, True))
-            for v in result.per_claim
-        ]
+        per_claim = [v.model_dump() for v in result.per_claim]
         artifact_b = {
             "submission_id": submission_id,
             "generated_from": f"{submission_id}_artifact_a.json",

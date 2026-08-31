@@ -3,9 +3,7 @@
 ClaimNoveltyAgent: per-claim novelty assessment as a CODE-CONTROLLED two-phase
 pipeline (not a free tool loop -- that let weak models wander and re-list/re-read).
 
-Flow per claim:
-  0. RERANK the candidate pool by claim-specific relevance (bi-encoder similarity is
-     near-saturated on same-topic pools) -- ordering only, no pre-selection.
+Flow per claim (exactly four phases):
   1. TRIAGE (abstracts only, batched LLM calls): classify EVERY paper in the pool by how
      much it could overlap the claim (none/superficial/partial/substantial/same) +
      what_is_shared + submission_delta. Clearly-distinct papers are done here, cheaply.
@@ -52,6 +50,10 @@ _PRICES = {
     "o4-mini": (0.0011, 0.0044),
     "o3": (0.0020, 0.0080),
     "gpt-3.5-turbo": (0.0005, 0.0015),
+    # gpt-5.6 family (short-context tier), per 1k tokens
+    "gpt-5.6-luna": (0.0002, 0.0012),
+    "gpt-5.6-terra": (0.0020, 0.0120),
+    "gpt-5.6-sol": (0.0050, 0.0300),
 }
 
 
@@ -73,18 +75,17 @@ def _usage(ai) -> tuple:
 
 
 def _usd(model: str, prompt_tokens: int, completion_tokens: int) -> float:
-    key = max((k for k in _PRICES if (model or "").startswith(k)), key=len, default=None)
+    # Match only at a variant boundary: a bare startswith would price "gpt-5.6-luna"
+    # as "gpt-5" (~6x too high). A trailing "-" means a dated/variant suffix; a "."
+    # means a different model generation.
+    m = model or ""
+    cands = [k for k in _PRICES if m.startswith(k) and (len(m) == len(k) or m[len(k)] == "-")]
+    key = m if m in _PRICES else max(cands, key=len, default=None)
     p_in, p_out = _PRICES.get(key, (0.0, 0.0))
     return round(prompt_tokens / 1000 * p_in + completion_tokens / 1000 * p_out, 4)
 
 
 # ------------------------------ schemas ---------------------------------- #
-
-
-class _Rerank(BaseModel):
-    """Claim-specific relevance ranking of the candidate prior work."""
-    ranked_paper_ids: List[str] = Field(
-        description="ALL candidate paper_ids, most-relevant to least-relevant to THIS claim's specific contribution")
 
 
 class _TriageItem(BaseModel):
@@ -159,16 +160,6 @@ class conclude_comparison(BaseModel):
 
 
 # ------------------------------ prompts ---------------------------------- #
-
-_RERANK_PROMPT = """Rank prior-work papers by how relevant each is for assessing the NOVELTY of ONE specific claimed contribution. Being on the same broad topic is NOT enough -- rank by how DIRECTLY a paper bears on the specific contribution (same problem, method, finding, benchmark, or setting). E.g. if the claim proposes a benchmark, other benchmarks / evaluation frameworks for the same task are the most relevant.
-
-## Claim
-{claim}
-
-## Candidate papers (paper_id :: title :: abstract)
-{cands}
-
-Return ranked_paper_ids: EVERY candidate paper_id exactly once, most relevant first."""
 
 _TRIAGE_PROMPT = """Triage prior-work papers against ONE claimed contribution using ONLY their abstracts, to decide which need a deeper full-text comparison.
 
@@ -376,9 +367,32 @@ class ClaimNoveltyAgent:
             except ValueError:
                 deep_dive_workers = 4
         self.deep_dive_workers = max(1, deep_dive_workers)
-        # reasoning models (gpt-5*, o-series) reject any temperature other than the default
-        kw = {} if model_name.startswith(("gpt-5", "o1", "o3", "o4")) else {"temperature": 0.0}
-        self.llm = ChatOpenAI(model_name=model_name, api_key=api_key, max_retries=8, **kw)
+        # reasoning models (gpt-5*, o-series) reject any temperature other than the default.
+        # For them we also cap the reasoning effort: at the default (medium/high) a single
+        # gpt-5-mini call reasons for many minutes, which makes a batch untenable. "low"
+        # (env NOVELTY_REASONING_EFFORT) brings calls down to seconds with little quality
+        # loss for these structured comparison tasks. Non-reasoning models ignore it.
+        is_reasoning = model_name.startswith(("gpt-5", "o1", "o3", "o4"))
+        if is_reasoning:
+            kw = {"reasoning_effort": os.getenv("NOVELTY_REASONING_EFFORT", "low")}
+        else:
+            kw = {"temperature": 0.0}
+        # A per-request timeout is essential: without it a single stalled HTTP connection
+        # (half-open socket behind OpenAI's proxy) hangs the whole run forever -- max_retries
+        # never fires because the request never *errors*, it just waits. With a timeout the
+        # stalled call aborts and is retried, which reconnects and succeeds in seconds.
+        try:
+            timeout = float(os.getenv("NOVELTY_LLM_TIMEOUT", "180"))
+        except ValueError:
+            timeout = 180.0
+        try:
+            max_retries = int(os.getenv("NOVELTY_LLM_MAX_RETRIES", "6"))
+        except ValueError:
+            max_retries = 6
+        self.llm = ChatOpenAI(
+            model_name=model_name, api_key=api_key,
+            max_retries=max_retries, timeout=timeout, **kw
+        )
 
     # ------------------------------ helpers ------------------------------ #
 
@@ -393,19 +407,6 @@ class ClaimNoveltyAgent:
         parsed, raw = res.get("parsed"), res.get("raw")
         pt, ct = _usage(raw) if raw is not None else (0, 0)
         return parsed, pt, ct
-
-    # ------------------------------ phase 0 ------------------------------ #
-
-    def _rerank(self, tb: ClaimToolbox, claim: dict):
-        papers = sorted(tb.pool.values(), key=lambda p: p.get("sim", 0.0), reverse=True)[:40]
-        if len(papers) <= 1:
-            return 0, 0
-        cands = "\n".join(
-            f"{p['paper_id']} :: {p['title']} :: {(p.get('abstract') or '')[:280]}" for p in papers)
-        parsed, pt, ct = self._struct(_Rerank, _RERANK_PROMPT.format(claim=self._claim_str(claim)[:1200], cands=cands))
-        if parsed and parsed.ranked_paper_ids:
-            tb.set_rerank([pid for pid in parsed.ranked_paper_ids if pid in tb.pool])
-        return pt, ct
 
     # ------------------------------ phase 1 ------------------------------ #
 
@@ -443,9 +444,26 @@ class ClaimNoveltyAgent:
         return got, pt, ct
 
     def _understand_submission(self, tb: ClaimToolbox, claim: dict):
-        """ONCE per claim: pick submission sections about the claimed contribution, read
-        them in full, and produce a verified-quote realization of what the submission does
-        for this claim. Returns (realization_segments, claim_context_text, pt, ct)."""
+        """What the SUBMISSION itself does for this claim (verified-quote realization).
+
+        Normally this is already part of the claim artifact: deep claim extraction
+        (Step 2) picks the relevant submission sections, reads them in full and stores
+        the realization + section provenance per claim, reviewed at the HITL checkpoint.
+        We then just adopt it -- no model call, and the reading the reviewer approved is
+        exactly the one used for every comparison.
+
+        Only a claim WITHOUT a stored realization (a reviewer-authored or edited claim)
+        is read here on the fly, using the same section-menu -> read-in-full procedure.
+        Returns (realization_segments, claim_context_text, pt, ct)."""
+        stored = claim.get("realization") or []
+        if stored:
+            tb.claim_realization = stored
+            tb._log("understand_submission",
+                    f"from claim artifact: "
+                    f"{sum(1 for s in stored if s.get('kind') == 'quote')} verified quotes",
+                    progress=True)
+            return stored, _segments_to_text(stored), 0, 0
+
         pt = ct = 0
         pick_prompt = _SUBMISSION_SECTION_PICK.replace("{claim}", self._claim_str(claim)[:1200])
         secs, a, b = self._pick_sections(tb, "submission", pick_prompt); pt += a; ct += b
@@ -629,14 +647,10 @@ class ClaimNoveltyAgent:
             return lp, lc
 
         emit()
-        # Phase 0: rerank the pool by claim-specific relevance
-        _t = time.perf_counter()
-        a, b = self._rerank(tb, claim); pt += a; ct += b
-        timings["rerank"] = round(time.perf_counter() - _t, 1)
-        emit()
-        # Phase 0b: understand what the SUBMISSION itself does for THIS claim -- pick the
-        # relevant submission sections, read them in full, build a verified-quote
-        # realization. Reused as context for every prior-work comparison (built once).
+        # What the SUBMISSION itself does for THIS claim: normally ADOPTED from the claim
+        # artifact (deep claim extraction already read the relevant sections and the
+        # reviewer approved it at the checkpoint) -- only derived here for a reviewer-added
+        # claim. Reused as context for every prior-work comparison.
         _t = time.perf_counter()
         _real, claim_ctx, a, b = self._understand_submission(tb, claim); pt += a; ct += b
         timings["understand_submission"] = round(time.perf_counter() - _t, 1)
@@ -700,12 +714,23 @@ class ClaimNoveltyAgent:
             timings["reentry"] = round(time.perf_counter() - _t, 1)
 
         # Phase 4: verdict from the ledger
-        refuters = [c for c in tb.ledger["comparisons"] if c["refutation_status"] == "can_refute"]
         # any triaged paper still 'unclear' (deep dive didn't resolve) -> leave as cannot_refute
         for c in tb.ledger["comparisons"]:
             if c["refutation_status"] == "unclear":
                 c["refutation_status"] = "cannot_refute"
-        if refuters:
+        # A claim is challenged if a prior paper either (a) fully refutes it -- can_refute, with a
+        # verified two-sided quote pair -- OR (b) shows substantial/same overlap of CONTRIBUTIONS.
+        # Fix A (NOVELTY_CHALLENGE_ON_STRONG_OVERLAP, default on): substantial overlap materially
+        # diminishes novelty even when the submission adds a differentiator, so it counts as a
+        # challenge. The old rule (can_refute only) required near-identity from a single paper and
+        # let substantial-overlap-with-a-wrinkle read as novel -- the "A2 grading miss" the eval
+        # found (e.g. CvGqMD5OtX: MCS-SQL substantial overlap yet cannot_refute -> wrongly novel).
+        refuters = [c for c in tb.ledger["comparisons"] if c["refutation_status"] == "can_refute"]
+        strong_overlap = []
+        if os.getenv("NOVELTY_CHALLENGE_ON_STRONG_OVERLAP", "1") != "0":
+            strong_overlap = [c for c in tb.ledger["comparisons"]
+                              if (c.get("overlap_degree") or "").lower() in ("substantial", "same")]
+        if refuters or strong_overlap:
             verdict, suff, stop = "challenged", True, "challenged"
         else:
             verdict, suff, stop = "not_challenged", True, "not_challenged"

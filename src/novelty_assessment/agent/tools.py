@@ -107,9 +107,6 @@ class ClaimToolbox:
         self._paper_index = {}   # pid -> PassageIndex (lazy)
         self._paper_text = {}    # pid -> full source text for verification (lazy)
         self._citation_ctx = self._load_citation_contexts()
-        # optional claim-specific relevance order (LLM reranker), pid -> rank; when set it
-        # overrides the (near-saturated) bi-encoder similarity order everywhere.
-        self.rerank_pos = {}
 
         # Deep dives run in PARALLEL (independent per-paper LLM comparisons), so every
         # mutation of the shared ledger/progress state is serialized by this lock. The
@@ -323,19 +320,15 @@ class ClaimToolbox:
             if _DEPTH_RANK.get(depth, 0) > _DEPTH_RANK.get(e["depth"], 0):
                 e["depth"] = depth
 
-    def set_rerank(self, ranked_ids: List[str]):
-        """Set the claim-specific relevance order (from the LLM reranker)."""
-        self.rerank_pos = {pid: i for i, pid in enumerate(ranked_ids) if pid in self.pool}
-
     def _ranked(self) -> List[dict]:
-        """Pool papers ordered by LLM rerank (if available) else by claim similarity.
+        """Pool papers ordered by claim similarity.
 
-        The bi-encoder similarity is near-saturated on a same-topic pool (all ~0.9),
-        so once a reranker has judged claim-specific relevance we order by that; papers
-        not covered by the reranker (e.g. later agent-retrieved ones) sort after it."""
-        if self.rerank_pos:
-            return sorted(self.pool.values(),
-                          key=lambda p: (self.rerank_pos.get(p["paper_id"], 10 ** 6), -p.get("sim", 0.0)))
+        There used to be an LLM reranker in front of this. It was removed: triage reads
+        the ENTIRE pool regardless of order, so the ordering only affected which papers
+        land in the top-20 `frontier` shown in the review UI -- one LLM call per claim for
+        display order. Ordering still matters if a pool ever exceeds the 30-paper triage
+        chunk size (it would change which abstracts are judged together); pools are
+        currently ~20."""
         return sorted(self.pool.values(), key=lambda p: p.get("sim", 0.0), reverse=True)
 
     # ------------------------------- tools ------------------------------- #
@@ -700,7 +693,7 @@ class ClaimToolbox:
             }
             for pid, info in examined.items()
         ]
-        # The full ranked frontier (claim-specific rerank order) so the reviewer sees ALL
+        # The full ranked frontier (claim-similarity order) so the reviewer sees ALL
         # relevant prior work -- which the agent examined/compared, and which it did not.
         frontier = self._ranked()[:20]
         frontier_out = [
@@ -720,8 +713,6 @@ class ClaimToolbox:
             "claim_name": self.claim.get("name", ""),
             "claim_text": self.claim.get("claim_text", ""),
             "claim_realization": self.claim_realization,
-            # submission sections read to understand what the submission does for this claim
-            "claim_sections_used": list(self._sections_read.get("submission", [])),
             "candidates_examined": len(self.ledger["examined"]),
             "can_refute_count": sum(1 for c in comps if c["refutation_status"] == "can_refute"),
             "comparisons": comps,

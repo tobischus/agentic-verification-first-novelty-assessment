@@ -82,8 +82,6 @@ class Judge:
 
     def _deterministic_checks(self, artifact_a: dict, artifact_b: dict):
         refuters = self._refuters_from_a(artifact_a)
-        # claim_id -> whether the agent's evidence gate deemed the evidence sufficient
-        suff = {e["claim_id"]: e.get("evidence_sufficient", True) for e in artifact_a["claims"]}
         checks, issues = [], []
         for v in artifact_b["per_claim"]:
             cid = v["claim_id"]
@@ -97,9 +95,6 @@ class Judge:
                 problems.append("B verdict 'challenged' but A has no verified can_refute for this claim")
             if verdict == "not_challenged" and a_has:
                 problems.append("B verdict 'not_challenged' but A HAS a verified can_refute for this claim")
-            # insufficient evidence must not surface as a confident verdict (DR-2.0 'unclear' default)
-            if not suff.get(cid, True) and verdict != "uncertain":
-                problems.append("evidence_sufficient=false but B verdict is confident (must be uncertain)")
             # named challenging papers must exist among A's refuters (fuzzy title match)
             for p in b_papers:
                 if not any(fuzz.token_set_ratio(p, at) >= 85 for at in a_titles):
