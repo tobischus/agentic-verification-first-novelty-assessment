@@ -1,0 +1,29 @@
+{
+  "aggregate": {
+    "afzal": {
+      "n_judgments": 17,
+      "judgment_similarity": 0.889,
+      "frac_core_found": 1.0,
+      "conclusion_agreement_pct": 82.4,
+      "positive_shift_pct": 11.8,
+      "negative_shift_pct": 5.9,
+      "prior_work_engagement_mean": 1.353,
+      "depth_of_analysis_mean": 1.294
+    },
+    "mine": {
+      "n_judgments": 17,
+      "judgment_similarity": 0.704,
+      "frac_core_found": 0.784,
+      "conclusion_agreement_pct": 41.2,
+      "positive_shift_pct": 47.1,
+      "negative_shift_pct": 11.8,
+      "prior_work_engagement_mean": 1.765,
+      "depth_of_analysis_mean": 1.882
+    }
+  },
+  "judge_cost": {
+    "usd": 0.38469999999999993,
+    "tokens": 95387
+  },
+  "n_papers": 16
+}

@@ -1,0 +1,18 @@
+{
+  "text": "The paper’s central contribution is FACTTEST: a statistical testing framework that evaluates LLM factuality and enables abstention with user-specified finite-sample Type I error guarantees via a calibration split, a score function, and an order-statistic threshold. Mohri et al. (2024) already propose a very similar core mechanism: a split-conformal procedure that computes per-instance scores, selects a quantile-based threshold on a calibration set, and thereby provides distribution-free, finite-sample control of the probability of incorrect (non-factual) outputs, with abstention when scores fall below threshold. This substantially overlaps with FACTTEST’s main idea of building a calibrated correctness classifier with guaranteed Type I error and abstention, as well as the associated power analysis based on the same thresholding scheme. The submission does introduce a covariate-shift extension using density-ratio-based rejection sampling, which appears novel within the examined prior work, and offers additional empirical comparisons. However, these additions are methodological extensions around an already established conformal-factuality core rather than a fundamentally new mechanism. Given that the central contribution is substantially challenged by Mohri et al. (2024), the overall novelty is not sufficient for a top-venue standard.",
+  "model": "gpt-5.1",
+  "fix": "B",
+  "n_claims": 4,
+  "n_challenged": 3,
+  "verdict_summary": "3 of 4 claim(s) CHALLENGED by prior work (re-derived, fix B). Overlap degrees across claims: same x0, substantial x3, partial x9, superficial x0.",
+  "flips": [
+    {
+      "claim": "claim_4",
+      "old": false,
+      "new": true,
+      "reason": "fully coverage"
+    }
+  ],
+  "cost_usd": 0.0,
+  "tokens": 4807
+}

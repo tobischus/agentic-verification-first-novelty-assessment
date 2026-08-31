@@ -1,0 +1,423 @@
+[
+  {
+    "sid": "09JVxsEZPf",
+    "ref": "review_1.txt",
+    "human_conclusion": "INSUFFICIENT",
+    "primary_basis": "OVERLAP_SPECIFIC",
+    "n_named": 3,
+    "named": [
+      "SNIP (Lee et al.)",
+      "Model merging (Yu et al.)",
+      "Model merging (Hui et al.)"
+    ],
+    "present": 0,
+    "absent": 3,
+    "matches": [
+      {
+        "named": "SNIP (Lee et al.)",
+        "status": "ABSENT",
+        "best_match": ""
+      },
+      {
+        "named": "Model merging (Yu et al.)",
+        "status": "ABSENT",
+        "best_match": ""
+      },
+      {
+        "named": "Model merging (Hui et al.)",
+        "status": "ABSENT",
+        "best_match": ""
+      }
+    ],
+    "pool_n": 17,
+    "agent_challenged": 1,
+    "agent_claims": 3,
+    "situation": "agent_challenged"
+  },
+  {
+    "sid": "1XxNbecjXe",
+    "ref": "review_2.txt",
+    "human_conclusion": "MIXED",
+    "primary_basis": "OVERLAP_SPECIFIC",
+    "n_named": 1,
+    "named": [
+      "Bailey et al. (2023)"
+    ],
+    "present": 1,
+    "absent": 0,
+    "matches": [
+      {
+        "named": "Bailey et al. (2023): Prior work on prompt injection attacks via images and the 'Behavior Matching' approach for generating image-based attacks on VLMs.",
+        "status": "PRESENT",
+        "best_match": "Image Hijacks: Adversarial Images can Control Generative Models at Runtime — Luke Bailey, 2023"
+      }
+    ],
+    "pool_n": 20,
+    "agent_challenged": 3,
+    "agent_claims": 4,
+    "situation": "agent_challenged"
+  },
+  {
+    "sid": "2NqssmiXLu",
+    "ref": "review_0.txt",
+    "human_conclusion": "MIXED",
+    "primary_basis": "OVERLAP_SPECIFIC",
+    "n_named": 1,
+    "named": [
+      "expert iteration (Polu et al., 2022)"
+    ],
+    "present": 0,
+    "absent": 1,
+    "matches": [
+      {
+        "named": "expert iteration (Polu et al., 2022)",
+        "status": "ABSENT",
+        "best_match": ""
+      }
+    ],
+    "pool_n": 18,
+    "agent_challenged": 0,
+    "agent_claims": 3,
+    "situation": "A1_retrieval_miss"
+  },
+  {
+    "sid": "328vch6tRs",
+    "ref": "review_2.txt",
+    "human_conclusion": "INSUFFICIENT",
+    "primary_basis": "OVERLAP_SPECIFIC",
+    "n_named": 2,
+    "named": [
+      "Byte Pair Encoding (BPE)",
+      "Rogers et al., 2020"
+    ],
+    "present": 1,
+    "absent": 1,
+    "matches": [
+      {
+        "named": "Byte Pair Encoding (BPE): A widely used subword tokenization method that enables models to learn larger vocabularies by combining tokens.",
+        "status": "PRESENT",
+        "best_match": "Byte Pair Encoding is Suboptimal for Language Model Pretraining — Kaj Bostrom, 2020"
+      },
+      {
+        "named": "Rogers et al., 2020: A study analyzing syntactic and semantic composition in transformers, specifically referenced for similar findings about aggregation and disambiguation in network layers.",
+        "status": "ABSENT",
+        "best_match": ""
+      }
+    ],
+    "pool_n": 20,
+    "agent_challenged": 2,
+    "agent_claims": 4,
+    "situation": "agent_challenged"
+  },
+  {
+    "sid": "3xjc9PhEPd",
+    "ref": "review_3.txt",
+    "human_conclusion": "INSUFFICIENT",
+    "primary_basis": "OBVIOUSNESS",
+    "n_named": 0,
+    "named": [],
+    "present": 0,
+    "absent": 0,
+    "matches": [],
+    "pool_n": 22,
+    "agent_challenged": 0,
+    "agent_claims": 4,
+    "situation": "B_not_retrieval"
+  },
+  {
+    "sid": "4QWPCTLq20",
+    "ref": "review_3.txt",
+    "human_conclusion": "INSUFFICIENT",
+    "primary_basis": "OVERLAP_SPECIFIC",
+    "n_named": 2,
+    "named": [
+      "H2O",
+      "SnapKV"
+    ],
+    "present": 0,
+    "absent": 2,
+    "matches": [
+      {
+        "named": "H2O",
+        "status": "ABSENT",
+        "best_match": ""
+      },
+      {
+        "named": "SnapKV",
+        "status": "ABSENT",
+        "best_match": ""
+      }
+    ],
+    "pool_n": 22,
+    "agent_challenged": 1,
+    "agent_claims": 3,
+    "situation": "agent_challenged"
+  },
+  {
+    "sid": "5GuhYMgaap",
+    "ref": "review_3.txt",
+    "human_conclusion": "MIXED",
+    "primary_basis": "OVERLAP_SPECIFIC",
+    "n_named": 3,
+    "named": [
+      "https://aclanthology.org/2023.findings-acl.67.pdf",
+      "https://openreview.net/forum?id=KFjCFxiGk4",
+      "https://arxiv.org/abs/2309.05660"
+    ],
+    "present": 1,
+    "absent": 2,
+    "matches": [
+      {
+        "named": "https://aclanthology.org/2023.findings-acl.67.pdf: Study on deductive reasoning in LLMs",
+        "status": "ABSENT",
+        "best_match": "Large Language Models are In-Context Semantic Reasoners rather than Symbolic Reasoners — Xiaojuan Tang, 2023"
+      },
+      {
+        "named": "https://openreview.net/forum?id=KFjCFxiGk4: Study on deductive reasoning in LLMs",
+        "status": "ABSENT",
+        "best_match": "Large Language Models are In-Context Semantic Reasoners rather than Symbolic Reasoners — Xiaojuan Tang, 2023"
+      },
+      {
+        "named": "https://arxiv.org/abs/2309.05660: Study on inductive reasoning in LLMs",
+        "status": "PRESENT",
+        "best_match": "Phenomenal Yet Puzzling: Testing Inductive Reasoning Capabilities of Language Models with Hypothesis Refinement — , 2023"
+      }
+    ],
+    "pool_n": 19,
+    "agent_challenged": 2,
+    "agent_claims": 3,
+    "situation": "agent_challenged"
+  },
+  {
+    "sid": "5bUy4F59mk",
+    "ref": "review_2.txt",
+    "human_conclusion": "INSUFFICIENT",
+    "primary_basis": "OVERLAP_SPECIFIC",
+    "n_named": 2,
+    "named": [
+      "Domino",
+      "TOOLDEC"
+    ],
+    "present": 0,
+    "absent": 2,
+    "matches": [
+      {
+        "named": "Domino: focuses on grammar and token alignment in general constrained text generation tasks",
+        "status": "ABSENT",
+        "best_match": "Grammar-Constrained Decoding for Structured NLP Tasks without Finetuning"
+      },
+      {
+        "named": "TOOLDEC: eliminates syntax errors by constraining token choices using finite state machines to maintain tool syntax",
+        "status": "ABSENT",
+        "best_match": "Don't Fine-Tune, Decode: Syntax Error-Free Tool Use via Constrained Decoding"
+      }
+    ],
+    "pool_n": 18,
+    "agent_challenged": 3,
+    "agent_claims": 3,
+    "situation": "agent_challenged"
+  },
+  {
+    "sid": "7X65yoKl3Y",
+    "ref": "review_1.txt",
+    "human_conclusion": "INSUFFICIENT",
+    "primary_basis": "MARGINAL_DELTA",
+    "n_named": 0,
+    "named": [],
+    "present": 0,
+    "absent": 0,
+    "matches": [],
+    "pool_n": 18,
+    "agent_challenged": 0,
+    "agent_claims": 3,
+    "situation": "B_not_retrieval"
+  },
+  {
+    "sid": "8zxGruuzr9",
+    "ref": "review_3.txt",
+    "human_conclusion": "INSUFFICIENT",
+    "primary_basis": "OVERLAP_SPECIFIC",
+    "n_named": 4,
+    "named": [
+      "Social Chemistry 101 (Forbes et al. 2020)",
+      "Argyle et al. (2022)",
+      "Durmus et al. (2023)",
+      "Ma et al. (2024)"
+    ],
+    "present": 1,
+    "absent": 3,
+    "matches": [
+      {
+        "named": "Social Chemistry 101 (Forbes et al. 2020): Study of values and social norms in language models.",
+        "status": "ABSENT",
+        "best_match": ""
+      },
+      {
+        "named": "Argyle et al. (2022): Work on simulating human samples and values in language models.",
+        "status": "ABSENT",
+        "best_match": ""
+      },
+      {
+        "named": "Durmus et al. (2023): Research on world opinions and values in language models.",
+        "status": "PRESENT",
+        "best_match": "Towards Measuring the Representation of Subjective Global Opinions in Language Models — Esin Durmus, 2023"
+      },
+      {
+        "named": "Ma et al. (2024): Survey summarizing research on evaluating attitudes, opinions, and values in LLMs.",
+        "status": "ABSENT",
+        "best_match": ""
+      }
+    ],
+    "pool_n": 18,
+    "agent_challenged": 0,
+    "agent_claims": 4,
+    "situation": "A2_grading_miss"
+  },
+  {
+    "sid": "996aKQIom0",
+    "ref": "review_3.txt",
+    "human_conclusion": "INSUFFICIENT",
+    "primary_basis": "MARGINAL_DELTA",
+    "n_named": 0,
+    "named": [],
+    "present": 0,
+    "absent": 0,
+    "matches": [],
+    "pool_n": 20,
+    "agent_challenged": 1,
+    "agent_claims": 1,
+    "situation": "agent_challenged"
+  },
+  {
+    "sid": "AAjCYWXC5I",
+    "ref": "review_0.txt",
+    "human_conclusion": "SUFFICIENT",
+    "primary_basis": "POSITIVE",
+    "n_named": 0,
+    "named": [],
+    "present": 0,
+    "absent": 0,
+    "matches": [],
+    "pool_n": 22,
+    "agent_challenged": 0,
+    "agent_claims": 2,
+    "situation": "B_not_retrieval"
+  },
+  {
+    "sid": "AAjCYWXC5I",
+    "ref": "review_1.txt",
+    "human_conclusion": "MIXED",
+    "primary_basis": "MARGINAL_DELTA",
+    "n_named": 0,
+    "named": [],
+    "present": 0,
+    "absent": 0,
+    "matches": [],
+    "pool_n": 22,
+    "agent_challenged": 0,
+    "agent_claims": 2,
+    "situation": "B_not_retrieval"
+  },
+  {
+    "sid": "BINwUtUGuq",
+    "ref": "review_0.txt",
+    "human_conclusion": "INSUFFICIENT",
+    "primary_basis": "OBVIOUSNESS",
+    "n_named": 0,
+    "named": [],
+    "present": 0,
+    "absent": 0,
+    "matches": [],
+    "pool_n": 17,
+    "agent_challenged": 1,
+    "agent_claims": 4,
+    "situation": "agent_challenged"
+  },
+  {
+    "sid": "BUpdp5gETF",
+    "ref": "review_1.txt",
+    "human_conclusion": "INSUFFICIENT",
+    "primary_basis": "OVERLAP_SPECIFIC",
+    "n_named": 1,
+    "named": [
+      "muP"
+    ],
+    "present": 0,
+    "absent": 1,
+    "matches": [
+      {
+        "named": "muP: Recent works on the 'muP' framework, which involve tuning learning rates and other hyperparameters per component/layer in neural networks.",
+        "status": "ABSENT",
+        "best_match": "Scaling Exponents Across Parameterizations and Optimizers"
+      }
+    ],
+    "pool_n": 17,
+    "agent_challenged": 1,
+    "agent_claims": 3,
+    "situation": "agent_challenged"
+  },
+  {
+    "sid": "BVCGTsgpOS",
+    "ref": "review_1.txt",
+    "human_conclusion": "INSUFFICIENT",
+    "primary_basis": "OVERLAP_SPECIFIC",
+    "n_named": 3,
+    "named": [
+      "Vovk et al., 2012",
+      "Conformal language modeling (https://arxiv.org/abs/2306.10193)",
+      "https://arxiv.org/abs/2106.09848"
+    ],
+    "present": 0,
+    "absent": 3,
+    "matches": [
+      {
+        "named": "Vovk et al., 2012: PAC-style conformal prediction; foundational work on conformal prediction with statistical guarantees.",
+        "status": "ABSENT",
+        "best_match": ""
+      },
+      {
+        "named": "Conformal language modeling (https://arxiv.org/abs/2306.10193): Extension of conformal prediction to language modeling tasks, including hallucination detection.",
+        "status": "ABSENT",
+        "best_match": ""
+      },
+      {
+        "named": "https://arxiv.org/abs/2106.09848: Prior work introducing rejection sampling for covariate shift in statistical prediction.",
+        "status": "ABSENT",
+        "best_match": ""
+      }
+    ],
+    "pool_n": 19,
+    "agent_challenged": 2,
+    "agent_claims": 4,
+    "situation": "agent_challenged"
+  },
+  {
+    "sid": "CvGqMD5OtX",
+    "ref": "review_0.txt",
+    "human_conclusion": "INSUFFICIENT",
+    "primary_basis": "OVERLAP_SPECIFIC",
+    "n_named": 2,
+    "named": [
+      "DIN-SQL",
+      "CodeS"
+    ],
+    "present": 2,
+    "absent": 0,
+    "matches": [
+      {
+        "named": "DIN-SQL: Prior work on few-shot example generation for NL2SQL tasks.",
+        "status": "PRESENT",
+        "best_match": "DIN-SQL: Decomposed In-Context Learning of Text-to-SQL with Self-Correction — M. Pourreza, 2023"
+      },
+      {
+        "named": "CodeS: Prior work on few-shot example generation for NL2SQL tasks.",
+        "status": "PRESENT",
+        "best_match": "CodeS: Towards Building Open-source Language Models for Text-to-SQL — Haoyang Li, 2024"
+      }
+    ],
+    "pool_n": 21,
+    "agent_challenged": 0,
+    "agent_claims": 3,
+    "situation": "A2_grading_miss"
+  }
+]

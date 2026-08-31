@@ -1,0 +1,11 @@
+{
+  "text": "The central contribution of this paper is the formalization of “zero-shot in-context adversarial learning” for LLMs, instantiated as a GAN-inspired minimax game over an implicit neighborhood of optimal answers and realized via a multi-agent, purely in-context interaction scheme for research ideation. According to the evidence, no prior work was found that already formulates this specific adversarial, zero-shot, in-context learning framework or its associated theory; the agent could not identify existing GAN-style formulations that keep the adversarial process entirely in context without parameter updates. Thus, the core methodological idea appears genuinely new among the examined literature. A secondary contribution is the relative quality ranking metric for open-ended generation. Here, Fu et al. (2023) already propose GPTScore, which similarly uses a generative LM plus aspect-specific prompts to automate evaluation, but their method is based on per-item likelihood scores, whereas this submission introduces a blind, comparative ranking protocol and a scalarization of the target’s relative position; this constitutes a partial but nontrivial extension. Overall, given that the main theoretical/methodological framework is not challenged by overlapping prior work and the evaluation metric is only partially overlapped, the paper’s novelty constitutes a genuine advance.",
+  "model": "gpt-5.1",
+  "fix": "B",
+  "n_claims": 2,
+  "n_challenged": 0,
+  "verdict_summary": "0 of 2 claim(s) CHALLENGED by prior work (re-derived, fix B). Overlap degrees across claims: same x0, substantial x0, partial x1, superficial x0.",
+  "flips": [],
+  "cost_usd": 0.0,
+  "tokens": 1919
+}

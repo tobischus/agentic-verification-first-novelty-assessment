@@ -1,0 +1,11 @@
+{
+  "text": "The paper’s central contribution is a method for constructing small image perturbations that act as cross‑modal soft prompts/meta‑instructions: given an image and a textual meta‑instruction, they optimize a perturbation so that a VLM’s answers both follow the meta‑instruction and remain grounded in the image, under a stealth constraint. Very closely related work already delivers this core capability. Bailey et al. (2023) (“Image Hijacks”) optimize pixel‑space images so that a VLM’s logits/outputs match those induced by target text prompts, explicitly showing that adversarial images can function as soft prompts controlling generative behavior. Bagdasarian et al. (2023), Qi et al. (2023), Shayegani et al. (2023), and “Multi‑Faceted Attack: Exposing Cross‑Model Vulnerabilities in Defense‑Equipped Vision‑Language Models” all craft constrained image perturbations that inject instructions via the vision pathway so that multimodal LLMs produce attacker‑specified, context‑appropriate outputs, often under visual‑similarity constraints. Relative to this body of work, the submission mainly contributes a more elaborate data/optimization pipeline (LLM‑synthesized QA pairs, evaluator filtering) and a particular empirical focus on benign “meta‑objectives” and semantic‑preservation metrics, which are secondary refinements rather than a new mechanism. Since the core technique—image perturbations as hidden cross‑modal prompts—is already well established, the paper’s novelty is not sufficient for a top‑tier venue.",
+  "model": "gpt-5.1",
+  "fix": "B",
+  "n_claims": 4,
+  "n_challenged": 3,
+  "verdict_summary": "3 of 4 claim(s) CHALLENGED by prior work (re-derived, fix B). Overlap degrees across claims: same x0, substantial x15, partial x17, superficial x0.",
+  "flips": [],
+  "cost_usd": 0.0,
+  "tokens": 6636
+}

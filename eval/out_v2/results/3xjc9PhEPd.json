@@ -1,0 +1,205 @@
+{
+  "sid": "3xjc9PhEPd",
+  "steps": {
+    "pipeline_status": "completed",
+    "grobid_ok": true,
+    "title": "EMPIRICAL GUIDELINES FOR DEPLOYING LLMS ONTO RESOURCE-CONSTRAINED EDGE DEVICES",
+    "title_source": "grobid",
+    "abstract_chars": 1494,
+    "publication_date": "2024-06-06",
+    "date_source": "arxiv_v1",
+    "quality": {
+      "gates": {
+        "title_found": true,
+        "abstract_found": true,
+        "references_found": true,
+        "citation_contexts_found": true,
+        "full_text_found": true
+      },
+      "all_passed": true,
+      "failed_gates": [],
+      "counts": {
+        "cited_papers": 93,
+        "citation_contexts": 87,
+        "sections": 29,
+        "full_text_chars": 86359
+      },
+      "title_source": "grobid",
+      "title_needs_review": false
+    },
+    "n_claims": 4,
+    "n_ranked_papers": 22,
+    "n_pdfs_with": 22,
+    "n_pdfs_total": 22,
+    "per_claim": [
+      {
+        "claim_id": "claim_1",
+        "verdict": "not_challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 22,
+        "n_overlap": 12,
+        "deep_dives": 12
+      },
+      {
+        "claim_id": "claim_2",
+        "verdict": "not_challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 22,
+        "n_overlap": 5,
+        "deep_dives": 10
+      },
+      {
+        "claim_id": "claim_3",
+        "verdict": "not_challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 22,
+        "n_overlap": 4,
+        "deep_dives": 6
+      },
+      {
+        "claim_id": "claim_4",
+        "verdict": "not_challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 22,
+        "n_overlap": 2,
+        "deep_dives": 5
+      }
+    ],
+    "conclusion_ok": true,
+    "elapsed_s": 1025.9
+  },
+  "cost": {
+    "stages_usd": 0.0015,
+    "stages_prompt_tokens": 0,
+    "stages_completion_tokens": 0,
+    "agent_usd": 0.228,
+    "agent_prompt_tokens": 280450,
+    "agent_completion_tokens": 78994,
+    "conclusion_usd": 0.0193,
+    "conclusion_prompt_tokens": 8038,
+    "conclusion_completion_tokens": 404,
+    "total_usd": 0.2488,
+    "total_tokens": 367886,
+    "model": "gpt-5-mini"
+  },
+  "old_judge": {
+    "n_human_refs": 1,
+    "per_ref": [
+      {
+        "human_file": "review_3.txt",
+        "afzal": {
+          "n_core": 3,
+          "judgment_similarity": 0.933,
+          "frac_found": 1.0,
+          "conclusion_aligned": true,
+          "reference_conclusion": "INSUFFICIENT",
+          "reviewer_conclusion": "INSUFFICIENT",
+          "positive_shift": false,
+          "negative_shift": false,
+          "prior_work_engagement": "LIMITED",
+          "prior_work_ordinal": 1,
+          "depth_of_analysis": "MODERATE",
+          "depth_ordinal": 1,
+          "cost_usd": 0.0097,
+          "tokens": 2449,
+          "core_judgments": [
+            "The novelty of its contributions is limited.",
+            "Many of the conclusions...are largely intuitive and align with established common sense in the field.",
+            "The study does not introduce innovative findings or substantially advance the state of the art. As such, the paper’s contributions are primarily incremental, and its novelty is constrained by the intuitive nature of its results and the lack of new conceptual or methodological advances."
+          ]
+        },
+        "mine": {
+          "n_core": 3,
+          "judgment_similarity": 0.8,
+          "frac_found": 1.0,
+          "conclusion_aligned": false,
+          "reference_conclusion": "INSUFFICIENT",
+          "reviewer_conclusion": "MIXED",
+          "positive_shift": true,
+          "negative_shift": false,
+          "prior_work_engagement": "EXTENSIVE",
+          "prior_work_ordinal": 2,
+          "depth_of_analysis": "DEEP",
+          "depth_ordinal": 2,
+          "cost_usd": 0.0116,
+          "tokens": 2842,
+          "core_judgments": [
+            "The novelty of its contributions is limited.",
+            "Many of the conclusions...are largely intuitive and align with established common sense in the field.",
+            "The study does not introduce innovative findings or substantially advance the state of the art. As such, the paper’s contributions are primarily incremental, and its novelty is constrained by the intuitive nature of its results and the lack of new conceptual or methodological advances."
+          ]
+        }
+      }
+    ],
+    "cost": {
+      "usd": 0.0213,
+      "tokens": 5291
+    }
+  },
+  "error": null,
+  "conclusion": "The paper’s central contribution is a large empirical study that jointly varies model families/sizes, personalization methods (several PEFT variants and RAG), compression techniques, data scale, and training time to derive design guidelines for personalized LLM deployment on resource‑constrained edge devices. Prior work partially touches many of these axes, but always in isolation or much narrower scope: Li et al. (2024) analyze quantization across models and tasks but do not study personalization or customization–compression interactions; MobileLLM (Liu et al., 2024) benchmarks on‑device models and quantization but not PEFT vs. RAG or personalization trade‑offs; Pu et al. (2023) and Zhang et al. (2024) provide systematic PEFT/LoRA studies and scaling guidance, yet only for server‑side finetuning on limited model families and without edge constraints, compression, or direct comparison to RAG. The additional guidelines here (LoRA vs. RAG choice by task difficulty, near‑universal LoRA rank/alpha defaults, and 3–4h training sufficiency on edge hardware) follow from that broader, integrated experimental design and are secondary to it. Because no prior work delivers this combined, edge‑centric multi‑factor benchmark, the central contribution appears genuinely novel, and the paper constitutes a real empirical advance rather than a recombination of existing studies.",
+  "conclusion_meta": {
+    "text": "The paper’s central contribution is a large empirical study that jointly varies model families/sizes, personalization methods (several PEFT variants and RAG), compression techniques, data scale, and training time to derive design guidelines for personalized LLM deployment on resource‑constrained edge devices. Prior work partially touches many of these axes, but always in isolation or much narrower scope: Li et al. (2024) analyze quantization across models and tasks but do not study personalization or customization–compression interactions; MobileLLM (Liu et al., 2024) benchmarks on‑device models and quantization but not PEFT vs. RAG or personalization trade‑offs; Pu et al. (2023) and Zhang et al. (2024) provide systematic PEFT/LoRA studies and scaling guidance, yet only for server‑side finetuning on limited model families and without edge constraints, compression, or direct comparison to RAG. The additional guidelines here (LoRA vs. RAG choice by task difficulty, near‑universal LoRA rank/alpha defaults, and 3–4h training sufficiency on edge hardware) follow from that broader, integrated experimental design and are secondary to it. Because no prior work delivers this combined, edge‑centric multi‑factor benchmark, the central contribution appears genuinely novel, and the paper constitutes a real empirical advance rather than a recombination of existing studies.",
+    "model": "gpt-5.1",
+    "n_claims": 4,
+    "n_challenged": 0,
+    "verdict_summary": "0 of 4 claim(s) CHALLENGED by prior work. Overlap degrees found across claims: same x0, substantial x0, partial x23, superficial x0.",
+    "cost_usd": 0.0,
+    "tokens": 5712,
+    "generated_at": "2026-07-19 20:52:06"
+  },
+  "judge": {
+    "n_human_refs": 1,
+    "per_ref": [
+      {
+        "human_file": "review_3.txt",
+        "afzal": {
+          "n_core": 3,
+          "judgment_similarity": 0.933,
+          "frac_found": 1.0,
+          "conclusion_aligned": true,
+          "reference_conclusion": "INSUFFICIENT",
+          "reviewer_conclusion": "INSUFFICIENT",
+          "positive_shift": false,
+          "negative_shift": false,
+          "prior_work_engagement": "LIMITED",
+          "prior_work_ordinal": 1,
+          "depth_of_analysis": "MODERATE",
+          "depth_ordinal": 1,
+          "cost_usd": 0.0096,
+          "tokens": 2444,
+          "core_judgments": [
+            "The novelty of its contributions is limited.",
+            "Many of the conclusions...are largely intuitive and align with established common sense in the field.",
+            "The study does not introduce innovative findings or substantially advance the state of the art. As such, the paper’s contributions are primarily incremental, and its novelty is constrained by the intuitive nature of its results and the lack of new conceptual or methodological advances."
+          ]
+        },
+        "mine": {
+          "n_core": 3,
+          "judgment_similarity": 0.0,
+          "frac_found": 0.0,
+          "conclusion_aligned": false,
+          "reference_conclusion": "INSUFFICIENT",
+          "reviewer_conclusion": "SUFFICIENT",
+          "positive_shift": true,
+          "negative_shift": false,
+          "prior_work_engagement": "EXTENSIVE",
+          "prior_work_ordinal": 2,
+          "depth_of_analysis": "DEEP",
+          "depth_ordinal": 2,
+          "cost_usd": 0.0102,
+          "tokens": 2574,
+          "core_judgments": [
+            "The novelty of its contributions is limited.",
+            "Many of the conclusions...are largely intuitive and align with established common sense in the field.",
+            "The study does not introduce innovative findings or substantially advance the state of the art. As such, the paper’s contributions are primarily incremental, and its novelty is constrained by the intuitive nature of its results and the lack of new conceptual or methodological advances."
+          ]
+        }
+      }
+    ],
+    "cost": {
+      "usd": 0.0198,
+      "tokens": 5018
+    }
+  }
+}

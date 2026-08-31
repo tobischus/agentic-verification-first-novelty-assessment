@@ -1,0 +1,11 @@
+{
+  "text": "The paper’s central contribution is the “Tool Decoding” mechanism, a training‑free, plug‑and‑play decoding procedure that injects tool signatures into constrained decoding to improve tool selection and tool calls. However, very closely related work already delivers this core idea: TOOLDEC (“Don't Fine-Tune, Decode: Syntax Error-Free Tool Use via Constrained Decoding”) proposes a model-agnostic, training-free constrained decoding method that derives syntactic constraints from tool documentation and masks invalid tokens to enforce valid tool names and argument formats, directly targeting tool use at inference time. Similarly, Wang et al. (2024) (“FANTAstic SEquences”) and Wang et al. (2023) implement training-free, API-aware constrained decoding using signatures/regex and trie or DP-based token restriction, again to ensure valid function and argument generation and to substantially improve tool-use performance on API-Bank. Relative to this body of work, the submission mainly adds an “order consistency” heuristic that aggregates multiple sampled parameter orders to reduce value errors, some taxonomy refinements, and additional experiments over more models/benchmarks. These deltas are secondary design details and expanded evaluation rather than a new core mechanism. Given that the central idea—tool-specific, training-free constrained decoding for tool use—is already well established, the overall novelty is not strong enough for a top-tier venue.",
+  "model": "gpt-5.1",
+  "fix": "A",
+  "n_claims": 3,
+  "n_challenged": 3,
+  "verdict_summary": "3 of 3 claim(s) CHALLENGED by prior work (re-derived, fix A). Overlap degrees across claims: same x0, substantial x9, partial x9, superficial x0.",
+  "flips": [],
+  "cost_usd": 0.0,
+  "tokens": 5060
+}

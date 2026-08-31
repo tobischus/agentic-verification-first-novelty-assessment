@@ -1,0 +1,197 @@
+{
+  "sid": "BUpdp5gETF",
+  "steps": {
+    "pipeline_status": "completed",
+    "grobid_ok": true,
+    "title": "DIFFERENT RATES FOR DIFFERENT WEIGHTS: DECOUPLED RELATIVE LEARNING RATE SCHEDULES",
+    "title_source": "grobid",
+    "abstract_chars": 809,
+    "publication_date": "2025-07-04",
+    "date_source": "arxiv_v1",
+    "quality": {
+      "gates": {
+        "title_found": true,
+        "abstract_found": true,
+        "references_found": true,
+        "citation_contexts_found": true,
+        "full_text_found": true
+      },
+      "all_passed": true,
+      "failed_gates": [],
+      "counts": {
+        "cited_papers": 23,
+        "citation_contexts": 26,
+        "sections": 20,
+        "full_text_chars": 24091
+      },
+      "title_source": "grobid",
+      "title_needs_review": false
+    },
+    "n_claims": 3,
+    "n_ranked_papers": 17,
+    "n_pdfs_with": 17,
+    "n_pdfs_total": 17,
+    "per_claim": [
+      {
+        "claim_id": "claim_1",
+        "verdict": "not_challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 17,
+        "n_overlap": 1,
+        "deep_dives": 1
+      },
+      {
+        "claim_id": "claim_2",
+        "verdict": "not_challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 17,
+        "n_overlap": 2,
+        "deep_dives": 3
+      },
+      {
+        "claim_id": "claim_3",
+        "verdict": "challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 17,
+        "n_overlap": 2,
+        "deep_dives": 4
+      }
+    ],
+    "conclusion_ok": true,
+    "elapsed_s": 760.8
+  },
+  "cost": {
+    "stages_usd": 0.0067,
+    "stages_prompt_tokens": 6105,
+    "stages_completion_tokens": 1021,
+    "agent_usd": 0.0666,
+    "agent_prompt_tokens": 82243,
+    "agent_completion_tokens": 23067,
+    "conclusion_usd": 0.0078,
+    "conclusion_prompt_tokens": 2557,
+    "conclusion_completion_tokens": 334,
+    "total_usd": 0.0811,
+    "total_tokens": 115327,
+    "model": "gpt-5-mini"
+  },
+  "old_judge": {
+    "n_human_refs": 1,
+    "per_ref": [
+      {
+        "human_file": "review_1.txt",
+        "afzal": {
+          "n_core": 3,
+          "judgment_similarity": 0.883,
+          "frac_found": 1.0,
+          "conclusion_aligned": false,
+          "reference_conclusion": "INSUFFICIENT",
+          "reviewer_conclusion": "MIXED",
+          "positive_shift": true,
+          "negative_shift": false,
+          "prior_work_engagement": "LIMITED",
+          "prior_work_ordinal": 1,
+          "depth_of_analysis": "MODERATE",
+          "depth_ordinal": 1,
+          "cost_usd": 0.0111,
+          "tokens": 2633,
+          "core_judgments": [
+            "The overall novelty of the work appears limited, as the idea of tuning learning rates for each component of a neural network is already well established in the literature, particularly in recent muP works.",
+            "The approach does not significantly advance beyond existing methods.",
+            "The main contribution seems to be an empirical application of per-layer learning rate schedules, but without a large-scale validation or a deeper theoretical analysis, the work does not clearly differentiate itself from prior art."
+          ]
+        },
+        "mine": {
+          "n_core": 3,
+          "judgment_similarity": 0.733,
+          "frac_found": 1.0,
+          "conclusion_aligned": false,
+          "reference_conclusion": "INSUFFICIENT",
+          "reviewer_conclusion": "MIXED",
+          "positive_shift": true,
+          "negative_shift": false,
+          "prior_work_engagement": "EXTENSIVE",
+          "prior_work_ordinal": 2,
+          "depth_of_analysis": "DEEP",
+          "depth_ordinal": 2,
+          "cost_usd": 0.0113,
+          "tokens": 2755,
+          "core_judgments": [
+            "The overall novelty of the work appears limited, as the idea of tuning learning rates for each component of a neural network is already well established in the literature, particularly in recent muP works.",
+            "The approach does not significantly advance beyond existing methods.",
+            "The main contribution seems to be an empirical application of per-layer learning rate schedules, but without a large-scale validation or a deeper theoretical analysis, the work does not clearly differentiate itself from prior art."
+          ]
+        }
+      }
+    ],
+    "cost": {
+      "usd": 0.0224,
+      "tokens": 5388
+    }
+  },
+  "error": null,
+  "conclusion": "The central contribution of this paper is the introduction of decoupled Relative Learning Rate Schedules (RLRS), i.e., a parameterization of per‑component learning‑rate schedules (with component‑specific start/end multipliers on a cosine schedule) for different Transformer modules, including MoE components, together with an empirical demonstration that this improves optimization efficiency. Prior work has already established the value of non‑uniform learning rates across model parts: Hayou et al. (2024) advocate distinct learning rates for LoRA A and B matrices, and Everett et al. (2024) systematically study per‑layer learning‑rate prescriptions and cosine schedules in dense Transformers, showing that tuning per‑layer constants matters. However, neither work proposes the concrete RLRS mechanism used here—namely, a single global base LR with per‑module relative start/end multipliers, nor do they define a unified, transferable parameterization of per‑component cosine schedules spanning embeddings, attention, FFN, unembedding, and MoE experts/routers. The challenged claim around hyperparameter transfer across scales overlaps substantially with Everett et al. (2024), but this is secondary to the specific RLRS design. Overall, the core method—this particular decoupled relative scheduling scheme over many Transformer components—remains unchallenged and constitutes a genuine advance, albeit an incremental one.",
+  "conclusion_meta": {
+    "text": "The central contribution of this paper is the introduction of decoupled Relative Learning Rate Schedules (RLRS), i.e., a parameterization of per‑component learning‑rate schedules (with component‑specific start/end multipliers on a cosine schedule) for different Transformer modules, including MoE components, together with an empirical demonstration that this improves optimization efficiency. Prior work has already established the value of non‑uniform learning rates across model parts: Hayou et al. (2024) advocate distinct learning rates for LoRA A and B matrices, and Everett et al. (2024) systematically study per‑layer learning‑rate prescriptions and cosine schedules in dense Transformers, showing that tuning per‑layer constants matters. However, neither work proposes the concrete RLRS mechanism used here—namely, a single global base LR with per‑module relative start/end multipliers, nor do they define a unified, transferable parameterization of per‑component cosine schedules spanning embeddings, attention, FFN, unembedding, and MoE experts/routers. The challenged claim around hyperparameter transfer across scales overlaps substantially with Everett et al. (2024), but this is secondary to the specific RLRS design. Overall, the core method—this particular decoupled relative scheduling scheme over many Transformer components—remains unchallenged and constitutes a genuine advance, albeit an incremental one.",
+    "model": "gpt-5.1",
+    "n_claims": 3,
+    "n_challenged": 1,
+    "verdict_summary": "1 of 3 claim(s) CHALLENGED by prior work. Overlap degrees found across claims: same x0, substantial x1, partial x4, superficial x0.",
+    "cost_usd": 0.0,
+    "tokens": 2897,
+    "generated_at": "2026-07-19 20:55:09"
+  },
+  "judge": {
+    "n_human_refs": 1,
+    "per_ref": [
+      {
+        "human_file": "review_1.txt",
+        "afzal": {
+          "n_core": 3,
+          "judgment_similarity": 0.883,
+          "frac_found": 1.0,
+          "conclusion_aligned": false,
+          "reference_conclusion": "INSUFFICIENT",
+          "reviewer_conclusion": "MIXED",
+          "positive_shift": true,
+          "negative_shift": false,
+          "prior_work_engagement": "LIMITED",
+          "prior_work_ordinal": 1,
+          "depth_of_analysis": "MODERATE",
+          "depth_ordinal": 1,
+          "cost_usd": 0.0105,
+          "tokens": 2561,
+          "core_judgments": [
+            "The overall novelty of the work appears limited, as the idea of tuning learning rates for each component of a neural network is already well established in the literature, particularly in recent muP works.",
+            "The approach does not significantly advance beyond existing methods.",
+            "The main contribution seems to be an empirical application of per-layer learning rate schedules, but without a large-scale validation or a deeper theoretical analysis, the work does not clearly differentiate itself from prior art."
+          ]
+        },
+        "mine": {
+          "n_core": 3,
+          "judgment_similarity": 0.733,
+          "frac_found": 1.0,
+          "conclusion_aligned": false,
+          "reference_conclusion": "INSUFFICIENT",
+          "reviewer_conclusion": "SUFFICIENT",
+          "positive_shift": true,
+          "negative_shift": false,
+          "prior_work_engagement": "EXTENSIVE",
+          "prior_work_ordinal": 2,
+          "depth_of_analysis": "DEEP",
+          "depth_ordinal": 2,
+          "cost_usd": 0.0109,
+          "tokens": 2657,
+          "core_judgments": [
+            "The overall novelty of the work appears limited, as the idea of tuning learning rates for each component of a neural network is already well established in the literature, particularly in recent muP works.",
+            "The approach does not significantly advance beyond existing methods.",
+            "The main contribution seems to be an empirical application of per-layer learning rate schedules, but without a large-scale validation or a deeper theoretical analysis, the work does not clearly differentiate itself from prior art."
+          ]
+        }
+      }
+    ],
+    "cost": {
+      "usd": 0.0214,
+      "tokens": 5218
+    }
+  }
+}

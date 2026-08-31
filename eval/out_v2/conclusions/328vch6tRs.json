@@ -1,0 +1,10 @@
+{
+  "text": "The paper’s central contribution is the claim that LLMs internally detokenize subword sequences into coherent whole-word representations, primarily in early–middle layers, and that these multi-token words form a latent internal lexicon. Very similar conclusions are already drawn in Feucht et al. (2024), who show that multi-token lexical items undergo an early-layer “detokenization/erasure” process and that multi-token sequences are recoverable from early hidden states, and in Lad et al. (2024), who likewise document early-layer integration of subtokens into whole-word/entity representations using logit-lens-style analyses. Relative to these, the present submission mainly offers alternative probes and interventions (controlled random splits, word/nonword contrasts, Patchscopes-based decoding, and more task-specific retrieval metrics), which refine and repackage the same core picture rather than substantially changing it. The more novel elements — explicit logit-lens reconstruction of original words, evidence that FFN layers retrieve full-word representations earlier than residual streams, and some finer-grained characterization of robustness and FFN causality — are secondary mechanistic details on top of an already-established phenomenon. Given that the core detokenization/latent-vocabulary mechanism is substantially anticipated by Feucht et al. (2024) and Lad et al. (2024), the overall novelty is not sufficient for a top-venue publication.",
+  "model": "gpt-5.1",
+  "n_claims": 4,
+  "n_challenged": 2,
+  "verdict_summary": "2 of 4 claim(s) CHALLENGED by prior work. Overlap degrees found across claims: same x0, substantial x3, partial x8, superficial x0.",
+  "cost_usd": 0.0,
+  "tokens": 4448,
+  "generated_at": "2026-07-19 20:51:48"
+}

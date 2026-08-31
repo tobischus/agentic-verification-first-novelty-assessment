@@ -1,0 +1,159 @@
+{
+  "sid": "BVCGTsgpOS",
+  "steps": {
+    "pipeline_status": "completed",
+    "grobid_ok": true,
+    "title": "FACTTEST: FACTUALITY TESTING IN LARGE LAN-GUAGE MODELS WITH STATISTICAL GUARANTEES",
+    "title_source": "grobid_cleaned",
+    "abstract_chars": 2915,
+    "publication_date": "2026-07-19",
+    "date_source": "today_fallback",
+    "quality": {
+      "gates": {
+        "title_found": true,
+        "abstract_found": true,
+        "references_found": true,
+        "citation_contexts_found": true,
+        "full_text_found": true
+      },
+      "all_passed": true,
+      "failed_gates": [],
+      "counts": {
+        "cited_papers": 51,
+        "citation_contexts": 82,
+        "sections": 34,
+        "full_text_chars": 47101
+      },
+      "title_source": "grobid_cleaned",
+      "title_needs_review": true
+    },
+    "n_claims": 4,
+    "n_ranked_papers": 19,
+    "n_pdfs_with": 19,
+    "n_pdfs_total": 19,
+    "per_claim": [
+      {
+        "claim_id": "claim_1",
+        "verdict": "challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 19,
+        "n_overlap": 5,
+        "deep_dives": 8
+      },
+      {
+        "claim_id": "claim_2",
+        "verdict": "challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 19,
+        "n_overlap": 1,
+        "deep_dives": 1
+      },
+      {
+        "claim_id": "claim_3",
+        "verdict": "not_challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 19,
+        "n_overlap": 0,
+        "deep_dives": 0
+      },
+      {
+        "claim_id": "claim_4",
+        "verdict": "not_challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 19,
+        "n_overlap": 6,
+        "deep_dives": 6
+      }
+    ],
+    "conclusion_ok": true,
+    "elapsed_s": 1176.5
+  },
+  "cost": {
+    "stages_usd": 0.0095,
+    "stages_prompt_tokens": 7140,
+    "stages_completion_tokens": 1042,
+    "agent_usd": 0.1129,
+    "agent_prompt_tokens": 140938,
+    "agent_completion_tokens": 38780,
+    "conclusion_usd": 0.0126,
+    "conclusion_prompt_tokens": 5104,
+    "conclusion_completion_tokens": 294,
+    "total_usd": 0.135,
+    "total_tokens": 193298,
+    "model": "gpt-5-mini"
+  },
+  "error": null,
+  "conclusion": "The paper’s central contribution is FACTTEST: a statistical testing framework that evaluates LLM factuality and enables abstention with user-specified finite-sample Type I error guarantees via a calibration split, a score function, and an order-statistic threshold. Mohri et al. (2024) already propose a very similar core mechanism: a split-conformal procedure that computes per-instance scores, selects a quantile-based threshold on a calibration set, and thereby provides distribution-free, finite-sample control of the probability of incorrect (non-factual) outputs, with abstention when scores fall below threshold. This substantially overlaps with FACTTEST’s main idea of building a calibrated correctness classifier with guaranteed Type I error and abstention, as well as the associated power analysis based on the same thresholding scheme. The submission does introduce a covariate-shift extension using density-ratio-based rejection sampling, which appears novel within the examined prior work, and offers additional empirical comparisons. However, these additions are methodological extensions around an already established conformal-factuality core rather than a fundamentally new mechanism. Given that the central contribution is substantially challenged by Mohri et al. (2024), the overall novelty is not sufficient for a top-venue standard.",
+  "conclusion_meta": {
+    "text": "The paper’s central contribution is FACTTEST: a statistical testing framework that evaluates LLM factuality and enables abstention with user-specified finite-sample Type I error guarantees via a calibration split, a score function, and an order-statistic threshold. Mohri et al. (2024) already propose a very similar core mechanism: a split-conformal procedure that computes per-instance scores, selects a quantile-based threshold on a calibration set, and thereby provides distribution-free, finite-sample control of the probability of incorrect (non-factual) outputs, with abstention when scores fall below threshold. This substantially overlaps with FACTTEST’s main idea of building a calibrated correctness classifier with guaranteed Type I error and abstention, as well as the associated power analysis based on the same thresholding scheme. The submission does introduce a covariate-shift extension using density-ratio-based rejection sampling, which appears novel within the examined prior work, and offers additional empirical comparisons. However, these additions are methodological extensions around an already established conformal-factuality core rather than a fundamentally new mechanism. Given that the central contribution is substantially challenged by Mohri et al. (2024), the overall novelty is not sufficient for a top-venue standard.",
+    "model": "gpt-5.1",
+    "fix": "B",
+    "n_claims": 4,
+    "n_challenged": 3,
+    "verdict_summary": "3 of 4 claim(s) CHALLENGED by prior work (re-derived, fix B). Overlap degrees across claims: same x0, substantial x3, partial x9, superficial x0.",
+    "flips": [
+      {
+        "claim": "claim_4",
+        "old": false,
+        "new": true,
+        "reason": "fully coverage"
+      }
+    ],
+    "cost_usd": 0.0,
+    "tokens": 4807
+  },
+  "judge": {
+    "n_human_refs": 1,
+    "per_ref": [
+      {
+        "human_file": "review_1.txt",
+        "afzal": {
+          "n_core": 3,
+          "judgment_similarity": 0.883,
+          "frac_found": 1.0,
+          "conclusion_aligned": true,
+          "reference_conclusion": "INSUFFICIENT",
+          "reviewer_conclusion": "INSUFFICIENT",
+          "positive_shift": false,
+          "negative_shift": false,
+          "prior_work_engagement": "LIMITED",
+          "prior_work_ordinal": 1,
+          "depth_of_analysis": "MODERATE",
+          "depth_ordinal": 1,
+          "cost_usd": 0.0099,
+          "tokens": 2910,
+          "core_judgments": [
+            "The paper's novelty is limited, as it does not sufficiently engage with existing literature on conformal prediction and selective prediction—well-established frameworks for building trustworthy AI models.",
+            "Key components of the proposed method appear to be equivalent to PAC-style conformal prediction, raising questions about what distinguishes this work from prior approaches.",
+            "The extension to covariate shift via rejection sampling also lacks novelty, as similar techniques have been introduced in prior work."
+          ]
+        },
+        "mine": {
+          "n_core": 3,
+          "judgment_similarity": 0.9,
+          "frac_found": 1.0,
+          "conclusion_aligned": true,
+          "reference_conclusion": "INSUFFICIENT",
+          "reviewer_conclusion": "INSUFFICIENT",
+          "positive_shift": false,
+          "negative_shift": false,
+          "prior_work_engagement": "LIMITED",
+          "prior_work_ordinal": 1,
+          "depth_of_analysis": "MODERATE",
+          "depth_ordinal": 1,
+          "cost_usd": 0.0112,
+          "tokens": 2879,
+          "core_judgments": [
+            "The paper's novelty is limited, as it does not sufficiently engage with existing literature on conformal prediction and selective prediction—well-established frameworks for building trustworthy AI models.",
+            "Key components of the proposed method appear to be equivalent to PAC-style conformal prediction, raising questions about what distinguishes this work from prior approaches.",
+            "The extension to covariate shift via rejection sampling also lacks novelty, as similar techniques have been introduced in prior work."
+          ]
+        }
+      }
+    ],
+    "cost": {
+      "usd": 0.0211,
+      "tokens": 5789
+    }
+  }
+}

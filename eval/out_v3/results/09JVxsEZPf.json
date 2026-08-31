@@ -1,0 +1,144 @@
+{
+  "sid": "09JVxsEZPf",
+  "steps": {
+    "pipeline_status": "completed",
+    "grobid_ok": true,
+    "title": "TOWARDS COMPREHENSIVE AND EFFICIENT POST SAFETY ALIGNMENT OF LARGE LANGUAGE MODELS VIA SAFETY PATCHING",
+    "title_source": "grobid",
+    "abstract_chars": 1345,
+    "publication_date": "2024-05-22",
+    "date_source": "arxiv_v1",
+    "quality": {
+      "gates": {
+        "title_found": true,
+        "abstract_found": true,
+        "references_found": true,
+        "citation_contexts_found": true,
+        "full_text_found": true
+      },
+      "all_passed": true,
+      "failed_gates": [],
+      "counts": {
+        "cited_papers": 81,
+        "citation_contexts": 127,
+        "sections": 57,
+        "full_text_chars": 65125
+      },
+      "title_source": "grobid",
+      "title_needs_review": false
+    },
+    "n_claims": 3,
+    "n_ranked_papers": 17,
+    "n_pdfs_with": 17,
+    "n_pdfs_total": 17,
+    "per_claim": [
+      {
+        "claim_id": "claim_1",
+        "verdict": "not_challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 17,
+        "n_overlap": 3,
+        "deep_dives": 4
+      },
+      {
+        "claim_id": "claim_2",
+        "verdict": "challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 17,
+        "n_overlap": 3,
+        "deep_dives": 3
+      },
+      {
+        "claim_id": "claim_3",
+        "verdict": "not_challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 17,
+        "n_overlap": 4,
+        "deep_dives": 4
+      }
+    ],
+    "conclusion_ok": true,
+    "elapsed_s": 626.7
+  },
+  "cost": {
+    "stages_usd": 0.0015,
+    "stages_prompt_tokens": 0,
+    "stages_completion_tokens": 0,
+    "agent_usd": 0.108,
+    "agent_prompt_tokens": 104524,
+    "agent_completion_tokens": 40911,
+    "conclusion_usd": 0.0108,
+    "conclusion_prompt_tokens": 3946,
+    "conclusion_completion_tokens": 360,
+    "total_usd": 0.1202,
+    "total_tokens": 149741,
+    "model": "gpt-5-mini"
+  },
+  "error": null,
+  "conclusion": "The paper’s central contribution is the SAFEPATCHING framework: deriving parameter-space “safety patches” and seamlessly integrating them into an already aligned LLM to improve safety while preserving utility. Bhardwaj et al. (2024) already introduce a very similar core idea in RESTA: compute a safety delta vector in parameter space and add it to a fine-tuned backbone to restore or improve safety, studying how operations on this delta affect safety–utility trade-offs. This substantially overlaps the submission’s main mechanism of parameter-patch addition for post-hoc safety alignment. The present work extends this paradigm by (i) deriving two complementary patches from harmful data via opposite gradient directions (one for safety enhancement, one for over-safety mitigation), and (ii) introducing a controllable integration scheme and a more “comprehensive” evaluation including continual PSA scenarios. However, these additions, while interesting, are incremental refinements on an existing weight-space safety-vector approach rather than a qualitatively new central mechanism. Since the core methodological idea—safety alignment via additive parameter patches to a pretrained/aligned model—is already delivered by Bhardwaj et al. (2024), the overall novelty of the submission is not sufficient for a top-tier venue.",
+  "conclusion_meta": {
+    "text": "The paper’s central contribution is the SAFEPATCHING framework: deriving parameter-space “safety patches” and seamlessly integrating them into an already aligned LLM to improve safety while preserving utility. Bhardwaj et al. (2024) already introduce a very similar core idea in RESTA: compute a safety delta vector in parameter space and add it to a fine-tuned backbone to restore or improve safety, studying how operations on this delta affect safety–utility trade-offs. This substantially overlaps the submission’s main mechanism of parameter-patch addition for post-hoc safety alignment. The present work extends this paradigm by (i) deriving two complementary patches from harmful data via opposite gradient directions (one for safety enhancement, one for over-safety mitigation), and (ii) introducing a controllable integration scheme and a more “comprehensive” evaluation including continual PSA scenarios. However, these additions, while interesting, are incremental refinements on an existing weight-space safety-vector approach rather than a qualitatively new central mechanism. Since the core methodological idea—safety alignment via additive parameter patches to a pretrained/aligned model—is already delivered by Bhardwaj et al. (2024), the overall novelty of the submission is not sufficient for a top-tier venue.",
+    "model": "gpt-5.1",
+    "fix": "A",
+    "n_claims": 3,
+    "n_challenged": 1,
+    "verdict_summary": "1 of 3 claim(s) CHALLENGED by prior work (re-derived, fix A). Overlap degrees across claims: same x0, substantial x1, partial x9, superficial x0.",
+    "flips": [],
+    "cost_usd": 0.0,
+    "tokens": 4026
+  },
+  "judge": {
+    "n_human_refs": 1,
+    "per_ref": [
+      {
+        "human_file": "review_1.txt",
+        "afzal": {
+          "n_core": 3,
+          "judgment_similarity": 0.85,
+          "frac_found": 1.0,
+          "conclusion_aligned": false,
+          "reference_conclusion": "INSUFFICIENT",
+          "reviewer_conclusion": "MIXED",
+          "positive_shift": true,
+          "negative_shift": false,
+          "prior_work_engagement": "EXTENSIVE",
+          "prior_work_ordinal": 2,
+          "depth_of_analysis": "DEEP",
+          "depth_ordinal": 2,
+          "cost_usd": 0.0106,
+          "tokens": 2581,
+          "core_judgments": [
+            "The approach is positioned as a novel solution to the limitations of existing PSA methods, its novelty appears limited, as the core methodology relies on the SNIP score proposed by Lee et al. and model merging techniques previously introduced by Yu et al. and Hui et al.",
+            "The paper does not provide a thorough explanation of the unique contributions or advancements that distinguish SAFEPATCHING from these established methods.",
+            "The specific innovations and the rigor of the proposed tool remain unclear."
+          ]
+        },
+        "mine": {
+          "n_core": 3,
+          "judgment_similarity": 0.617,
+          "frac_found": 0.667,
+          "conclusion_aligned": true,
+          "reference_conclusion": "INSUFFICIENT",
+          "reviewer_conclusion": "INSUFFICIENT",
+          "positive_shift": false,
+          "negative_shift": false,
+          "prior_work_engagement": "LIMITED",
+          "prior_work_ordinal": 1,
+          "depth_of_analysis": "MODERATE",
+          "depth_ordinal": 1,
+          "cost_usd": 0.0112,
+          "tokens": 2682,
+          "core_judgments": [
+            "The approach is positioned as a novel solution to the limitations of existing PSA methods, its novelty appears limited, as the core methodology relies on the SNIP score proposed by Lee et al. and model merging techniques previously introduced by Yu et al. and Hui et al.",
+            "The paper does not provide a thorough explanation of the unique contributions or advancements that distinguish SAFEPATCHING from these established methods.",
+            "The specific innovations and the rigor of the proposed tool remain unclear."
+          ]
+        }
+      }
+    ],
+    "cost": {
+      "usd": 0.0218,
+      "tokens": 5263
+    }
+  }
+}

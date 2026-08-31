@@ -1,0 +1,279 @@
+{
+  "sid": "AAjCYWXC5I",
+  "steps": {
+    "pipeline_status": "completed",
+    "grobid_ok": true,
+    "title": "REVIEW AND REBUTTAL: ZERO-SHOT IN-CONTEXT ADVERSARIAL LEARNING FOR IMPROVING RE-SEARCH IDEATION",
+    "title_source": "grobid_cleaned",
+    "abstract_chars": 1440,
+    "publication_date": "2026-07-19",
+    "date_source": "today_fallback",
+    "quality": {
+      "gates": {
+        "title_found": true,
+        "abstract_found": true,
+        "references_found": true,
+        "citation_contexts_found": true,
+        "full_text_found": true
+      },
+      "all_passed": true,
+      "failed_gates": [],
+      "counts": {
+        "cited_papers": 42,
+        "citation_contexts": 55,
+        "sections": 25,
+        "full_text_chars": 48589
+      },
+      "title_source": "grobid_cleaned",
+      "title_needs_review": true
+    },
+    "n_claims": 2,
+    "n_ranked_papers": 22,
+    "n_pdfs_with": 20,
+    "n_pdfs_total": 22,
+    "per_claim": [
+      {
+        "claim_id": "claim_1",
+        "verdict": "not_challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 22,
+        "n_overlap": 0,
+        "deep_dives": 0
+      },
+      {
+        "claim_id": "claim_2",
+        "verdict": "not_challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 22,
+        "n_overlap": 1,
+        "deep_dives": 1
+      }
+    ],
+    "conclusion_ok": true,
+    "elapsed_s": 1415.7
+  },
+  "cost": {
+    "stages_usd": 0.0079,
+    "stages_prompt_tokens": 6406,
+    "stages_completion_tokens": 1175,
+    "agent_usd": 0.029,
+    "agent_prompt_tokens": 26165,
+    "agent_completion_tokens": 11205,
+    "conclusion_usd": 0.0046,
+    "conclusion_prompt_tokens": 1300,
+    "conclusion_completion_tokens": 256,
+    "total_usd": 0.0416,
+    "total_tokens": 46507,
+    "model": "gpt-5-mini"
+  },
+  "old_judge": {
+    "n_human_refs": 2,
+    "per_ref": [
+      {
+        "human_file": "review_0.txt",
+        "afzal": {
+          "n_core": 3,
+          "judgment_similarity": 0.733,
+          "frac_found": 1.0,
+          "conclusion_aligned": false,
+          "reference_conclusion": "SUFFICIENT",
+          "reviewer_conclusion": "INSUFFICIENT",
+          "positive_shift": false,
+          "negative_shift": true,
+          "prior_work_engagement": "EXTENSIVE",
+          "prior_work_ordinal": 2,
+          "depth_of_analysis": "DEEP",
+          "depth_ordinal": 2,
+          "cost_usd": 0.0123,
+          "tokens": 2799,
+          "core_judgments": [
+            "The framework fills a notable gap in the field by conceptually adapting adversarial learning to the context of LLM-driven idea generation, an area that has seen limited exploration.",
+            "The use of a peer review-inspired multi-agent setup to promote iterative improvement in idea generation represents a conceptually novel contribution, distinguishing the work from prior approaches that typically do not model such structured, adversarial interactions among LLM agents.",
+            "The paper’s novelty lies in its creative adaptation of adversarial learning principles and academic peer review dynamics to the automated ideation process, offering a fresh perspective and a promising direction for advancing LLM-based research support systems."
+          ]
+        },
+        "mine": {
+          "n_core": 3,
+          "judgment_similarity": 0.917,
+          "frac_found": 1.0,
+          "conclusion_aligned": true,
+          "reference_conclusion": "SUFFICIENT",
+          "reviewer_conclusion": "SUFFICIENT",
+          "positive_shift": false,
+          "negative_shift": false,
+          "prior_work_engagement": "LIMITED",
+          "prior_work_ordinal": 1,
+          "depth_of_analysis": "MODERATE",
+          "depth_ordinal": 1,
+          "cost_usd": 0.0119,
+          "tokens": 2789,
+          "core_judgments": [
+            "The framework fills a notable gap in the field by conceptually adapting adversarial learning to the context of LLM-driven idea generation, an area that has seen limited exploration.",
+            "The use of a peer review-inspired multi-agent setup to promote iterative improvement in idea generation represents a conceptually novel contribution, distinguishing the work from prior approaches that typically do not model such structured, adversarial interactions among LLM agents.",
+            "The paper’s novelty lies in its creative adaptation of adversarial learning principles and academic peer review dynamics to the automated ideation process, offering a fresh perspective and a promising direction for advancing LLM-based research support systems."
+          ]
+        }
+      },
+      {
+        "human_file": "review_1.txt",
+        "afzal": {
+          "n_core": 3,
+          "judgment_similarity": 0.933,
+          "frac_found": 1.0,
+          "conclusion_aligned": true,
+          "reference_conclusion": "MIXED",
+          "reviewer_conclusion": "MIXED",
+          "positive_shift": false,
+          "negative_shift": false,
+          "prior_work_engagement": "EXTENSIVE",
+          "prior_work_ordinal": 2,
+          "depth_of_analysis": "DEEP",
+          "depth_ordinal": 2,
+          "cost_usd": 0.0115,
+          "tokens": 2933,
+          "core_judgments": [
+            "The novelty primarily lies in the creative integration and adaptation of existing ideas rather than the introduction of entirely new theoretical constructs.",
+            "The GAN-inspired framing, while innovative, is more metaphorical than rigorously mathematical, and the multi-agent system mimics established peer review dynamics in a new context.",
+            "Although the relative quality ranking metric is presented as a novel evaluation tool, a more thorough discussion of its relationship to existing metrics for open-ended text generation would strengthen the novelty claim, as it remains unclear whether similar approaches have been explored in prior literature."
+          ]
+        },
+        "mine": {
+          "n_core": 3,
+          "judgment_similarity": 0.267,
+          "frac_found": 0.333,
+          "conclusion_aligned": false,
+          "reference_conclusion": "MIXED",
+          "reviewer_conclusion": "SUFFICIENT",
+          "positive_shift": true,
+          "negative_shift": false,
+          "prior_work_engagement": "LIMITED",
+          "prior_work_ordinal": 1,
+          "depth_of_analysis": "MODERATE",
+          "depth_ordinal": 1,
+          "cost_usd": 0.0123,
+          "tokens": 3071,
+          "core_judgments": [
+            "The novelty primarily lies in the creative integration and adaptation of existing ideas rather than the introduction of entirely new theoretical constructs.",
+            "The GAN-inspired framing, while innovative, is more metaphorical than rigorously mathematical, and the multi-agent system mimics established peer review dynamics in a new context.",
+            "Although the relative quality ranking metric is presented as a novel evaluation tool, a more thorough discussion of its relationship to existing metrics for open-ended text generation would strengthen the novelty claim, as it remains unclear whether similar approaches have been explored in prior literature."
+          ]
+        }
+      }
+    ],
+    "cost": {
+      "usd": 0.048,
+      "tokens": 11592
+    }
+  },
+  "error": null,
+  "conclusion": "The paper’s central contribution is the formulation of “zero-shot in-context adversarial learning” for LLMs, instantiated via a GAN-style minimax framework over an assumed neighborhood of optimal answers and implemented as a multi-agent, fully in-context (no parameter update) optimization procedure for research-idea generation. Among the examined literature, no prior work was found that formalizes in-context adversarial learning in this way or that casts multi-LLM-agent interaction as a GAN-like game to better exploit a model’s parametric knowledge, so this core mechanism appears genuinely new given the available evidence. A secondary contribution is the proposed relative quality ranking metric for open-ended generation, where an LLM blindly compares generated ideas against a target idea under user-specified criteria; this partially overlaps conceptually with GPTScore’s use of LMs as flexible evaluators (Fu et al., 2023), but the submission’s blind comparative ranking protocol and scalarization differ methodologically and are not refuted by that work. Since the central theoretical and algorithmic contribution is not challenged and the overlap on evaluation is only partial, the paper’s novelty meets the bar for a genuine advance rather than being merely incremental.",
+  "conclusion_meta": {
+    "text": "The paper’s central contribution is the formulation of “zero-shot in-context adversarial learning” for LLMs, instantiated via a GAN-style minimax framework over an assumed neighborhood of optimal answers and implemented as a multi-agent, fully in-context (no parameter update) optimization procedure for research-idea generation. Among the examined literature, no prior work was found that formalizes in-context adversarial learning in this way or that casts multi-LLM-agent interaction as a GAN-like game to better exploit a model’s parametric knowledge, so this core mechanism appears genuinely new given the available evidence. A secondary contribution is the proposed relative quality ranking metric for open-ended generation, where an LLM blindly compares generated ideas against a target idea under user-specified criteria; this partially overlaps conceptually with GPTScore’s use of LMs as flexible evaluators (Fu et al., 2023), but the submission’s blind comparative ranking protocol and scalarization differ methodologically and are not refuted by that work. Since the central theoretical and algorithmic contribution is not challenged and the overlap on evaluation is only partial, the paper’s novelty meets the bar for a genuine advance rather than being merely incremental.",
+    "model": "gpt-5.1",
+    "n_claims": 2,
+    "n_challenged": 0,
+    "verdict_summary": "0 of 2 claim(s) CHALLENGED by prior work. Overlap degrees found across claims: same x0, substantial x0, partial x1, superficial x0.",
+    "cost_usd": 0.0,
+    "tokens": 1924,
+    "generated_at": "2026-07-19 20:54:17"
+  },
+  "judge": {
+    "n_human_refs": 2,
+    "per_ref": [
+      {
+        "human_file": "review_0.txt",
+        "afzal": {
+          "n_core": 3,
+          "judgment_similarity": 0.7,
+          "frac_found": 1.0,
+          "conclusion_aligned": false,
+          "reference_conclusion": "SUFFICIENT",
+          "reviewer_conclusion": "INSUFFICIENT",
+          "positive_shift": false,
+          "negative_shift": true,
+          "prior_work_engagement": "EXTENSIVE",
+          "prior_work_ordinal": 2,
+          "depth_of_analysis": "DEEP",
+          "depth_ordinal": 2,
+          "cost_usd": 0.0119,
+          "tokens": 2747,
+          "core_judgments": [
+            "The framework fills a notable gap in the field by conceptually adapting adversarial learning to the context of LLM-driven idea generation, an area that has seen limited exploration.",
+            "The use of a peer review-inspired multi-agent setup to promote iterative improvement in idea generation represents a conceptually novel contribution, distinguishing the work from prior approaches that typically do not model such structured, adversarial interactions among LLM agents.",
+            "The paper’s novelty lies in its creative adaptation of adversarial learning principles and academic peer review dynamics to the automated ideation process, offering a fresh perspective and a promising direction for advancing LLM-based research support systems."
+          ]
+        },
+        "mine": {
+          "n_core": 3,
+          "judgment_similarity": 0.917,
+          "frac_found": 1.0,
+          "conclusion_aligned": true,
+          "reference_conclusion": "SUFFICIENT",
+          "reviewer_conclusion": "SUFFICIENT",
+          "positive_shift": false,
+          "negative_shift": false,
+          "prior_work_engagement": "LIMITED",
+          "prior_work_ordinal": 1,
+          "depth_of_analysis": "MODERATE",
+          "depth_ordinal": 1,
+          "cost_usd": 0.0115,
+          "tokens": 2720,
+          "core_judgments": [
+            "The framework fills a notable gap in the field by conceptually adapting adversarial learning to the context of LLM-driven idea generation, an area that has seen limited exploration.",
+            "The use of a peer review-inspired multi-agent setup to promote iterative improvement in idea generation represents a conceptually novel contribution, distinguishing the work from prior approaches that typically do not model such structured, adversarial interactions among LLM agents.",
+            "Overall, the paper’s novelty lies in its creative adaptation of adversarial learning principles and academic peer review dynamics to the automated ideation process, offering a fresh perspective and a promising direction for advancing LLM-based research support systems."
+          ]
+        }
+      },
+      {
+        "human_file": "review_1.txt",
+        "afzal": {
+          "n_core": 3,
+          "judgment_similarity": 0.917,
+          "frac_found": 1.0,
+          "conclusion_aligned": true,
+          "reference_conclusion": "MIXED",
+          "reviewer_conclusion": "MIXED",
+          "positive_shift": false,
+          "negative_shift": false,
+          "prior_work_engagement": "EXTENSIVE",
+          "prior_work_ordinal": 2,
+          "depth_of_analysis": "DEEP",
+          "depth_ordinal": 2,
+          "cost_usd": 0.0118,
+          "tokens": 2982,
+          "core_judgments": [
+            "The novelty primarily lies in the creative integration and adaptation of existing ideas rather than the introduction of entirely new theoretical constructs.",
+            "The GAN-inspired framing, while innovative, is more metaphorical than rigorously mathematical, and the multi-agent system mimics established peer review dynamics in a new context.",
+            "Although the relative quality ranking metric is presented as a novel evaluation tool, a more thorough discussion of its relationship to existing metrics for open-ended text generation would strengthen the novelty claim, as it remains unclear whether similar approaches have been explored in prior literature."
+          ]
+        },
+        "mine": {
+          "n_core": 3,
+          "judgment_similarity": 0.267,
+          "frac_found": 0.333,
+          "conclusion_aligned": false,
+          "reference_conclusion": "MIXED",
+          "reviewer_conclusion": "SUFFICIENT",
+          "positive_shift": true,
+          "negative_shift": false,
+          "prior_work_engagement": "LIMITED",
+          "prior_work_ordinal": 1,
+          "depth_of_analysis": "MODERATE",
+          "depth_ordinal": 1,
+          "cost_usd": 0.0127,
+          "tokens": 3112,
+          "core_judgments": [
+            "The novelty primarily lies in the creative integration and adaptation of existing ideas rather than the introduction of entirely new theoretical constructs.",
+            "The GAN-inspired framing, while innovative, is more metaphorical than rigorously mathematical, and the multi-agent system mimics established peer review dynamics in a new context.",
+            "Although the relative quality ranking metric is presented as a novel evaluation tool, a more thorough discussion of its relationship to existing metrics for open-ended text generation would strengthen the novelty claim, as it remains unclear whether similar approaches have been explored in prior literature."
+          ]
+        }
+      }
+    ],
+    "cost": {
+      "usd": 0.0479,
+      "tokens": 11561
+    }
+  }
+}

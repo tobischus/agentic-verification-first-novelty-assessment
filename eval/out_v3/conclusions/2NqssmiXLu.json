@@ -1,0 +1,11 @@
+{
+  "text": "The paper’s central contribution is the SAFE framework: a two-stage, self-evolving pipeline that bootstraps from GPT‑4o to synthesize specifications and proofs for Rust/Verus, and then iteratively fine-tunes open-source LLMs on filtered, verifier-checked artifacts (including incorrect proofs for self-debugging) to overcome multi-level data scarcity and ultimately obtain an autonomous Verus proof generator. The closest prior work combines two strands: Baldur (First et al., 2023), which fine-tunes models for whole-proof generation and proof repair using verifier error messages, and several systems for Rust/Verus (Yao et al., 2023; Yang et al., 2024) that use GPT-4-family models plus verifier feedback to generate and iteratively improve proofs/specifications. These works already cover LLM-based proof synthesis, exploitation of verifier errors, and (in Baldur) proof-repair training. What SAFE adds is specific to Rust/Verus: an explicit multi-round self-evolution loop that (i) bootstraps data from GPT‑4o, (ii) uses quantitative correctness/completeness metrics for automatic spec filtering, and (iii) repeatedly fine-tunes open models for both proof generation and self-debugging. This iterative, model-improving, bootstrap-from-GPT procedure for Rust/Verus is not present in the prior work and is central rather than peripheral. Overall, the paper constitutes a genuine advance in novelty.",
+  "model": "gpt-5.1",
+  "fix": "A",
+  "n_claims": 3,
+  "n_challenged": 0,
+  "verdict_summary": "0 of 3 claim(s) CHALLENGED by prior work (re-derived, fix A). Overlap degrees across claims: same x0, substantial x0, partial x16, superficial x0.",
+  "flips": [],
+  "cost_usd": 0.0,
+  "tokens": 5005
+}

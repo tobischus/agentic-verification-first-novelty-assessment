@@ -1,0 +1,205 @@
+{
+  "sid": "1XxNbecjXe",
+  "steps": {
+    "pipeline_status": "completed",
+    "grobid_ok": true,
+    "title": "SOFT PROMPTS GO HARD: STEERING VISUAL LAN-GUAGE MODELS WITH HIDDEN META-INSTRUCTIONS",
+    "title_source": "grobid",
+    "abstract_chars": 1811,
+    "publication_date": "2026-07-18",
+    "date_source": "today_fallback",
+    "quality": {
+      "gates": {
+        "title_found": true,
+        "abstract_found": true,
+        "references_found": true,
+        "citation_contexts_found": true,
+        "full_text_found": true
+      },
+      "all_passed": true,
+      "failed_gates": [],
+      "counts": {
+        "cited_papers": 43,
+        "citation_contexts": 51,
+        "sections": 26,
+        "full_text_chars": 41297
+      },
+      "title_source": "grobid",
+      "title_needs_review": false
+    },
+    "n_claims": 4,
+    "n_ranked_papers": 20,
+    "n_pdfs_with": 18,
+    "n_pdfs_total": 20,
+    "per_claim": [
+      {
+        "claim_id": "claim_1",
+        "verdict": "challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 20,
+        "n_overlap": 8,
+        "deep_dives": 9
+      },
+      {
+        "claim_id": "claim_2",
+        "verdict": "challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 20,
+        "n_overlap": 9,
+        "deep_dives": 10
+      },
+      {
+        "claim_id": "claim_3",
+        "verdict": "challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 20,
+        "n_overlap": 7,
+        "deep_dives": 10
+      },
+      {
+        "claim_id": "claim_4",
+        "verdict": "not_challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 20,
+        "n_overlap": 8,
+        "deep_dives": 8
+      }
+    ],
+    "conclusion_ok": true,
+    "elapsed_s": 797.2
+  },
+  "cost": {
+    "stages_usd": 0.0017,
+    "stages_prompt_tokens": 0,
+    "stages_completion_tokens": 0,
+    "agent_usd": 0.3348,
+    "agent_prompt_tokens": 259476,
+    "agent_completion_tokens": 134944,
+    "conclusion_usd": 0.0254,
+    "conclusion_prompt_tokens": 10923,
+    "conclusion_completion_tokens": 439,
+    "total_usd": 0.3618,
+    "total_tokens": 405782,
+    "model": "gpt-5-mini"
+  },
+  "old_judge": {
+    "n_human_refs": 1,
+    "per_ref": [
+      {
+        "human_file": "review_2.txt",
+        "afzal": {
+          "n_core": 3,
+          "judgment_similarity": 0.9,
+          "frac_found": 1.0,
+          "conclusion_aligned": true,
+          "reference_conclusion": "MIXED",
+          "reviewer_conclusion": "MIXED",
+          "positive_shift": false,
+          "negative_shift": false,
+          "prior_work_engagement": "LIMITED",
+          "prior_work_ordinal": 1,
+          "depth_of_analysis": "MODERATE",
+          "depth_ordinal": 1,
+          "cost_usd": 0.0129,
+          "tokens": 3078,
+          "core_judgments": [
+            "The concept of providing meta-instructions through image inputs is not entirely novel—prior work, notably Bailey et al. (2023), has explored related prompt injection attacks via images.",
+            "The general algorithm employed, which involves creating a dataset of input-output pairs and training an image via projected gradient descent to maximize the likelihood over this dataset, closely aligns with the 'Behavior Matching' approach described by Bailey et al. (2023). As such, the methodological contribution is incremental rather than fundamentally new.",
+            "The novelty of this work lies less in the method itself and more in the scope, depth, and clarity of its empirical investigation, as well as the new insights it provides into the vulnerabilities of VLMs to image-based prompt injection."
+          ]
+        },
+        "mine": {
+          "n_core": 3,
+          "judgment_similarity": 0.917,
+          "frac_found": 1.0,
+          "conclusion_aligned": true,
+          "reference_conclusion": "MIXED",
+          "reviewer_conclusion": "MIXED",
+          "positive_shift": false,
+          "negative_shift": false,
+          "prior_work_engagement": "EXTENSIVE",
+          "prior_work_ordinal": 2,
+          "depth_of_analysis": "DEEP",
+          "depth_ordinal": 2,
+          "cost_usd": 0.0132,
+          "tokens": 3280,
+          "core_judgments": [
+            "The concept of providing meta-instructions through image inputs is not entirely novel—prior work, notably Bailey et al. (2023), has explored related prompt injection attacks via images.",
+            "The general algorithm employed, which involves creating a dataset of input-output pairs and training an image via projected gradient descent to maximize the likelihood over this dataset, closely aligns with the 'Behavior Matching' approach described by Bailey et al. (2023). As such, the methodological contribution is incremental rather than fundamentally new.",
+            "The novelty of this work lies less in the method itself and more in the scope, depth, and clarity of its empirical investigation, as well as the new insights it provides into the vulnerabilities of VLMs to image-based prompt injection."
+          ]
+        }
+      }
+    ],
+    "cost": {
+      "usd": 0.0261,
+      "tokens": 6358
+    }
+  },
+  "error": null,
+  "conclusion": "The paper’s central contribution is a method to construct image perturbations that function as cross‑modal soft prompts or “hidden meta‑instructions” which steer VLM outputs while preserving the original image semantics. Very similar capabilities are already provided by several prior works: Bailey et al. (2023) “Image Hijacks” and Bagdasarian et al. (2023) “(Ab)using Images and Sounds for Indirect Instruction Injection in Multi-Modal LLMs” both optimize small pixel-space perturbations so that images act as soft prompts, inducing target behaviours or prompt-like instruction following in VLMs under stealth constraints; “Manipulating Multimodal Agents via Cross-Modal Prompt Injection” and “Multi-Faceted Attack: Exposing Cross-Model Vulnerabilities in Defense-Equipped Vision-Language Models” likewise craft constrained visual perturbations whose embeddings encode instructions that override or inject prompts. Relative to this, the submission’s main additions are procedural and evaluative: synthesizing and filtering QA pairs with LLMs, focusing on a catalog of benign “meta-objectives” (sentiment, style, bias), and more systematically quantifying semantic preservation (SSIM, embedding similarity, oracle LLM). These are useful refinements but remain peripheral to the already-established core mechanism of using adversarial image perturbations as cross‑modal soft prompts for instruction injection. On balance, the central contribution is therefore not novel enough for a top-tier venue.",
+  "conclusion_meta": {
+    "text": "The paper’s central contribution is a method to construct image perturbations that function as cross‑modal soft prompts or “hidden meta‑instructions” which steer VLM outputs while preserving the original image semantics. Very similar capabilities are already provided by several prior works: Bailey et al. (2023) “Image Hijacks” and Bagdasarian et al. (2023) “(Ab)using Images and Sounds for Indirect Instruction Injection in Multi-Modal LLMs” both optimize small pixel-space perturbations so that images act as soft prompts, inducing target behaviours or prompt-like instruction following in VLMs under stealth constraints; “Manipulating Multimodal Agents via Cross-Modal Prompt Injection” and “Multi-Faceted Attack: Exposing Cross-Model Vulnerabilities in Defense-Equipped Vision-Language Models” likewise craft constrained visual perturbations whose embeddings encode instructions that override or inject prompts. Relative to this, the submission’s main additions are procedural and evaluative: synthesizing and filtering QA pairs with LLMs, focusing on a catalog of benign “meta-objectives” (sentiment, style, bias), and more systematically quantifying semantic preservation (SSIM, embedding similarity, oracle LLM). These are useful refinements but remain peripheral to the already-established core mechanism of using adversarial image perturbations as cross‑modal soft prompts for instruction injection. On balance, the central contribution is therefore not novel enough for a top-tier venue.",
+    "model": "gpt-5.1",
+    "n_claims": 4,
+    "n_challenged": 3,
+    "verdict_summary": "3 of 4 claim(s) CHALLENGED by prior work. Overlap degrees found across claims: same x0, substantial x15, partial x17, superficial x0.",
+    "cost_usd": 0.0,
+    "tokens": 6630,
+    "generated_at": "2026-07-19 20:51:04"
+  },
+  "judge": {
+    "n_human_refs": 1,
+    "per_ref": [
+      {
+        "human_file": "review_2.txt",
+        "afzal": {
+          "n_core": 3,
+          "judgment_similarity": 0.9,
+          "frac_found": 1.0,
+          "conclusion_aligned": true,
+          "reference_conclusion": "MIXED",
+          "reviewer_conclusion": "MIXED",
+          "positive_shift": false,
+          "negative_shift": false,
+          "prior_work_engagement": "LIMITED",
+          "prior_work_ordinal": 1,
+          "depth_of_analysis": "MODERATE",
+          "depth_ordinal": 1,
+          "cost_usd": 0.011,
+          "tokens": 3079,
+          "core_judgments": [
+            "The concept of providing meta-instructions through image inputs is not entirely novel—prior work, notably Bailey et al. (2023), has explored related prompt injection attacks via images.",
+            "The general algorithm employed, which involves creating a dataset of input-output pairs and training an image via projected gradient descent to maximize the likelihood over this dataset, closely aligns with the 'Behavior Matching' approach described by Bailey et al. (2023). As such, the methodological contribution is incremental rather than fundamentally new.",
+            "The novelty of this work lies less in the method itself and more in the scope, depth, and clarity of its empirical investigation, as well as the new insights it provides into the vulnerabilities of VLMs to image-based prompt injection."
+          ]
+        },
+        "mine": {
+          "n_core": 3,
+          "judgment_similarity": 0.917,
+          "frac_found": 1.0,
+          "conclusion_aligned": false,
+          "reference_conclusion": "MIXED",
+          "reviewer_conclusion": "INSUFFICIENT",
+          "positive_shift": false,
+          "negative_shift": true,
+          "prior_work_engagement": "EXTENSIVE",
+          "prior_work_ordinal": 2,
+          "depth_of_analysis": "DEEP",
+          "depth_ordinal": 2,
+          "cost_usd": 0.0125,
+          "tokens": 3076,
+          "core_judgments": [
+            "The concept of providing meta-instructions through image inputs is not entirely novel—prior work, notably Bailey et al. (2023), has explored related prompt injection attacks via images.",
+            "The general algorithm employed, which involves creating a dataset of input-output pairs and training an image via projected gradient descent to maximize the likelihood over this dataset, closely aligns with the 'Behavior Matching' approach described by Bailey et al. (2023). As such, the methodological contribution is incremental rather than fundamentally new.",
+            "The novelty of this work lies less in the method itself and more in the scope, depth, and clarity of its empirical investigation, as well as the new insights it provides into the vulnerabilities of VLMs to image-based prompt injection."
+          ]
+        }
+      }
+    ],
+    "cost": {
+      "usd": 0.0235,
+      "tokens": 6155
+    }
+  }
+}

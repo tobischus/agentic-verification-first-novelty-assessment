@@ -1,0 +1,144 @@
+{
+  "sid": "4QWPCTLq20",
+  "steps": {
+    "pipeline_status": "completed",
+    "grobid_ok": true,
+    "title": "INTELLLM: LITTLE HINTS MAKE A BIG DIFFERENCE FOR LLM KV CACHE COMPRESSION",
+    "title_source": "grobid",
+    "abstract_chars": 1864,
+    "publication_date": "2026-07-19",
+    "date_source": "today_fallback",
+    "quality": {
+      "gates": {
+        "title_found": true,
+        "abstract_found": true,
+        "references_found": true,
+        "citation_contexts_found": true,
+        "full_text_found": true
+      },
+      "all_passed": true,
+      "failed_gates": [],
+      "counts": {
+        "cited_papers": 29,
+        "citation_contexts": 14,
+        "sections": 22,
+        "full_text_chars": 26050
+      },
+      "title_source": "grobid",
+      "title_needs_review": false
+    },
+    "n_claims": 3,
+    "n_ranked_papers": 22,
+    "n_pdfs_with": 22,
+    "n_pdfs_total": 22,
+    "per_claim": [
+      {
+        "claim_id": "claim_1",
+        "verdict": "challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 22,
+        "n_overlap": 19,
+        "deep_dives": 20
+      },
+      {
+        "claim_id": "claim_2",
+        "verdict": "not_challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 22,
+        "n_overlap": 12,
+        "deep_dives": 16
+      },
+      {
+        "claim_id": "claim_3",
+        "verdict": "not_challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 22,
+        "n_overlap": 11,
+        "deep_dives": 17
+      }
+    ],
+    "conclusion_ok": true,
+    "elapsed_s": 1589.0
+  },
+  "cost": {
+    "stages_usd": 0.0095,
+    "stages_prompt_tokens": 5683,
+    "stages_completion_tokens": 1962,
+    "agent_usd": 0.4134,
+    "agent_prompt_tokens": 361521,
+    "agent_completion_tokens": 161524,
+    "conclusion_usd": 0.027,
+    "conclusion_prompt_tokens": 12093,
+    "conclusion_completion_tokens": 355,
+    "total_usd": 0.4499,
+    "total_tokens": 543138,
+    "model": "gpt-5-mini"
+  },
+  "error": null,
+  "conclusion": "The paper’s central contribution is IntelLLM, presented as a lightweight, training‑free framework for long‑text LLM inference via KV‑cache compression that preserves long‑range reasoning. However, this high‑level contribution substantially overlaps with multiple prior KV‑compression methods that already offer training‑free, deployment‑oriented frameworks targeting long‑context, memory‑efficient inference, notably GEAR (quantized+low‑rank+sparse KV decomposition with a streaming buffer; “GEAR: An Efficient KV Cache Compression Recipe for Near-Lossless Generative Inference of LLM”), LServe (unified sparse attention, paging, and KV quantization), RazorAttention (retrieval‑head‑based KV pruning with compensation tokens), Tactic (adaptive sparse attention via clustering), and R‑KV (redundancy‑aware KV selection). These works already achieve the same core functionality IntelLLM claims: significantly reducing KV cache cost during autoregressive generation without finetuning, while preserving performance on long sequences. IntelLLM’s genuinely novel components are its specific Center of Gravity Eviction (CGE) and Remote Gap Localization (RGL) strategies, which introduce new eviction and positional‑remapping policies. However, these are algorithmic details within an already well‑explored framework design space rather than a qualitatively new paradigm. Given that the central contribution—the overall framework for training‑free KV‑cache compression for long‑context inference—is challenged by strong prior art, the paper is, on balance, not novel enough for a top‑tier venue.",
+  "conclusion_meta": {
+    "text": "The paper’s central contribution is IntelLLM, presented as a lightweight, training‑free framework for long‑text LLM inference via KV‑cache compression that preserves long‑range reasoning. However, this high‑level contribution substantially overlaps with multiple prior KV‑compression methods that already offer training‑free, deployment‑oriented frameworks targeting long‑context, memory‑efficient inference, notably GEAR (quantized+low‑rank+sparse KV decomposition with a streaming buffer; “GEAR: An Efficient KV Cache Compression Recipe for Near-Lossless Generative Inference of LLM”), LServe (unified sparse attention, paging, and KV quantization), RazorAttention (retrieval‑head‑based KV pruning with compensation tokens), Tactic (adaptive sparse attention via clustering), and R‑KV (redundancy‑aware KV selection). These works already achieve the same core functionality IntelLLM claims: significantly reducing KV cache cost during autoregressive generation without finetuning, while preserving performance on long sequences. IntelLLM’s genuinely novel components are its specific Center of Gravity Eviction (CGE) and Remote Gap Localization (RGL) strategies, which introduce new eviction and positional‑remapping policies. However, these are algorithmic details within an already well‑explored framework design space rather than a qualitatively new paradigm. Given that the central contribution—the overall framework for training‑free KV‑cache compression for long‑context inference—is challenged by strong prior art, the paper is, on balance, not novel enough for a top‑tier venue.",
+    "model": "gpt-5.1",
+    "fix": "A",
+    "n_claims": 3,
+    "n_challenged": 1,
+    "verdict_summary": "1 of 3 claim(s) CHALLENGED by prior work (re-derived, fix A). Overlap degrees across claims: same x0, substantial x5, partial x37, superficial x0.",
+    "flips": [],
+    "cost_usd": 0.0,
+    "tokens": 4866
+  },
+  "judge": {
+    "n_human_refs": 1,
+    "per_ref": [
+      {
+        "human_file": "review_3.txt",
+        "afzal": {
+          "n_core": 3,
+          "judgment_similarity": 0.883,
+          "frac_found": 1.0,
+          "conclusion_aligned": true,
+          "reference_conclusion": "INSUFFICIENT",
+          "reviewer_conclusion": "INSUFFICIENT",
+          "positive_shift": false,
+          "negative_shift": false,
+          "prior_work_engagement": "LIMITED",
+          "prior_work_ordinal": 1,
+          "depth_of_analysis": "MODERATE",
+          "depth_ordinal": 1,
+          "cost_usd": 0.0103,
+          "tokens": 2591,
+          "core_judgments": [
+            "The integration of CGE and RGL is presented as a novel solution to the KV cache memory challenge, but the overall novelty of the work is limited.",
+            "Sparse attention mechanisms have already been extensively explored in prior literature, such as [1] and [2], which diminishes the originality of the proposed methods.",
+            "The CGE component closely resembles previous approaches like H2O [3] and SnapKV [4], with only incremental differences."
+          ]
+        },
+        "mine": {
+          "n_core": 3,
+          "judgment_similarity": 0.883,
+          "frac_found": 1.0,
+          "conclusion_aligned": true,
+          "reference_conclusion": "INSUFFICIENT",
+          "reviewer_conclusion": "INSUFFICIENT",
+          "positive_shift": false,
+          "negative_shift": false,
+          "prior_work_engagement": "EXTENSIVE",
+          "prior_work_ordinal": 2,
+          "depth_of_analysis": "DEEP",
+          "depth_ordinal": 2,
+          "cost_usd": 0.0109,
+          "tokens": 2743,
+          "core_judgments": [
+            "The integration of CGE and RGL is presented as a novel solution to the KV cache memory challenge, but the overall novelty of the work is limited.",
+            "Sparse attention mechanisms have already been extensively explored in prior literature, such as [1] and [2], which diminishes the originality of the proposed methods.",
+            "The CGE component closely resembles previous approaches like H2O [3] and SnapKV [4], with only incremental differences."
+          ]
+        }
+      }
+    ],
+    "cost": {
+      "usd": 0.0212,
+      "tokens": 5334
+    }
+  }
+}

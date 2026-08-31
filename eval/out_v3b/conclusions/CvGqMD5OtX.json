@@ -1,0 +1,18 @@
+{
+  "text": "The central contribution of this paper is the CHASE-SQL framework: an ensemble that generates diverse SQL candidates using several prompting strategies and then selects a final query via a learned scoring model. Closest prior work is MCS-SQL by Lee et al. (2024), which already generates diverse candidate SQLs from multiple prompts and then selects a single best query, and SQL-PaLM by Sun et al. (2023) and C3 by Dong et al. (2023), which likewise combine multiple candidate generators with execution-based selection/voting at test time. These works therefore already realize the core idea of multi-path candidate generation plus a dedicated selection phase for Text-to-SQL. Relative to them, the submission’s main deltas are: (i) specific engineering of three generators (divide-and-conquer CoT, query-plan-based CoT, and online synthetic examples), (ii) replacing execution/voting or prompted multiple-choice with a trained pairwise selection classifier and win-count aggregation, and (iii) some auxiliary mechanisms such as a query-fixing loop and DB-value retrieval. While these additions are technically sound, they refine an established ensemble paradigm rather than redefining it, and the move from execution-based or prompted selection to a learned pairwise scorer is incremental. Accordingly, the overall novelty is not sufficient for a top-venue contribution.",
+  "model": "gpt-5.1",
+  "fix": "B",
+  "n_claims": 3,
+  "n_challenged": 1,
+  "verdict_summary": "1 of 3 claim(s) CHALLENGED by prior work (re-derived, fix B). Overlap degrees across claims: same x0, substantial x1, partial x8, superficial x0.",
+  "flips": [
+    {
+      "claim": "claim_3",
+      "old": false,
+      "new": true,
+      "reason": "fully coverage"
+    }
+  ],
+  "cost_usd": 0.0,
+  "tokens": 3696
+}

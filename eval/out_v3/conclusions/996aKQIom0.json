@@ -1,0 +1,11 @@
+{
+  "text": "The central contribution of this paper is a benchmark/framework for evaluating role‑playing abilities of LLMs via a three‑agent setup (player, interrogator, judge) with dynamically generated multi‑turn interactions and multi‑model automatic judging. However, H. Liu et al.’s “Enhancing Role-playing Systems through Aggressive Queries: Evaluation and Improvement” already introduces MORTISE, a designed system specifically for benchmarking and improving role‑playing LLMs through adversarial queries and datasets, substantially overlapping in the core goal of systematically assessing role‑play capabilities. Other prior work such as SocialBench, RoleLLM/RoleBench, CharacterEval, and ECHO likewise provide role‑play benchmarks and automatic or semi‑automatic evaluation protocols tailored to character consistency and related criteria. Relative to these, the submission’s main additions are operational design choices: fully dynamic LM‑generated interrogator prompts at each run, a three‑role separation with an explicit “interrogator” agent, averaging over multiple LM judges, and a particular per‑turn scoring scheme. These are incremental refinements of an already well‑explored benchmarking paradigm rather than a qualitatively new central mechanism. Given that the paper’s core contribution—a benchmark for role‑playing LLMs—is substantially anticipated by existing benchmarks and systems, the overall novelty is not sufficient for a top‑tier venue.",
+  "model": "gpt-5.1",
+  "fix": "A",
+  "n_claims": 1,
+  "n_challenged": 1,
+  "verdict_summary": "1 of 1 claim(s) CHALLENGED by prior work (re-derived, fix A). Overlap degrees across claims: same x0, substantial x1, partial x7, superficial x0.",
+  "flips": [],
+  "cost_usd": 0.0,
+  "tokens": 2376
+}

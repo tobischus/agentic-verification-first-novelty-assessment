@@ -1,0 +1,10 @@
+{
+  "text": "The paper’s central contribution is the Tool Decoding method: a training‑free, plug‑and‑play decoding procedure that uses tool documentation to impose constrained decoding for tool names/arguments and augments this with an “order consistency” mechanism to reduce parameter/value errors. However, very closely related prior work already delivers the core of this contribution. In particular, TOOLDEC (“Don’t Fine-Tune, Decode”) and FANTASE (Wang et al., 2024) both propose model‑agnostic, training‑free constrained decoding that extracts API/tool signatures from documentation, stores them in lookup/trie/FSM structures, and restricts token generation to valid tool names and argument keys, demonstrating large gains across multiple LLMs and benchmarks, including API-Bank. Similarly, Wang et al. (2023) applies API‑aware constrained decoding to eliminate format violations without finetuning. Relative to these, the submission’s main technical delta is the order‑consistency majority‑vote scheme over multiple sampled parameter orders and some finer‑grained error taxonomies and broader empirical coverage; these are useful but peripheral refinements on top of an already well‑explored constrained‑decoding core. Given that the decoding mechanism that does the main work is substantially prefigured by prior art, the overall novelty is not strong enough for a top‑tier venue.",
+  "model": "gpt-5.1",
+  "n_claims": 3,
+  "n_challenged": 3,
+  "verdict_summary": "3 of 3 claim(s) CHALLENGED by prior work. Overlap degrees found across claims: same x0, substantial x9, partial x9, superficial x0.",
+  "cost_usd": 0.0,
+  "tokens": 5064,
+  "generated_at": "2026-07-19 20:53:04"
+}

@@ -1,0 +1,11 @@
+{
+  "text": "The paper’s central contribution is IntelLLM, presented as a lightweight, no‑finetuning framework for long‑text LLM inference that compresses the KV cache while preserving long‑range reasoning, chiefly via its CGE and RGL strategies plus a windowing mechanism. However, closely related work already delivers this central functionality: GEAR (Zhang et al., 2024), LServe (Yu et al., 2024), RazorAttention (Zhang et al., 2024), Tactic (Wang et al., 2024), and R-KV (Li et al., 2024) all propose training‑free or serving‑time mechanisms that compress/sparsify the KV cache or attention, reduce memory and compute for long contexts, and preserve performance, thereby achieving essentially the same high‑level goal as IntelLLM. The submission’s genuine novelty lies in its specific algorithms—Center of Gravity Eviction (masking the attention “center of gravity” with tailored masking/normalization order) and Remote Gap Localization (explicit positional shifting for distant KVs)—which are not present in the prior work and represent nontrivial technical differences. Nonetheless, these appear as alternative instantiations within an already well‑established design space of test‑time KV‑compression heuristics. Because the overarching framework-level contribution is substantially overlapped by prior work, the overall novelty is best characterized as mixed rather than a clear, field‑advancing advance.",
+  "model": "gpt-5.1",
+  "fix": "B",
+  "n_claims": 3,
+  "n_challenged": 1,
+  "verdict_summary": "1 of 3 claim(s) CHALLENGED by prior work (re-derived, fix B). Overlap degrees across claims: same x0, substantial x5, partial x37, superficial x0.",
+  "flips": [],
+  "cost_usd": 0.0,
+  "tokens": 4846
+}

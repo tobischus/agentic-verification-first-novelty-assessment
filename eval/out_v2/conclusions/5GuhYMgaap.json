@@ -1,0 +1,10 @@
+{
+  "text": "The central contribution of this paper is the SolverLearner framework, which aims to cleanly separate inductive from deductive reasoning by having an LLM induce a mapping function from examples (Function Proposal) and then execute that function via an external interpreter (Function Execution) so the LLM no longer performs the deductive step. Very similar two-stage designs already exist: Chen et al. (2022) have Program-of-Thoughts prompting where the LLM outputs code that is executed externally to “disentangle computation from reasoning,” Hypothesis Search explicitly has the LLM generate programmatic hypotheses from examples and runs them as Python programs, and Pan et al. (2023) (Logic-LM) translates problems into symbolic programs that are solved by external engines. These works already realize the same core mechanism: LLM-based hypothesis/program generation (inductive) plus external deterministic execution (deductive), and at least Phenomenal Yet Puzzling: Testing Inductive Reasoning Capabilities of Language Models with Hypothesis Refinement already reports the key empirical pattern that LMs are strong rule proposers but weak rule executors. The paper’s additions are largely in framing (casting this as “inductive vs deductive” and packaging it as SolverLearner) and in specific experimental instantiations. As such, the central technical idea is substantially challenged by prior work and the overall novelty is not strong enough for a top-tier venue.",
+  "model": "gpt-5.1",
+  "n_claims": 3,
+  "n_challenged": 2,
+  "verdict_summary": "2 of 3 claim(s) CHALLENGED by prior work. Overlap degrees found across claims: same x0, substantial x5, partial x12, superficial x0.",
+  "cost_usd": 0.0,
+  "tokens": 5142,
+  "generated_at": "2026-07-19 20:52:45"
+}

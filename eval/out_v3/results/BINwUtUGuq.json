@@ -1,0 +1,152 @@
+{
+  "sid": "BINwUtUGuq",
+  "steps": {
+    "pipeline_status": "completed",
+    "grobid_ok": true,
+    "title": "FISTAPRUNER: LAYER-WISE POST-TRAINING PRUNING FOR LARGE LANGUAGE MODELS",
+    "title_source": "grobid_cleaned",
+    "abstract_chars": 2529,
+    "publication_date": "2025-01-01",
+    "date_source": "semantic_scholar",
+    "quality": {
+      "gates": {
+        "title_found": true,
+        "abstract_found": true,
+        "references_found": true,
+        "citation_contexts_found": true,
+        "full_text_found": true
+      },
+      "all_passed": true,
+      "failed_gates": [],
+      "counts": {
+        "cited_papers": 49,
+        "citation_contexts": 64,
+        "sections": 19,
+        "full_text_chars": 39560
+      },
+      "title_source": "grobid_cleaned",
+      "title_needs_review": true
+    },
+    "n_claims": 4,
+    "n_ranked_papers": 17,
+    "n_pdfs_with": 17,
+    "n_pdfs_total": 17,
+    "per_claim": [
+      {
+        "claim_id": "claim_1",
+        "verdict": "not_challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 17,
+        "n_overlap": 1,
+        "deep_dives": 6
+      },
+      {
+        "claim_id": "claim_2",
+        "verdict": "challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 17,
+        "n_overlap": 1,
+        "deep_dives": 4
+      },
+      {
+        "claim_id": "claim_3",
+        "verdict": "not_challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 17,
+        "n_overlap": 1,
+        "deep_dives": 1
+      },
+      {
+        "claim_id": "claim_4",
+        "verdict": "not_challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 17,
+        "n_overlap": 13,
+        "deep_dives": 15
+      }
+    ],
+    "conclusion_ok": true,
+    "elapsed_s": 1474.4
+  },
+  "cost": {
+    "stages_usd": 0.0136,
+    "stages_prompt_tokens": 7114,
+    "stages_completion_tokens": 3364,
+    "agent_usd": 0.1875,
+    "agent_prompt_tokens": 208460,
+    "agent_completion_tokens": 67715,
+    "conclusion_usd": 0.0174,
+    "conclusion_prompt_tokens": 6913,
+    "conclusion_completion_tokens": 449,
+    "total_usd": 0.2186,
+    "total_tokens": 294015,
+    "model": "gpt-5-mini"
+  },
+  "error": null,
+  "conclusion": "The paper’s central contribution is FISTAPruner: a layer‑wise, post‑training pruning method that formulates a convex LASSO‑like objective with per‑row ℓ1 regularization, solved via FISTA with adaptive regularization to hit target sparsities and an intra‑layer error‑correction scheme. Prior work such as Park et al. (2023) and Boza (2024) already performs post‑training, layer‑wise pruning with reconstruction via convex optimization, but they rely on least-squares or ADMM formulations without an ℓ1‑regularized convex model solved by accelerated proximal methods, and they do not incorporate the proposed operator‑by‑operator intra‑layer error propagation and correction or the specific adaptive sparsity control. These differences constitute a genuine algorithmic delta at the core of the method rather than merely peripheral tuning or evaluation. The extension to 2:4 semi‑structured pruning is less novel: Holmes et al. (2021) already enforce n:m patterns via groupwise hard projection, and the submission’s final hard‑thresholding step is conceptually very similar. Nonetheless, this challenged secondary claim does not undermine the distinctiveness of the main unstructured‑pruning formulation and solver. Overall, the paper represents a genuine advance in novelty, with a clearly new central pruning mechanism but a non‑novel n:m extension.",
+  "conclusion_meta": {
+    "text": "The paper’s central contribution is FISTAPruner: a layer‑wise, post‑training pruning method that formulates a convex LASSO‑like objective with per‑row ℓ1 regularization, solved via FISTA with adaptive regularization to hit target sparsities and an intra‑layer error‑correction scheme. Prior work such as Park et al. (2023) and Boza (2024) already performs post‑training, layer‑wise pruning with reconstruction via convex optimization, but they rely on least-squares or ADMM formulations without an ℓ1‑regularized convex model solved by accelerated proximal methods, and they do not incorporate the proposed operator‑by‑operator intra‑layer error propagation and correction or the specific adaptive sparsity control. These differences constitute a genuine algorithmic delta at the core of the method rather than merely peripheral tuning or evaluation. The extension to 2:4 semi‑structured pruning is less novel: Holmes et al. (2021) already enforce n:m patterns via groupwise hard projection, and the submission’s final hard‑thresholding step is conceptually very similar. Nonetheless, this challenged secondary claim does not undermine the distinctiveness of the main unstructured‑pruning formulation and solver. Overall, the paper represents a genuine advance in novelty, with a clearly new central pruning mechanism but a non‑novel n:m extension.",
+    "model": "gpt-5.1",
+    "fix": "A",
+    "n_claims": 4,
+    "n_challenged": 1,
+    "verdict_summary": "1 of 4 claim(s) CHALLENGED by prior work (re-derived, fix A). Overlap degrees across claims: same x0, substantial x1, partial x15, superficial x0.",
+    "flips": [],
+    "cost_usd": 0.0,
+    "tokens": 4405
+  },
+  "judge": {
+    "n_human_refs": 1,
+    "per_ref": [
+      {
+        "human_file": "review_0.txt",
+        "afzal": {
+          "n_core": 3,
+          "judgment_similarity": 0.9,
+          "frac_found": 1.0,
+          "conclusion_aligned": true,
+          "reference_conclusion": "INSUFFICIENT",
+          "reviewer_conclusion": "INSUFFICIENT",
+          "positive_shift": false,
+          "negative_shift": false,
+          "prior_work_engagement": "EXTENSIVE",
+          "prior_work_ordinal": 2,
+          "depth_of_analysis": "DEEP",
+          "depth_ordinal": 2,
+          "cost_usd": 0.0115,
+          "tokens": 2747,
+          "core_judgments": [
+            "The error correction component simply utilizes the outputs of previously pruned linear operators, a technique already established in prior works, and does not address inter-layer errors that arise from pruning earlier layers.",
+            "The use of the FISTA optimization algorithm is unmodified from its standard form, and applying L1 regularization for pruning is a well-known and widely adopted strategy in the literature.",
+            "Overall, the main contribution appears to be the application of the FISTA algorithm to LLM pruning, but this does not represent a significant departure from established techniques."
+          ]
+        },
+        "mine": {
+          "n_core": 3,
+          "judgment_similarity": 0.233,
+          "frac_found": 0.333,
+          "conclusion_aligned": false,
+          "reference_conclusion": "INSUFFICIENT",
+          "reviewer_conclusion": "SUFFICIENT",
+          "positive_shift": true,
+          "negative_shift": false,
+          "prior_work_engagement": "EXTENSIVE",
+          "prior_work_ordinal": 2,
+          "depth_of_analysis": "DEEP",
+          "depth_ordinal": 2,
+          "cost_usd": 0.0114,
+          "tokens": 2787,
+          "core_judgments": [
+            "The error correction component simply utilizes the outputs of previously pruned linear operators, a technique already established in prior works, and does not address inter-layer errors that arise from pruning earlier layers.",
+            "The use of the FISTA optimization algorithm is unmodified from its standard form, and applying L1 regularization for pruning is a well-known and widely adopted strategy in the literature.",
+            "Overall, the main contribution appears to be the application of the FISTA algorithm to LLM pruning, but this does not represent a significant departure from established techniques."
+          ]
+        }
+      }
+    ],
+    "cost": {
+      "usd": 0.0229,
+      "tokens": 5534
+    }
+  }
+}

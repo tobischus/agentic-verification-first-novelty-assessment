@@ -1,0 +1,152 @@
+{
+  "sid": "328vch6tRs",
+  "steps": {
+    "pipeline_status": "completed",
+    "grobid_ok": true,
+    "title": "FROM TOKENS TO WORDS: ON THE INNER LEXICON OF LLMS",
+    "title_source": "grobid",
+    "abstract_chars": 1232,
+    "publication_date": "2024-10-08",
+    "date_source": "arxiv_v1",
+    "quality": {
+      "gates": {
+        "title_found": true,
+        "abstract_found": true,
+        "references_found": true,
+        "citation_contexts_found": true,
+        "full_text_found": true
+      },
+      "all_passed": true,
+      "failed_gates": [],
+      "counts": {
+        "cited_papers": 70,
+        "citation_contexts": 85,
+        "sections": 22,
+        "full_text_chars": 52121
+      },
+      "title_source": "grobid",
+      "title_needs_review": false
+    },
+    "n_claims": 4,
+    "n_ranked_papers": 20,
+    "n_pdfs_with": 20,
+    "n_pdfs_total": 20,
+    "per_claim": [
+      {
+        "claim_id": "claim_1",
+        "verdict": "challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 20,
+        "n_overlap": 2,
+        "deep_dives": 3
+      },
+      {
+        "claim_id": "claim_2",
+        "verdict": "not_challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 20,
+        "n_overlap": 3,
+        "deep_dives": 3
+      },
+      {
+        "claim_id": "claim_3",
+        "verdict": "challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 20,
+        "n_overlap": 3,
+        "deep_dives": 4
+      },
+      {
+        "claim_id": "claim_4",
+        "verdict": "not_challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 20,
+        "n_overlap": 3,
+        "deep_dives": 4
+      }
+    ],
+    "conclusion_ok": true,
+    "elapsed_s": 640.7
+  },
+  "cost": {
+    "stages_usd": 0.0014,
+    "stages_prompt_tokens": 0,
+    "stages_completion_tokens": 0,
+    "agent_usd": 0.1591,
+    "agent_prompt_tokens": 136575,
+    "agent_completion_tokens": 62428,
+    "conclusion_usd": 0.0117,
+    "conclusion_prompt_tokens": 4397,
+    "conclusion_completion_tokens": 363,
+    "total_usd": 0.1722,
+    "total_tokens": 203763,
+    "model": "gpt-5-mini"
+  },
+  "error": null,
+  "conclusion": "The paper’s central contribution is the claim that LLMs internally “detokenize” subword sequences into coherent whole-word representations primarily in early-to-middle layers, and that multi-token words are represented in a latent internal lexicon that can be decoded from hidden states. Very similar conclusions are already established in Feucht et al. (2024) and Lad et al. (2024): both works show that multi-token lexical items undergo an early-layer detokenization/consolidation process, that last-token hidden states carry whole-word/multi-token information, and that many such multi-token items can be systematically recovered from early-layer representations, i.e., that the model supports a latent, tokenizer-agnostic vocabulary. The present submission adds more targeted probes and generative interventions (logit-lens retrieval curves, Patchscopes-style decoding, and word–nonword contrasts) and extends the analysis to explicitly implicate FFN layers, but these refinements are largely methodological and deepen an already established picture rather than changing it. While some secondary claims (e.g., precise reconstruction accuracy profiles and FFN-specific causal tests) appear novel, the core story—that LLMs perform early detokenization and maintain a latent vocabulary of multi-token words—is substantially anticipated by prior work. On balance, the paper is therefore not novel enough for a top-venue contribution.",
+  "conclusion_meta": {
+    "text": "The paper’s central contribution is the claim that LLMs internally “detokenize” subword sequences into coherent whole-word representations primarily in early-to-middle layers, and that multi-token words are represented in a latent internal lexicon that can be decoded from hidden states. Very similar conclusions are already established in Feucht et al. (2024) and Lad et al. (2024): both works show that multi-token lexical items undergo an early-layer detokenization/consolidation process, that last-token hidden states carry whole-word/multi-token information, and that many such multi-token items can be systematically recovered from early-layer representations, i.e., that the model supports a latent, tokenizer-agnostic vocabulary. The present submission adds more targeted probes and generative interventions (logit-lens retrieval curves, Patchscopes-style decoding, and word–nonword contrasts) and extends the analysis to explicitly implicate FFN layers, but these refinements are largely methodological and deepen an already established picture rather than changing it. While some secondary claims (e.g., precise reconstruction accuracy profiles and FFN-specific causal tests) appear novel, the core story—that LLMs perform early detokenization and maintain a latent vocabulary of multi-token words—is substantially anticipated by prior work. On balance, the paper is therefore not novel enough for a top-venue contribution.",
+    "model": "gpt-5.1",
+    "fix": "B",
+    "n_claims": 4,
+    "n_challenged": 2,
+    "verdict_summary": "2 of 4 claim(s) CHALLENGED by prior work (re-derived, fix B). Overlap degrees across claims: same x0, substantial x3, partial x8, superficial x0.",
+    "flips": [],
+    "cost_usd": 0.0,
+    "tokens": 4422
+  },
+  "judge": {
+    "n_human_refs": 1,
+    "per_ref": [
+      {
+        "human_file": "review_2.txt",
+        "afzal": {
+          "n_core": 3,
+          "judgment_similarity": 0.917,
+          "frac_found": 1.0,
+          "conclusion_aligned": true,
+          "reference_conclusion": "INSUFFICIENT",
+          "reviewer_conclusion": "INSUFFICIENT",
+          "positive_shift": false,
+          "negative_shift": false,
+          "prior_work_engagement": "LIMITED",
+          "prior_work_ordinal": 1,
+          "depth_of_analysis": "MODERATE",
+          "depth_ordinal": 1,
+          "cost_usd": 0.0125,
+          "tokens": 3025,
+          "core_judgments": [
+            "The idea of an 'inner lexicon' is not new, as it follows implicitly from prior work on memorization of training data and explicitly from research on tokenization methods such as Byte Pair Encoding (BPE), which is extensively discussed in the paper.",
+            "Many of the findings in this work reproduce and analyze well-established concepts in this area (subword tokenization and vocabulary learning), rather than introducing fundamentally new insights.",
+            "The final experiment introducing a method for training-free vocabulary expansion appears to be a novel contribution, but it is only briefly explored and would benefit from deeper investigation."
+          ]
+        },
+        "mine": {
+          "n_core": 3,
+          "judgment_similarity": 0.9,
+          "frac_found": 1.0,
+          "conclusion_aligned": true,
+          "reference_conclusion": "INSUFFICIENT",
+          "reviewer_conclusion": "INSUFFICIENT",
+          "positive_shift": false,
+          "negative_shift": false,
+          "prior_work_engagement": "EXTENSIVE",
+          "prior_work_ordinal": 2,
+          "depth_of_analysis": "DEEP",
+          "depth_ordinal": 2,
+          "cost_usd": 0.0126,
+          "tokens": 3056,
+          "core_judgments": [
+            "The idea of an 'inner lexicon' is not new, as it follows implicitly from prior work on memorization of training data and explicitly from research on tokenization methods such as Byte Pair Encoding (BPE), which is extensively discussed in the paper.",
+            "Many of the findings in this work reproduce and analyze well-established concepts in this area, particularly regarding subword tokenizers and the aggregation/disambiguation of word representations across network layers.",
+            "The final experiment introducing a method for training-free vocabulary expansion appears to be a novel contribution, but it is only briefly explored and would benefit from deeper investigation."
+          ]
+        }
+      }
+    ],
+    "cost": {
+      "usd": 0.0251,
+      "tokens": 6081
+    }
+  }
+}

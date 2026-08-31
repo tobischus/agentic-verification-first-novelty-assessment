@@ -1,0 +1,18 @@
+{
+  "text": "The paper’s central contribution is the CHASE-SQL framework: generating diverse SQL candidates via multiple prompting strategies and then selecting a single final query with a learned scoring model. At the framework level, this is substantially overlapped by MCS-SQL (Lee et al., 2024), which already proposes to leverage multiple prompts to produce diverse candidate SQLs and then apply a selection procedure to choose the best candidate, thereby improving Text-to-SQL performance. The present submission extends this idea by (i) instantiating several specific candidate generators (divide-and-conquer CoT, query-plan-based CoT, and online synthetic example generation) and (ii) replacing MCS-SQL’s execution-based filtering plus LLM multiple-choice selection with a trained pairwise comparison classifier that aggregates wins into a final score. While these additions are technically nontrivial, they are best viewed as alternative engineering choices within the same multi-candidate–plus–selection paradigm, rather than a qualitatively new mechanism. The pairwise selection agent and specific candidate generators are themselves not directly challenged, but they refine rather than fundamentally extend the core idea already realized in MCS-SQL. Consequently, the central contribution is not novel enough to meet the bar for a genuine advance.",
+  "model": "gpt-5.1",
+  "fix": "A",
+  "n_claims": 3,
+  "n_challenged": 1,
+  "verdict_summary": "1 of 3 claim(s) CHALLENGED by prior work (re-derived, fix A). Overlap degrees across claims: same x0, substantial x1, partial x8, superficial x0.",
+  "flips": [
+    {
+      "claim": "claim_3",
+      "old": false,
+      "new": true,
+      "reason": "1 substantial/same overlap(s)"
+    }
+  ],
+  "cost_usd": 0.0,
+  "tokens": 3682
+}

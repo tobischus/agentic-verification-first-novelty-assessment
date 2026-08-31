@@ -1,0 +1,197 @@
+{
+  "sid": "5GuhYMgaap",
+  "steps": {
+    "pipeline_status": "completed",
+    "grobid_ok": true,
+    "title": "Inductive or Deductive? Rethinking the Fundamental Reasoning Abilities of LLMs",
+    "title_source": "grobid",
+    "abstract_chars": 3169,
+    "publication_date": "2024-07-31",
+    "date_source": "arxiv_v1",
+    "quality": {
+      "gates": {
+        "title_found": true,
+        "abstract_found": true,
+        "references_found": true,
+        "citation_contexts_found": true,
+        "full_text_found": true
+      },
+      "all_passed": true,
+      "failed_gates": [],
+      "counts": {
+        "cited_papers": 29,
+        "citation_contexts": 37,
+        "sections": 22,
+        "full_text_chars": 39155
+      },
+      "title_source": "grobid",
+      "title_needs_review": false
+    },
+    "n_claims": 3,
+    "n_ranked_papers": 19,
+    "n_pdfs_with": 17,
+    "n_pdfs_total": 19,
+    "per_claim": [
+      {
+        "claim_id": "claim_1",
+        "verdict": "not_challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 19,
+        "n_overlap": 9,
+        "deep_dives": 11
+      },
+      {
+        "claim_id": "claim_2",
+        "verdict": "challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 19,
+        "n_overlap": 3,
+        "deep_dives": 3
+      },
+      {
+        "claim_id": "claim_3",
+        "verdict": "challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 19,
+        "n_overlap": 5,
+        "deep_dives": 10
+      }
+    ],
+    "conclusion_ok": true,
+    "elapsed_s": 1509.6
+  },
+  "cost": {
+    "stages_usd": 0.0119,
+    "stages_prompt_tokens": 6541,
+    "stages_completion_tokens": 1941,
+    "agent_usd": 0.2285,
+    "agent_prompt_tokens": 183387,
+    "agent_completion_tokens": 91318,
+    "conclusion_usd": 0.0162,
+    "conclusion_prompt_tokens": 6581,
+    "conclusion_completion_tokens": 374,
+    "total_usd": 0.2565,
+    "total_tokens": 290142,
+    "model": "gpt-5-mini"
+  },
+  "old_judge": {
+    "n_human_refs": 1,
+    "per_ref": [
+      {
+        "human_file": "review_3.txt",
+        "afzal": {
+          "n_core": 3,
+          "judgment_similarity": 0.96,
+          "frac_found": 1.0,
+          "conclusion_aligned": true,
+          "reference_conclusion": "MIXED",
+          "reviewer_conclusion": "MIXED",
+          "positive_shift": false,
+          "negative_shift": false,
+          "prior_work_engagement": "LIMITED",
+          "prior_work_ordinal": 1,
+          "depth_of_analysis": "MODERATE",
+          "depth_ordinal": 1,
+          "cost_usd": 0.0125,
+          "tokens": 3050,
+          "core_judgments": [
+            "The primary contribution lies in offering a new perspective on how we interact with LLMs, particularly by connecting code generation and reasoning within this inductive-deductive framework and by introducing a new evaluation task that is less likely to have been seen during pretraining.",
+            "While the framework and the cipher task represent notable additions, the overall novelty is somewhat limited. Prior work has already explored inductive and deductive reasoning in LLMs, and some studies have discussed the performance gap between these reasoning types.",
+            "Although the explicit distinction and unified treatment of inductive and deductive reasoning may be a novel aspect of this work, the underlying research question itself is not entirely new."
+          ]
+        },
+        "mine": {
+          "n_core": 3,
+          "judgment_similarity": 0.933,
+          "frac_found": 1.0,
+          "conclusion_aligned": true,
+          "reference_conclusion": "MIXED",
+          "reviewer_conclusion": "MIXED",
+          "positive_shift": false,
+          "negative_shift": false,
+          "prior_work_engagement": "EXTENSIVE",
+          "prior_work_ordinal": 2,
+          "depth_of_analysis": "DEEP",
+          "depth_ordinal": 2,
+          "cost_usd": 0.0134,
+          "tokens": 3308,
+          "core_judgments": [
+            "The primary contribution lies in offering a new perspective on how we interact with LLMs, particularly by connecting code generation and reasoning within this inductive-deductive framework and by introducing a new evaluation task that is less likely to have been seen during pretraining.",
+            "While the framework and the cipher task represent notable additions, the overall novelty is somewhat limited. Prior work has already explored inductive and deductive reasoning in LLMs, and some studies have discussed the performance gap between these reasoning types.",
+            "Although the explicit distinction and unified treatment of inductive and deductive reasoning may be a novel aspect of this work, the underlying research question itself is not entirely new."
+          ]
+        }
+      }
+    ],
+    "cost": {
+      "usd": 0.0259,
+      "tokens": 6358
+    }
+  },
+  "error": null,
+  "conclusion": "The central contribution of this paper is the SolverLearner framework, which aims to cleanly separate inductive from deductive reasoning by having an LLM induce a mapping function from examples (Function Proposal) and then execute that function via an external interpreter (Function Execution) so the LLM no longer performs the deductive step. Very similar two-stage designs already exist: Chen et al. (2022) have Program-of-Thoughts prompting where the LLM outputs code that is executed externally to “disentangle computation from reasoning,” Hypothesis Search explicitly has the LLM generate programmatic hypotheses from examples and runs them as Python programs, and Pan et al. (2023) (Logic-LM) translates problems into symbolic programs that are solved by external engines. These works already realize the same core mechanism: LLM-based hypothesis/program generation (inductive) plus external deterministic execution (deductive), and at least Phenomenal Yet Puzzling: Testing Inductive Reasoning Capabilities of Language Models with Hypothesis Refinement already reports the key empirical pattern that LMs are strong rule proposers but weak rule executors. The paper’s additions are largely in framing (casting this as “inductive vs deductive” and packaging it as SolverLearner) and in specific experimental instantiations. As such, the central technical idea is substantially challenged by prior work and the overall novelty is not strong enough for a top-tier venue.",
+  "conclusion_meta": {
+    "text": "The central contribution of this paper is the SolverLearner framework, which aims to cleanly separate inductive from deductive reasoning by having an LLM induce a mapping function from examples (Function Proposal) and then execute that function via an external interpreter (Function Execution) so the LLM no longer performs the deductive step. Very similar two-stage designs already exist: Chen et al. (2022) have Program-of-Thoughts prompting where the LLM outputs code that is executed externally to “disentangle computation from reasoning,” Hypothesis Search explicitly has the LLM generate programmatic hypotheses from examples and runs them as Python programs, and Pan et al. (2023) (Logic-LM) translates problems into symbolic programs that are solved by external engines. These works already realize the same core mechanism: LLM-based hypothesis/program generation (inductive) plus external deterministic execution (deductive), and at least Phenomenal Yet Puzzling: Testing Inductive Reasoning Capabilities of Language Models with Hypothesis Refinement already reports the key empirical pattern that LMs are strong rule proposers but weak rule executors. The paper’s additions are largely in framing (casting this as “inductive vs deductive” and packaging it as SolverLearner) and in specific experimental instantiations. As such, the central technical idea is substantially challenged by prior work and the overall novelty is not strong enough for a top-tier venue.",
+    "model": "gpt-5.1",
+    "n_claims": 3,
+    "n_challenged": 2,
+    "verdict_summary": "2 of 3 claim(s) CHALLENGED by prior work. Overlap degrees found across claims: same x0, substantial x5, partial x12, superficial x0.",
+    "cost_usd": 0.0,
+    "tokens": 5142,
+    "generated_at": "2026-07-19 20:52:45"
+  },
+  "judge": {
+    "n_human_refs": 1,
+    "per_ref": [
+      {
+        "human_file": "review_3.txt",
+        "afzal": {
+          "n_core": 3,
+          "judgment_similarity": 0.933,
+          "frac_found": 1.0,
+          "conclusion_aligned": true,
+          "reference_conclusion": "MIXED",
+          "reviewer_conclusion": "MIXED",
+          "positive_shift": false,
+          "negative_shift": false,
+          "prior_work_engagement": "LIMITED",
+          "prior_work_ordinal": 1,
+          "depth_of_analysis": "MODERATE",
+          "depth_ordinal": 1,
+          "cost_usd": 0.0124,
+          "tokens": 3033,
+          "core_judgments": [
+            "The primary contribution lies in offering a new perspective on how we interact with LLMs, particularly by connecting code generation and reasoning within this inductive-deductive framework and by introducing a new evaluation task that is less likely to have been seen during pretraining.",
+            "While the framework and the cipher task represent notable additions, the overall novelty is somewhat limited. Prior work has already explored inductive and deductive reasoning in LLMs, and some studies have discussed the performance gap between these reasoning types.",
+            "Although the explicit distinction and unified treatment of inductive and deductive reasoning may be a novel aspect of this work, the underlying research question itself is not entirely new."
+          ]
+        },
+        "mine": {
+          "n_core": 3,
+          "judgment_similarity": 0.96,
+          "frac_found": 1.0,
+          "conclusion_aligned": false,
+          "reference_conclusion": "MIXED",
+          "reviewer_conclusion": "INSUFFICIENT",
+          "positive_shift": false,
+          "negative_shift": true,
+          "prior_work_engagement": "EXTENSIVE",
+          "prior_work_ordinal": 2,
+          "depth_of_analysis": "DEEP",
+          "depth_ordinal": 2,
+          "cost_usd": 0.0129,
+          "tokens": 3190,
+          "core_judgments": [
+            "The primary contribution lies in offering a new perspective on how we interact with LLMs, particularly by connecting code generation and reasoning within this inductive-deductive framework and by introducing a new evaluation task that is less likely to have been seen during pretraining.",
+            "While the framework and the cipher task represent notable additions, the overall novelty is somewhat limited. Prior work has already explored inductive and deductive reasoning in LLMs, and some studies have discussed the performance gap between these reasoning types.",
+            "Although the explicit distinction and unified treatment of inductive and deductive reasoning may be a novel aspect of this work, the underlying research question itself is not entirely new."
+          ]
+        }
+      }
+    ],
+    "cost": {
+      "usd": 0.0253,
+      "tokens": 6223
+    }
+  }
+}

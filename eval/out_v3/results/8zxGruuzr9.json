@@ -1,0 +1,152 @@
+{
+  "sid": "8zxGruuzr9",
+  "steps": {
+    "pipeline_status": "completed",
+    "grobid_ok": true,
+    "title": "DO LLMS HAVE CONSISTENT VALUES?",
+    "title_source": "grobid",
+    "abstract_chars": 1248,
+    "publication_date": "2024-07-16",
+    "date_source": "arxiv_v1",
+    "quality": {
+      "gates": {
+        "title_found": true,
+        "abstract_found": true,
+        "references_found": true,
+        "citation_contexts_found": true,
+        "full_text_found": true
+      },
+      "all_passed": true,
+      "failed_gates": [],
+      "counts": {
+        "cited_papers": 78,
+        "citation_contexts": 82,
+        "sections": 16,
+        "full_text_chars": 37881
+      },
+      "title_source": "grobid",
+      "title_needs_review": false
+    },
+    "n_claims": 4,
+    "n_ranked_papers": 18,
+    "n_pdfs_with": 15,
+    "n_pdfs_total": 18,
+    "per_claim": [
+      {
+        "claim_id": "claim_1",
+        "verdict": "not_challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 18,
+        "n_overlap": 1,
+        "deep_dives": 1
+      },
+      {
+        "claim_id": "claim_2",
+        "verdict": "not_challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 18,
+        "n_overlap": 11,
+        "deep_dives": 14
+      },
+      {
+        "claim_id": "claim_3",
+        "verdict": "not_challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 18,
+        "n_overlap": 1,
+        "deep_dives": 4
+      },
+      {
+        "claim_id": "claim_4",
+        "verdict": "not_challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 18,
+        "n_overlap": 0,
+        "deep_dives": 0
+      }
+    ],
+    "conclusion_ok": true,
+    "elapsed_s": 1795.3
+  },
+  "cost": {
+    "stages_usd": 0.0117,
+    "stages_prompt_tokens": 6115,
+    "stages_completion_tokens": 3368,
+    "agent_usd": 0.121,
+    "agent_prompt_tokens": 156481,
+    "agent_completion_tokens": 40876,
+    "conclusion_usd": 0.0138,
+    "conclusion_prompt_tokens": 5397,
+    "conclusion_completion_tokens": 378,
+    "total_usd": 0.1465,
+    "total_tokens": 212615,
+    "model": "gpt-5-mini"
+  },
+  "error": null,
+  "conclusion": "The paper’s central contribution is the introduction of a “Value Anchor” prompting strategy that steers LLMs to answer PVQ‑RR items as a person strongly emphasizing a specified value, and the demonstration that this yields human‑like first- and second‑order value statistics. Prior work already gets quite close on several axes: Kovač et al. (2024), Hadar-Shoval et al. (2024), and Fischer et al. (2023) all administer Schwartz/PVQ-based instruments to LLMs and compare resulting value profiles to large human datasets, while Kang et al. (2023) injects target value distributions and prompts models on PVQ items. However, none of these works uses the specific “answer as a person that is [value]” Value Anchor persona framing, nor do they systematically study how such anchoring modifies the full correlation structure of values or analyze anchoring effects as a function of position on the Schwartz value circle. The additional explanation of how anchoring shapes correlations and the released multi-model persona datasets are likewise not directly covered by prior work. Because the core mechanism (Value Anchor prompting) and its demonstrated effect on human-consistent value correlations are not directly anticipated by existing studies, the paper’s novelty constitutes a genuine advance.",
+  "conclusion_meta": {
+    "text": "The paper’s central contribution is the introduction of a “Value Anchor” prompting strategy that steers LLMs to answer PVQ‑RR items as a person strongly emphasizing a specified value, and the demonstration that this yields human‑like first- and second‑order value statistics. Prior work already gets quite close on several axes: Kovač et al. (2024), Hadar-Shoval et al. (2024), and Fischer et al. (2023) all administer Schwartz/PVQ-based instruments to LLMs and compare resulting value profiles to large human datasets, while Kang et al. (2023) injects target value distributions and prompts models on PVQ items. However, none of these works uses the specific “answer as a person that is [value]” Value Anchor persona framing, nor do they systematically study how such anchoring modifies the full correlation structure of values or analyze anchoring effects as a function of position on the Schwartz value circle. The additional explanation of how anchoring shapes correlations and the released multi-model persona datasets are likewise not directly covered by prior work. Because the core mechanism (Value Anchor prompting) and its demonstrated effect on human-consistent value correlations are not directly anticipated by existing studies, the paper’s novelty constitutes a genuine advance.",
+    "model": "gpt-5.1",
+    "fix": "A",
+    "n_claims": 4,
+    "n_challenged": 0,
+    "verdict_summary": "0 of 4 claim(s) CHALLENGED by prior work (re-derived, fix A). Overlap degrees across claims: same x0, substantial x0, partial x13, superficial x0.",
+    "flips": [],
+    "cost_usd": 0.0,
+    "tokens": 3570
+  },
+  "judge": {
+    "n_human_refs": 1,
+    "per_ref": [
+      {
+        "human_file": "review_3.txt",
+        "afzal": {
+          "n_core": 3,
+          "judgment_similarity": 0.9,
+          "frac_found": 1.0,
+          "conclusion_aligned": true,
+          "reference_conclusion": "INSUFFICIENT",
+          "reviewer_conclusion": "INSUFFICIENT",
+          "positive_shift": false,
+          "negative_shift": false,
+          "prior_work_engagement": "LIMITED",
+          "prior_work_ordinal": 1,
+          "depth_of_analysis": "MODERATE",
+          "depth_ordinal": 1,
+          "cost_usd": 0.01,
+          "tokens": 3011,
+          "core_judgments": [
+            "The claim that 'little research has been done to study the values exhibited in text generated by LLMs' significantly understates the substantial body of related work that has emerged over the past five years.",
+            "Prior studies, such as Social Chemistry 101 by Forbes et al. (2020), Argyle et al. (2022) on simulating human samples, and Durmus et al. (2023) on world opinions, have already explored similar questions regarding values and attitudes in language models, including those from the BERT family.",
+            "The methodological approach of prompting LLMs with an established survey and reporting their outputs does not represent a significant methodological advance for the ICLR audience."
+          ]
+        },
+        "mine": {
+          "n_core": 3,
+          "judgment_similarity": 0.583,
+          "frac_found": 0.667,
+          "conclusion_aligned": false,
+          "reference_conclusion": "INSUFFICIENT",
+          "reviewer_conclusion": "SUFFICIENT",
+          "positive_shift": true,
+          "negative_shift": false,
+          "prior_work_engagement": "EXTENSIVE",
+          "prior_work_ordinal": 2,
+          "depth_of_analysis": "DEEP",
+          "depth_ordinal": 2,
+          "cost_usd": 0.0131,
+          "tokens": 3210,
+          "core_judgments": [
+            "The claim that 'little research has been done to study the values exhibited in text generated by LLMs' significantly understates the substantial body of related work that has emerged over the past five years.",
+            "Prior studies, such as Social Chemistry 101 by Forbes et al. (2020), Argyle et al. (2022) on simulating human samples, and Durmus et al. (2023) on world opinions, have already explored similar questions regarding values and attitudes in language models, including those from the BERT family.",
+            "The methodological approach of prompting LLMs with an established survey and reporting their outputs does not represent a significant methodological advance for the ICLR audience."
+          ]
+        }
+      }
+    ],
+    "cost": {
+      "usd": 0.0231,
+      "tokens": 6221
+    }
+  }
+}

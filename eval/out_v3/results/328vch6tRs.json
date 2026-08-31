@@ -1,0 +1,152 @@
+{
+  "sid": "328vch6tRs",
+  "steps": {
+    "pipeline_status": "completed",
+    "grobid_ok": true,
+    "title": "FROM TOKENS TO WORDS: ON THE INNER LEXICON OF LLMS",
+    "title_source": "grobid",
+    "abstract_chars": 1232,
+    "publication_date": "2024-10-08",
+    "date_source": "arxiv_v1",
+    "quality": {
+      "gates": {
+        "title_found": true,
+        "abstract_found": true,
+        "references_found": true,
+        "citation_contexts_found": true,
+        "full_text_found": true
+      },
+      "all_passed": true,
+      "failed_gates": [],
+      "counts": {
+        "cited_papers": 70,
+        "citation_contexts": 85,
+        "sections": 22,
+        "full_text_chars": 52121
+      },
+      "title_source": "grobid",
+      "title_needs_review": false
+    },
+    "n_claims": 4,
+    "n_ranked_papers": 20,
+    "n_pdfs_with": 20,
+    "n_pdfs_total": 20,
+    "per_claim": [
+      {
+        "claim_id": "claim_1",
+        "verdict": "challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 20,
+        "n_overlap": 2,
+        "deep_dives": 3
+      },
+      {
+        "claim_id": "claim_2",
+        "verdict": "not_challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 20,
+        "n_overlap": 3,
+        "deep_dives": 3
+      },
+      {
+        "claim_id": "claim_3",
+        "verdict": "challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 20,
+        "n_overlap": 3,
+        "deep_dives": 4
+      },
+      {
+        "claim_id": "claim_4",
+        "verdict": "not_challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 20,
+        "n_overlap": 3,
+        "deep_dives": 4
+      }
+    ],
+    "conclusion_ok": true,
+    "elapsed_s": 640.7
+  },
+  "cost": {
+    "stages_usd": 0.0014,
+    "stages_prompt_tokens": 0,
+    "stages_completion_tokens": 0,
+    "agent_usd": 0.1591,
+    "agent_prompt_tokens": 136575,
+    "agent_completion_tokens": 62428,
+    "conclusion_usd": 0.0117,
+    "conclusion_prompt_tokens": 4397,
+    "conclusion_completion_tokens": 363,
+    "total_usd": 0.1722,
+    "total_tokens": 203763,
+    "model": "gpt-5-mini"
+  },
+  "error": null,
+  "conclusion": "The paper’s central contribution is its claim that LLMs perform an intrinsic “detokenization” process in which subword sequences are combined into coherent whole-word representations, primarily in early-to-middle layers. Closely related work has already made this point: Lad et al. (2024) and Feucht et al. (2024) both show that multi-token lexical items are integrated into full-word/entity representations in early layers, using logit-lens-style layerwise analyses and probes to document a detokenization/erasure phenomenon. Relative to these, the submission adds more targeted and task-specific probes (contrasting words vs. nonwords, measuring layerwise retrieval of original words under controlled splits, and using Patchscopes-style generative interventions), but these are largely methodological refinements rather than a qualitatively new mechanistic story. Additional claims—that last subtokens can be mapped back to the original whole-word with high accuracy, that multi-token words form a latent internal lexicon recoverable from hidden states, and that FFN layers are central to detokenization—are either substantially overlapped by Feucht et al. (2024) or constitute narrower mechanistic detail on top of an already established phenomenon. Consequently, the incremental deltas over the closest prior work are peripheral, and the paper is not novel enough as a substantive advance.",
+  "conclusion_meta": {
+    "text": "The paper’s central contribution is its claim that LLMs perform an intrinsic “detokenization” process in which subword sequences are combined into coherent whole-word representations, primarily in early-to-middle layers. Closely related work has already made this point: Lad et al. (2024) and Feucht et al. (2024) both show that multi-token lexical items are integrated into full-word/entity representations in early layers, using logit-lens-style layerwise analyses and probes to document a detokenization/erasure phenomenon. Relative to these, the submission adds more targeted and task-specific probes (contrasting words vs. nonwords, measuring layerwise retrieval of original words under controlled splits, and using Patchscopes-style generative interventions), but these are largely methodological refinements rather than a qualitatively new mechanistic story. Additional claims—that last subtokens can be mapped back to the original whole-word with high accuracy, that multi-token words form a latent internal lexicon recoverable from hidden states, and that FFN layers are central to detokenization—are either substantially overlapped by Feucht et al. (2024) or constitute narrower mechanistic detail on top of an already established phenomenon. Consequently, the incremental deltas over the closest prior work are peripheral, and the paper is not novel enough as a substantive advance.",
+    "model": "gpt-5.1",
+    "fix": "A",
+    "n_claims": 4,
+    "n_challenged": 2,
+    "verdict_summary": "2 of 4 claim(s) CHALLENGED by prior work (re-derived, fix A). Overlap degrees across claims: same x0, substantial x3, partial x8, superficial x0.",
+    "flips": [],
+    "cost_usd": 0.0,
+    "tokens": 4424
+  },
+  "judge": {
+    "n_human_refs": 1,
+    "per_ref": [
+      {
+        "human_file": "review_2.txt",
+        "afzal": {
+          "n_core": 3,
+          "judgment_similarity": 0.933,
+          "frac_found": 1.0,
+          "conclusion_aligned": true,
+          "reference_conclusion": "INSUFFICIENT",
+          "reviewer_conclusion": "INSUFFICIENT",
+          "positive_shift": false,
+          "negative_shift": false,
+          "prior_work_engagement": "LIMITED",
+          "prior_work_ordinal": 1,
+          "depth_of_analysis": "MODERATE",
+          "depth_ordinal": 1,
+          "cost_usd": 0.0116,
+          "tokens": 2905,
+          "core_judgments": [
+            "The idea of an inner lexicon is not new, as it follows implicitly from prior work on memorization of training data and explicitly from research on tokenization methods such as Byte Pair Encoding (BPE), which is extensively discussed in the paper.",
+            "Many of the findings in this work reproduce and analyze well-established concepts in this area.",
+            "The final experiment introducing a method for training-free vocabulary expansion appears to be a novel contribution, but it is only briefly explored and would benefit from deeper investigation."
+          ]
+        },
+        "mine": {
+          "n_core": 3,
+          "judgment_similarity": 0.867,
+          "frac_found": 1.0,
+          "conclusion_aligned": true,
+          "reference_conclusion": "INSUFFICIENT",
+          "reviewer_conclusion": "INSUFFICIENT",
+          "positive_shift": false,
+          "negative_shift": false,
+          "prior_work_engagement": "EXTENSIVE",
+          "prior_work_ordinal": 2,
+          "depth_of_analysis": "DEEP",
+          "depth_ordinal": 2,
+          "cost_usd": 0.0113,
+          "tokens": 2875,
+          "core_judgments": [
+            "The idea of an inner lexicon is not new, as it follows implicitly from prior work on memorization of training data and explicitly from research on tokenization methods such as Byte Pair Encoding (BPE), which is extensively discussed in the paper.",
+            "Many of the findings in this work reproduce and analyze well-established concepts in this area.",
+            "The final experiment introducing a method for training-free vocabulary expansion appears to be a novel contribution, but it is only briefly explored and would benefit from deeper investigation."
+          ]
+        }
+      }
+    ],
+    "cost": {
+      "usd": 0.0229,
+      "tokens": 5780
+    }
+  }
+}

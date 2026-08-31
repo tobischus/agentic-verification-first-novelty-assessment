@@ -1,0 +1,10 @@
+{
+  "text": "The paper’s central contribution is a large empirical study that jointly varies model families/sizes, personalization methods (several PEFT variants and RAG), compression techniques, data scale, and training time to derive design guidelines for personalized LLM deployment on resource‑constrained edge devices. Prior work partially touches many of these axes, but always in isolation or much narrower scope: Li et al. (2024) analyze quantization across models and tasks but do not study personalization or customization–compression interactions; MobileLLM (Liu et al., 2024) benchmarks on‑device models and quantization but not PEFT vs. RAG or personalization trade‑offs; Pu et al. (2023) and Zhang et al. (2024) provide systematic PEFT/LoRA studies and scaling guidance, yet only for server‑side finetuning on limited model families and without edge constraints, compression, or direct comparison to RAG. The additional guidelines here (LoRA vs. RAG choice by task difficulty, near‑universal LoRA rank/alpha defaults, and 3–4h training sufficiency on edge hardware) follow from that broader, integrated experimental design and are secondary to it. Because no prior work delivers this combined, edge‑centric multi‑factor benchmark, the central contribution appears genuinely novel, and the paper constitutes a real empirical advance rather than a recombination of existing studies.",
+  "model": "gpt-5.1",
+  "n_claims": 4,
+  "n_challenged": 0,
+  "verdict_summary": "0 of 4 claim(s) CHALLENGED by prior work. Overlap degrees found across claims: same x0, substantial x0, partial x23, superficial x0.",
+  "cost_usd": 0.0,
+  "tokens": 5712,
+  "generated_at": "2026-07-19 20:52:06"
+}

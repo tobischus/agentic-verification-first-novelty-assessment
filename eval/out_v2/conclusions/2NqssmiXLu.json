@@ -1,0 +1,10 @@
+{
+  "text": "The central contribution of this paper is the SAFE framework: a two-stage, self-evolving pipeline that (i) automatically synthesizes multi-level training data (specifications and proofs) for Verus-verified Rust programs by bootstrapping from GPT-4o and verifier-based filtering, and (ii) iteratively fine-tunes open-source LLMs to perform both proof generation and self-debugging using incorrect proofs and error messages. Prior work already covers key subpieces of this space: Baldur (First et al., 2023) fine-tunes LLMs for whole-proof generation and proof repair from error messages; Yao et al. (2023), Selene (Zhang et al., 2024), and AutoVerus (Yang et al., 2024) use GPT-class models and verifier feedback to synthesize and iteratively repair Verus or similar proofs; and SpecGen (Ma et al., 2024) and Clover (Sun et al., 2023) generate and filter specifications with verifier-driven feedback. However, none of these works implements a multi-round, GPT-bootstrapped self-evolving loop that jointly (a) constructs large, automatically filtered, multi-level Verus datasets from mostly unannotated Rust, and (b) uses them to train an open model with an explicit self-debugging objective. This integrated, self-evolution-based training pipeline for Rust/Verus remains unchallenged and appears genuinely new. Overall, the paper represents a genuine advance in novelty.",
+  "model": "gpt-5.1",
+  "n_claims": 3,
+  "n_challenged": 0,
+  "verdict_summary": "0 of 3 claim(s) CHALLENGED by prior work. Overlap degrees found across claims: same x0, substantial x0, partial x16, superficial x0.",
+  "cost_usd": 0.0,
+  "tokens": 5025,
+  "generated_at": "2026-07-19 20:51:26"
+}

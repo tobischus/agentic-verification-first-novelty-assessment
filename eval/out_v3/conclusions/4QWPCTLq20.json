@@ -1,0 +1,11 @@
+{
+  "text": "The paper’s central contribution is IntelLLM, presented as a lightweight, training‑free framework for long‑text LLM inference via KV‑cache compression that preserves long‑range reasoning. However, this high‑level contribution substantially overlaps with multiple prior KV‑compression methods that already offer training‑free, deployment‑oriented frameworks targeting long‑context, memory‑efficient inference, notably GEAR (quantized+low‑rank+sparse KV decomposition with a streaming buffer; “GEAR: An Efficient KV Cache Compression Recipe for Near-Lossless Generative Inference of LLM”), LServe (unified sparse attention, paging, and KV quantization), RazorAttention (retrieval‑head‑based KV pruning with compensation tokens), Tactic (adaptive sparse attention via clustering), and R‑KV (redundancy‑aware KV selection). These works already achieve the same core functionality IntelLLM claims: significantly reducing KV cache cost during autoregressive generation without finetuning, while preserving performance on long sequences. IntelLLM’s genuinely novel components are its specific Center of Gravity Eviction (CGE) and Remote Gap Localization (RGL) strategies, which introduce new eviction and positional‑remapping policies. However, these are algorithmic details within an already well‑explored framework design space rather than a qualitatively new paradigm. Given that the central contribution—the overall framework for training‑free KV‑cache compression for long‑context inference—is challenged by strong prior art, the paper is, on balance, not novel enough for a top‑tier venue.",
+  "model": "gpt-5.1",
+  "fix": "A",
+  "n_claims": 3,
+  "n_challenged": 1,
+  "verdict_summary": "1 of 3 claim(s) CHALLENGED by prior work (re-derived, fix A). Overlap degrees across claims: same x0, substantial x5, partial x37, superficial x0.",
+  "flips": [],
+  "cost_usd": 0.0,
+  "tokens": 4866
+}

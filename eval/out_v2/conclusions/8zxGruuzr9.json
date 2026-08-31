@@ -1,0 +1,10 @@
+{
+  "text": "The paper’s central contribution is the introduction of a “Value Anchor” prompting strategy that steers LLMs to answer a values questionnaire as a person who strongly embodies a specified value, and the demonstration that this prompt yields human-like first- and second-order value statistics. Prior work already covers several key ingredients separately: Kang et al. (2023) inject target value distributions and prompt models to answer PVQ items, Kovač et al. (2024) and Hadar-Shoval et al. (2024) administer PVQ(-RR) to LLMs and compare aggregate value profiles to large human datasets, and Kovač et al. (2023) show that prompt context can systematically shift measured values. However, none of these works employ the specific “answer as a person that is [value]” anchoring design, systematically sweep across 19 anchored values using PVQ-RR, or analyze how anchoring reshapes the full correlation structure to more closely mirror human value interrelationships. These additions—prompt design, correlation-focused evaluation, and mechanistic analysis of how anchoring effects vary around the Schwartz value circle—are central rather than peripheral. Given that the core mechanism and its primary empirical claim are not directly realized in the examined prior work, the paper’s novelty constitutes a genuine advance.",
+  "model": "gpt-5.1",
+  "n_claims": 4,
+  "n_challenged": 0,
+  "verdict_summary": "0 of 4 claim(s) CHALLENGED by prior work. Overlap degrees found across claims: same x0, substantial x0, partial x13, superficial x0.",
+  "cost_usd": 0.0,
+  "tokens": 3603,
+  "generated_at": "2026-07-19 20:53:40"
+}

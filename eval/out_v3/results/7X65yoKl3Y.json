@@ -1,0 +1,144 @@
+{
+  "sid": "7X65yoKl3Y",
+  "steps": {
+    "pipeline_status": "completed",
+    "grobid_ok": true,
+    "title": "ALLORA: ADAPTIVE LEARNING RATE MITIGATES LORA FATAL FLAWS",
+    "title_source": "grobid",
+    "abstract_chars": 1651,
+    "publication_date": "2024-10-13",
+    "date_source": "semantic_scholar",
+    "quality": {
+      "gates": {
+        "title_found": true,
+        "abstract_found": true,
+        "references_found": true,
+        "citation_contexts_found": true,
+        "full_text_found": true
+      },
+      "all_passed": true,
+      "failed_gates": [],
+      "counts": {
+        "cited_papers": 37,
+        "citation_contexts": 19,
+        "sections": 15,
+        "full_text_chars": 27489
+      },
+      "title_source": "grobid",
+      "title_needs_review": false
+    },
+    "n_claims": 3,
+    "n_ranked_papers": 18,
+    "n_pdfs_with": 18,
+    "n_pdfs_total": 18,
+    "per_claim": [
+      {
+        "claim_id": "claim_1",
+        "verdict": "not_challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 18,
+        "n_overlap": 4,
+        "deep_dives": 4
+      },
+      {
+        "claim_id": "claim_2",
+        "verdict": "not_challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 18,
+        "n_overlap": 5,
+        "deep_dives": 6
+      },
+      {
+        "claim_id": "claim_3",
+        "verdict": "not_challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 18,
+        "n_overlap": 0,
+        "deep_dives": 0
+      }
+    ],
+    "conclusion_ok": true,
+    "elapsed_s": 1034.6
+  },
+  "cost": {
+    "stages_usd": 0.0085,
+    "stages_prompt_tokens": 6942,
+    "stages_completion_tokens": 1372,
+    "agent_usd": 0.1115,
+    "agent_prompt_tokens": 100213,
+    "agent_completion_tokens": 43228,
+    "conclusion_usd": 0.0106,
+    "conclusion_prompt_tokens": 3848,
+    "conclusion_completion_tokens": 363,
+    "total_usd": 0.1306,
+    "total_tokens": 155966,
+    "model": "gpt-5-mini"
+  },
+  "error": null,
+  "conclusion": "The paper’s central contribution is ALLoRA, a LoRA variant that replaces LoRA’s global scaling factor and Dropout with a row-wise adaptive learning-rate multiplier inversely proportional to the LoRA row norms, motivated by an analysis of three alleged inefficiencies of standard LoRA in short-step finetuning. Several prior works already target closely related issues in LoRA’s optimization: Hayou et al. (2024) and Hayou et al. (2024, LoRA+) analyze how standard LoRA parametrization and learning-rate choices lead to inefficient dynamics and propose decoupled learning rates; Liu et al. (2024, DoRA), LoRA-FA, and Zhang et al. (2024) all modify gradient scaling or parameterization to stabilize and accelerate LoRA-style updates. However, none of these introduce the specific mechanism used here: a per-row adaptive factor tied to the norm of BA that is large at initialization and tapers as norms grow, coupled with complete removal of both Dropout and the LoRA scaling hyperparameter, and restricted to the A/B gradients. This delta is central rather than peripheral, and the empirical evaluation against strong LoRA variants (including DoRA) further supports it as a distinct method. Overall, the central contribution appears to be a genuine advance in the design of LoRA-style finetuning.",
+  "conclusion_meta": {
+    "text": "The paper’s central contribution is ALLoRA, a LoRA variant that replaces LoRA’s global scaling factor and Dropout with a row-wise adaptive learning-rate multiplier inversely proportional to the LoRA row norms, motivated by an analysis of three alleged inefficiencies of standard LoRA in short-step finetuning. Several prior works already target closely related issues in LoRA’s optimization: Hayou et al. (2024) and Hayou et al. (2024, LoRA+) analyze how standard LoRA parametrization and learning-rate choices lead to inefficient dynamics and propose decoupled learning rates; Liu et al. (2024, DoRA), LoRA-FA, and Zhang et al. (2024) all modify gradient scaling or parameterization to stabilize and accelerate LoRA-style updates. However, none of these introduce the specific mechanism used here: a per-row adaptive factor tied to the norm of BA that is large at initialization and tapers as norms grow, coupled with complete removal of both Dropout and the LoRA scaling hyperparameter, and restricted to the A/B gradients. This delta is central rather than peripheral, and the empirical evaluation against strong LoRA variants (including DoRA) further supports it as a distinct method. Overall, the central contribution appears to be a genuine advance in the design of LoRA-style finetuning.",
+    "model": "gpt-5.1",
+    "fix": "A",
+    "n_claims": 3,
+    "n_challenged": 0,
+    "verdict_summary": "0 of 3 claim(s) CHALLENGED by prior work (re-derived, fix A). Overlap degrees across claims: same x0, substantial x0, partial x9, superficial x0.",
+    "flips": [],
+    "cost_usd": 0.0,
+    "tokens": 4020
+  },
+  "judge": {
+    "n_human_refs": 1,
+    "per_ref": [
+      {
+        "human_file": "review_1.txt",
+        "afzal": {
+          "n_core": 3,
+          "judgment_similarity": 0.933,
+          "frac_found": 1.0,
+          "conclusion_aligned": true,
+          "reference_conclusion": "INSUFFICIENT",
+          "reviewer_conclusion": "INSUFFICIENT",
+          "positive_shift": false,
+          "negative_shift": false,
+          "prior_work_engagement": "EXTENSIVE",
+          "prior_work_ordinal": 2,
+          "depth_of_analysis": "DEEP",
+          "depth_ordinal": 2,
+          "cost_usd": 0.0092,
+          "tokens": 2335,
+          "core_judgments": [
+            "The novelty of the contribution is quite marginal.",
+            "Although ALLoRA represents a new variant of LoRA, the work lacks in-depth theoretical analysis to substantiate its improvements over existing methods.",
+            "The current presentation does not convincingly establish a significant leap in novelty."
+          ]
+        },
+        "mine": {
+          "n_core": 3,
+          "judgment_similarity": 0.0,
+          "frac_found": 0.0,
+          "conclusion_aligned": false,
+          "reference_conclusion": "INSUFFICIENT",
+          "reviewer_conclusion": "SUFFICIENT",
+          "positive_shift": true,
+          "negative_shift": false,
+          "prior_work_engagement": "EXTENSIVE",
+          "prior_work_ordinal": 2,
+          "depth_of_analysis": "DEEP",
+          "depth_ordinal": 2,
+          "cost_usd": 0.0099,
+          "tokens": 2474,
+          "core_judgments": [
+            "The novelty of the contribution is quite marginal.",
+            "Although ALLoRA represents a new variant of LoRA, the work lacks in-depth theoretical analysis to substantiate its improvements over existing methods.",
+            "The current presentation does not convincingly establish a significant leap in novelty."
+          ]
+        }
+      }
+    ],
+    "cost": {
+      "usd": 0.0191,
+      "tokens": 4809
+    }
+  }
+}

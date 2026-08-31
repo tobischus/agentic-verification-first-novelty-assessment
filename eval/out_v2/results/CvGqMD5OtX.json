@@ -1,0 +1,197 @@
+{
+  "sid": "CvGqMD5OtX",
+  "steps": {
+    "pipeline_status": "completed",
+    "grobid_ok": true,
+    "title": "CHASE-SQL: MULTI-PATH REASONING AND PREF-ERENCE OPTIMIZED CANDIDATE SELECTION IN TEXT-TO-SQL",
+    "title_source": "grobid",
+    "abstract_chars": 843,
+    "publication_date": "2024-10-02",
+    "date_source": "arxiv_v1",
+    "quality": {
+      "gates": {
+        "title_found": true,
+        "abstract_found": true,
+        "references_found": true,
+        "citation_contexts_found": true,
+        "full_text_found": true
+      },
+      "all_passed": true,
+      "failed_gates": [],
+      "counts": {
+        "cited_papers": 46,
+        "citation_contexts": 64,
+        "sections": 20,
+        "full_text_chars": 57391
+      },
+      "title_source": "grobid",
+      "title_needs_review": false
+    },
+    "n_claims": 3,
+    "n_ranked_papers": 21,
+    "n_pdfs_with": 21,
+    "n_pdfs_total": 21,
+    "per_claim": [
+      {
+        "claim_id": "claim_1",
+        "verdict": "not_challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 21,
+        "n_overlap": 2,
+        "deep_dives": 4
+      },
+      {
+        "claim_id": "claim_2",
+        "verdict": "not_challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 21,
+        "n_overlap": 3,
+        "deep_dives": 3
+      },
+      {
+        "claim_id": "claim_3",
+        "verdict": "not_challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 21,
+        "n_overlap": 4,
+        "deep_dives": 4
+      }
+    ],
+    "conclusion_ok": true,
+    "elapsed_s": 1279.8
+  },
+  "cost": {
+    "stages_usd": 0.0106,
+    "stages_prompt_tokens": 6411,
+    "stages_completion_tokens": 2713,
+    "agent_usd": 0.0825,
+    "agent_prompt_tokens": 87827,
+    "agent_completion_tokens": 30262,
+    "conclusion_usd": 0.0097,
+    "conclusion_prompt_tokens": 3497,
+    "conclusion_completion_tokens": 340,
+    "total_usd": 0.1028,
+    "total_tokens": 131050,
+    "model": "gpt-5-mini"
+  },
+  "old_judge": {
+    "n_human_refs": 1,
+    "per_ref": [
+      {
+        "human_file": "review_0.txt",
+        "afzal": {
+          "n_core": 3,
+          "judgment_similarity": 0.933,
+          "frac_found": 1.0,
+          "conclusion_aligned": true,
+          "reference_conclusion": "INSUFFICIENT",
+          "reviewer_conclusion": "INSUFFICIENT",
+          "positive_shift": false,
+          "negative_shift": false,
+          "prior_work_engagement": "LIMITED",
+          "prior_work_ordinal": 1,
+          "depth_of_analysis": "MODERATE",
+          "depth_ordinal": 1,
+          "cost_usd": 0.0116,
+          "tokens": 2765,
+          "core_judgments": [
+            "The novelty of the framework is limited, as many of the technical innovations have already been addressed in recent comprehensive surveys on NL2SQL, and the contributions largely reiterate established concepts rather than introducing fundamentally new ideas.",
+            "The paper claims a 'unique instance-aware synthetic example generation' approach; however, the use of few-shot examples has already been explored in prior work, including DIN-SQL and CodeS.",
+            "While the integration of these techniques into a unified framework is well-executed, the individual components and the overall approach do not represent a significant departure from existing literature."
+          ]
+        },
+        "mine": {
+          "n_core": 3,
+          "judgment_similarity": 0.5,
+          "frac_found": 0.667,
+          "conclusion_aligned": false,
+          "reference_conclusion": "INSUFFICIENT",
+          "reviewer_conclusion": "SUFFICIENT",
+          "positive_shift": true,
+          "negative_shift": false,
+          "prior_work_engagement": "EXTENSIVE",
+          "prior_work_ordinal": 2,
+          "depth_of_analysis": "DEEP",
+          "depth_ordinal": 2,
+          "cost_usd": 0.0125,
+          "tokens": 2987,
+          "core_judgments": [
+            "The novelty of the framework is limited, as many of the technical innovations have already been addressed in recent comprehensive surveys on NL2SQL, and the contributions largely reiterate established concepts rather than introducing fundamentally new ideas.",
+            "The paper claims a 'unique instance-aware synthetic example generation' approach; however, the use of few-shot examples has already been explored in prior work, including DIN-SQL and CodeS.",
+            "While the integration of these techniques into a unified framework is well-executed, the individual components and the overall approach do not represent a significant departure from existing literature."
+          ]
+        }
+      }
+    ],
+    "cost": {
+      "usd": 0.0241,
+      "tokens": 5752
+    }
+  },
+  "error": null,
+  "conclusion": "The central contribution of this paper is the CHASE-SQL framework: an ensemble that generates diverse SQL candidates via several prompting strategies and then selects a final query using a learned pairwise scoring model. Conceptually, this sits very close to MCS-SQL by Lee et al. (2024), which already proposes generating multiple candidate SQLs from diverse prompts and then performing a selection step to choose a final answer; C3 (Dong et al., 2023) and SQL-PaLM (Sun et al., 2023) likewise generate multiple diverse candidates and select among them using execution-based aggregation. Relative to this prior work, the submission’s main deltas are: (i) specific candidate-generation mechanisms (divide-and-conquer CoT, query-plan-based CoT, and online synthetic example generation), and (ii) replacing execution-based or prompted multiple-choice selection with a fine-tuned pairwise comparison classifier and win-count aggregation. These are nontrivial design choices and appear technically sound, but they refine an already-established “multi-path generation + selection” template rather than introduce a qualitatively new core mechanism. As such, while the paper offers a more engineered and possibly stronger instantiation of this paradigm, the central idea is too close to existing work, and the overall novelty is best characterized as mixed rather than a clear, standalone advance.",
+  "conclusion_meta": {
+    "text": "The central contribution of this paper is the CHASE-SQL framework: an ensemble that generates diverse SQL candidates via several prompting strategies and then selects a final query using a learned pairwise scoring model. Conceptually, this sits very close to MCS-SQL by Lee et al. (2024), which already proposes generating multiple candidate SQLs from diverse prompts and then performing a selection step to choose a final answer; C3 (Dong et al., 2023) and SQL-PaLM (Sun et al., 2023) likewise generate multiple diverse candidates and select among them using execution-based aggregation. Relative to this prior work, the submission’s main deltas are: (i) specific candidate-generation mechanisms (divide-and-conquer CoT, query-plan-based CoT, and online synthetic example generation), and (ii) replacing execution-based or prompted multiple-choice selection with a fine-tuned pairwise comparison classifier and win-count aggregation. These are nontrivial design choices and appear technically sound, but they refine an already-established “multi-path generation + selection” template rather than introduce a qualitatively new core mechanism. As such, while the paper offers a more engineered and possibly stronger instantiation of this paradigm, the central idea is too close to existing work, and the overall novelty is best characterized as mixed rather than a clear, standalone advance.",
+    "model": "gpt-5.1",
+    "n_claims": 3,
+    "n_challenged": 0,
+    "verdict_summary": "0 of 3 claim(s) CHALLENGED by prior work. Overlap degrees found across claims: same x0, substantial x1, partial x8, superficial x0.",
+    "cost_usd": 0.0,
+    "tokens": 3716,
+    "generated_at": "2026-07-19 20:55:42"
+  },
+  "judge": {
+    "n_human_refs": 1,
+    "per_ref": [
+      {
+        "human_file": "review_0.txt",
+        "afzal": {
+          "n_core": 3,
+          "judgment_similarity": 0.833,
+          "frac_found": 1.0,
+          "conclusion_aligned": true,
+          "reference_conclusion": "INSUFFICIENT",
+          "reviewer_conclusion": "INSUFFICIENT",
+          "positive_shift": false,
+          "negative_shift": false,
+          "prior_work_engagement": "LIMITED",
+          "prior_work_ordinal": 1,
+          "depth_of_analysis": "MODERATE",
+          "depth_ordinal": 1,
+          "cost_usd": 0.0119,
+          "tokens": 2799,
+          "core_judgments": [
+            "While the framework demonstrates strong empirical performance and integrates multiple established techniques, its novelty is limited.",
+            "Many of the technical innovations presented have already been addressed in recent comprehensive surveys on NL2SQL, such as https://arxiv.org/pdf/2408.05109, which covers a broad spectrum of studies leveraging LLMs for similar purposes.",
+            "For example, the paper claims a 'unique instance-aware synthetic example generation' approach; however, the use of few-shot examples has already been explored in prior work, including DIN-SQL and CodeS."
+          ]
+        },
+        "mine": {
+          "n_core": 3,
+          "judgment_similarity": 0.933,
+          "frac_found": 1.0,
+          "conclusion_aligned": false,
+          "reference_conclusion": "INSUFFICIENT",
+          "reviewer_conclusion": "MIXED",
+          "positive_shift": true,
+          "negative_shift": false,
+          "prior_work_engagement": "EXTENSIVE",
+          "prior_work_ordinal": 2,
+          "depth_of_analysis": "DEEP",
+          "depth_ordinal": 2,
+          "cost_usd": 0.0115,
+          "tokens": 2811,
+          "core_judgments": [
+            "The novelty of the framework is limited, as many of the technical innovations have already been addressed in recent comprehensive surveys on NL2SQL, and the contributions largely reiterate established concepts rather than introducing fundamentally new ideas.",
+            "The paper claims a 'unique instance-aware synthetic example generation' approach; however, the use of few-shot examples has already been explored in prior work, including DIN-SQL and CodeS.",
+            "While the integration of these techniques into a unified framework is well-executed, the individual components and the overall approach do not represent a significant departure from existing literature."
+          ]
+        }
+      }
+    ],
+    "cost": {
+      "usd": 0.0234,
+      "tokens": 5610
+    }
+  }
+}

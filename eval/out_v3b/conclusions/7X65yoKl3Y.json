@@ -1,0 +1,11 @@
+{
+  "text": "The paper’s central contribution is the ALLoRA method: a LoRA variant that removes both Dropout and the explicit scaling factor and instead applies a per-row adaptive learning-rate multiplier inversely proportional to the row norm of the LoRA update, with the goal of fixing three identified inefficiencies of standard LoRA in short-step finetuning. Several prior works already critique and modify LoRA’s optimization and scaling behavior, but they do so via clearly different mechanisms. Hayou et al. (2024) (LoRA+) adjust learning rates for A and B with fixed global ratios; Zhang et al. (2024) introduce a Riemannian preconditioner and a scaled AdamW implementation; LoRA-FA changes which adapter is trained and adjusts gradients in closed form; Liu et al. (2024) (DoRA) decomposes weights into magnitude and direction; Renduchintala et al. (2023) remove the scaling parameter α by tying weights. None of these works proposes the specific row-norm-based adaptive multiplier that is large at initialization and decays with the norm, nor the resulting Dropout-free, scaling-free LoRA formulation. The short-finetuning failure-mode analysis is only partially overlapped. Given that this adaptive mechanism is the core of the paper and is not challenged by prior work, the overall novelty constitutes a genuine advance.",
+  "model": "gpt-5.1",
+  "fix": "B",
+  "n_claims": 3,
+  "n_challenged": 0,
+  "verdict_summary": "0 of 3 claim(s) CHALLENGED by prior work (re-derived, fix B). Overlap degrees across claims: same x0, substantial x0, partial x9, superficial x0.",
+  "flips": [],
+  "cost_usd": 0.0,
+  "tokens": 4020
+}

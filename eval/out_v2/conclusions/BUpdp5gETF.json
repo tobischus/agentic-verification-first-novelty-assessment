@@ -1,0 +1,10 @@
+{
+  "text": "The central contribution of this paper is the introduction of decoupled Relative Learning Rate Schedules (RLRS), i.e., a parameterization of per‑component learning‑rate schedules (with component‑specific start/end multipliers on a cosine schedule) for different Transformer modules, including MoE components, together with an empirical demonstration that this improves optimization efficiency. Prior work has already established the value of non‑uniform learning rates across model parts: Hayou et al. (2024) advocate distinct learning rates for LoRA A and B matrices, and Everett et al. (2024) systematically study per‑layer learning‑rate prescriptions and cosine schedules in dense Transformers, showing that tuning per‑layer constants matters. However, neither work proposes the concrete RLRS mechanism used here—namely, a single global base LR with per‑module relative start/end multipliers, nor do they define a unified, transferable parameterization of per‑component cosine schedules spanning embeddings, attention, FFN, unembedding, and MoE experts/routers. The challenged claim around hyperparameter transfer across scales overlaps substantially with Everett et al. (2024), but this is secondary to the specific RLRS design. Overall, the core method—this particular decoupled relative scheduling scheme over many Transformer components—remains unchallenged and constitutes a genuine advance, albeit an incremental one.",
+  "model": "gpt-5.1",
+  "n_claims": 3,
+  "n_challenged": 1,
+  "verdict_summary": "1 of 3 claim(s) CHALLENGED by prior work. Overlap degrees found across claims: same x0, substantial x1, partial x4, superficial x0.",
+  "cost_usd": 0.0,
+  "tokens": 2897,
+  "generated_at": "2026-07-19 20:55:09"
+}

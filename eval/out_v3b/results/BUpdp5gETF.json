@@ -1,0 +1,144 @@
+{
+  "sid": "BUpdp5gETF",
+  "steps": {
+    "pipeline_status": "completed",
+    "grobid_ok": true,
+    "title": "DIFFERENT RATES FOR DIFFERENT WEIGHTS: DECOUPLED RELATIVE LEARNING RATE SCHEDULES",
+    "title_source": "grobid",
+    "abstract_chars": 809,
+    "publication_date": "2025-07-04",
+    "date_source": "arxiv_v1",
+    "quality": {
+      "gates": {
+        "title_found": true,
+        "abstract_found": true,
+        "references_found": true,
+        "citation_contexts_found": true,
+        "full_text_found": true
+      },
+      "all_passed": true,
+      "failed_gates": [],
+      "counts": {
+        "cited_papers": 23,
+        "citation_contexts": 26,
+        "sections": 20,
+        "full_text_chars": 24091
+      },
+      "title_source": "grobid",
+      "title_needs_review": false
+    },
+    "n_claims": 3,
+    "n_ranked_papers": 17,
+    "n_pdfs_with": 17,
+    "n_pdfs_total": 17,
+    "per_claim": [
+      {
+        "claim_id": "claim_1",
+        "verdict": "not_challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 17,
+        "n_overlap": 1,
+        "deep_dives": 1
+      },
+      {
+        "claim_id": "claim_2",
+        "verdict": "not_challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 17,
+        "n_overlap": 2,
+        "deep_dives": 3
+      },
+      {
+        "claim_id": "claim_3",
+        "verdict": "challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 17,
+        "n_overlap": 2,
+        "deep_dives": 4
+      }
+    ],
+    "conclusion_ok": true,
+    "elapsed_s": 760.8
+  },
+  "cost": {
+    "stages_usd": 0.0067,
+    "stages_prompt_tokens": 6105,
+    "stages_completion_tokens": 1021,
+    "agent_usd": 0.0666,
+    "agent_prompt_tokens": 82243,
+    "agent_completion_tokens": 23067,
+    "conclusion_usd": 0.0078,
+    "conclusion_prompt_tokens": 2557,
+    "conclusion_completion_tokens": 334,
+    "total_usd": 0.0811,
+    "total_tokens": 115327,
+    "model": "gpt-5-mini"
+  },
+  "error": null,
+  "conclusion": "The paper’s central contribution is the introduction of decoupled Relative Learning Rate Schedules (RLRS) that assign distinct, cosine‑shaped learning‑rate schedules (via per‑component start/end multipliers) to different Transformer components, with a claimed benefit that these relative schedules can be tuned on small models and extrapolated to much larger ones. Closest prior work, Everett et al. (2024), already studies per‑layer learning‑rate prescriptions, uses cosine schedules, and explicitly demonstrates that learning‑rate hyperparameters tuned or derived on small models can transfer across widths up to tens of billions of parameters, directly challenging the submission’s claim about small‑to‑large hyperparameter extrapolation. LoRA+ by Hayou et al. (2024) likewise shows that using different learning rates for different parameter groups (LoRA A/B matrices) can substantially improve optimization and discusses scaling behavior. Relative to these, the present work mainly refines the parameterization (per‑component start/end multipliers on a cosine LR, including MoE‑specific modules) and offers empirical evaluations on dense and MoE Transformers. These deltas are method‐engineering choices and extensions of scope rather than a qualitatively new central mechanism. Overall, the novelty is mixed but, given that the core idea and extrapolation claim are substantially anticipated, not strong enough for a top‑tier venue.",
+  "conclusion_meta": {
+    "text": "The paper’s central contribution is the introduction of decoupled Relative Learning Rate Schedules (RLRS) that assign distinct, cosine‑shaped learning‑rate schedules (via per‑component start/end multipliers) to different Transformer components, with a claimed benefit that these relative schedules can be tuned on small models and extrapolated to much larger ones. Closest prior work, Everett et al. (2024), already studies per‑layer learning‑rate prescriptions, uses cosine schedules, and explicitly demonstrates that learning‑rate hyperparameters tuned or derived on small models can transfer across widths up to tens of billions of parameters, directly challenging the submission’s claim about small‑to‑large hyperparameter extrapolation. LoRA+ by Hayou et al. (2024) likewise shows that using different learning rates for different parameter groups (LoRA A/B matrices) can substantially improve optimization and discusses scaling behavior. Relative to these, the present work mainly refines the parameterization (per‑component start/end multipliers on a cosine LR, including MoE‑specific modules) and offers empirical evaluations on dense and MoE Transformers. These deltas are method‐engineering choices and extensions of scope rather than a qualitatively new central mechanism. Overall, the novelty is mixed but, given that the core idea and extrapolation claim are substantially anticipated, not strong enough for a top‑tier venue.",
+    "model": "gpt-5.1",
+    "fix": "B",
+    "n_claims": 3,
+    "n_challenged": 1,
+    "verdict_summary": "1 of 3 claim(s) CHALLENGED by prior work (re-derived, fix B). Overlap degrees across claims: same x0, substantial x1, partial x4, superficial x0.",
+    "flips": [],
+    "cost_usd": 0.0,
+    "tokens": 2885
+  },
+  "judge": {
+    "n_human_refs": 1,
+    "per_ref": [
+      {
+        "human_file": "review_1.txt",
+        "afzal": {
+          "n_core": 3,
+          "judgment_similarity": 0.85,
+          "frac_found": 1.0,
+          "conclusion_aligned": false,
+          "reference_conclusion": "INSUFFICIENT",
+          "reviewer_conclusion": "MIXED",
+          "positive_shift": true,
+          "negative_shift": false,
+          "prior_work_engagement": "LIMITED",
+          "prior_work_ordinal": 1,
+          "depth_of_analysis": "MODERATE",
+          "depth_ordinal": 1,
+          "cost_usd": 0.0088,
+          "tokens": 2540,
+          "core_judgments": [
+            "The overall novelty of the work appears limited, as the idea of tuning learning rates for each component of a neural network is already well established in the literature, particularly in recent muP works.",
+            "The approach does not significantly advance beyond existing methods.",
+            "The main contribution seems to be an empirical application of per-layer learning rate schedules, but without a large-scale validation or a deeper theoretical analysis, the work does not clearly differentiate itself from prior art."
+          ]
+        },
+        "mine": {
+          "n_core": 3,
+          "judgment_similarity": 0.883,
+          "frac_found": 1.0,
+          "conclusion_aligned": false,
+          "reference_conclusion": "INSUFFICIENT",
+          "reviewer_conclusion": "MIXED",
+          "positive_shift": true,
+          "negative_shift": false,
+          "prior_work_engagement": "EXTENSIVE",
+          "prior_work_ordinal": 2,
+          "depth_of_analysis": "DEEP",
+          "depth_ordinal": 2,
+          "cost_usd": 0.0107,
+          "tokens": 2643,
+          "core_judgments": [
+            "The overall novelty of the work appears limited, as the idea of tuning learning rates for each component of a neural network is already well established in the literature, particularly in recent muP works.",
+            "The approach does not significantly advance beyond existing methods.",
+            "The main contribution seems to be an empirical application of per-layer learning rate schedules, but without a large-scale validation or a deeper theoretical analysis, the work does not clearly differentiate itself from prior art."
+          ]
+        }
+      }
+    ],
+    "cost": {
+      "usd": 0.0195,
+      "tokens": 5183
+    }
+  }
+}

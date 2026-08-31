@@ -1,0 +1,11 @@
+{
+  "text": "The paper’s central contribution is a method for constructing small image perturbations that act as cross‑modal soft prompts (“hidden meta‑instructions”) to steer VLM outputs while preserving the original image semantics. Very closely related work already does this. Bailey et al. (2023) and Bagdasarian et al. (2023) optimize pixel‑space perturbations so that images function as prompts controlling generative or multimodal models, with explicit goals of visual stealthiness and output control; “Manipulating Multimodal Agents via Cross‑Modal Prompt Injection” and “Multi‑Faceted Attack: Exposing Cross‑Model Vulnerabilities in Defense‑Equipped Vision‑Language Models” similarly construct perturbations whose visual embeddings encode textual instructions that override downstream behavior. The present submission’s main additions are procedural and framing: using LLM‑synthesized and filtered QA pairs as training targets, explicitly casting the perturbations as “meta‑instructions” (e.g., sentiment, style, spin) rather than jailbreaks, and providing a somewhat more systematic evaluation, including semantic‑preservation metrics and demonstration of some capabilities not accessible via direct text prompts. These are incremental on top of prior attack formulations that already realize the core idea of visually encoded hidden prompts. Given that the central mechanism is substantially anticipated by multiple works, the overall novelty is not strong enough for a top‑tier venue.",
+  "model": "gpt-5.1",
+  "fix": "A",
+  "n_claims": 4,
+  "n_challenged": 3,
+  "verdict_summary": "3 of 4 claim(s) CHALLENGED by prior work (re-derived, fix A). Overlap degrees across claims: same x0, substantial x15, partial x17, superficial x0.",
+  "flips": [],
+  "cost_usd": 0.0,
+  "tokens": 6602
+}

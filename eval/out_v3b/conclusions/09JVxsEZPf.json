@@ -1,0 +1,11 @@
+{
+  "text": "The paper’s central contribution is the SAFEPATCHING framework: deriving parameter “safety patches” from harmful data and seamlessly adding them to an already-aligned LLM to improve safety while preserving utility. Bhardwaj et al. (2024) already introduce RESTA, which computes a safety delta (“safety vector”) in parameter space and adds it to a fine‑tuned backbone to restore or improve safety, and also explores rescaling and related manipulations while tracking safety–utility trade‑offs. This substantially overlaps the core idea that post‑hoc safety alignment can be implemented via additive parameter patches applied to an existing model without retraining it from scratch, with an explicit emphasis on maintaining performance. Relative to RESTA and related work, this submission adds a more elaborate two‑patch construction (one patch for safety enhancement and one for over‑safety mitigation via opposite‑direction gradients) and a continual PSA evaluation protocol; these are meaningful but secondary extensions around a core mechanism that is already present in Bhardwaj et al. (2024) and, conceptually, in unlearning-style methods like Lu et al. (2024). Given that the central mechanism of post‑hoc, utility‑preserving safety patching in parameter space is already established, the overall novelty is not sufficient for a top‑tier venue.",
+  "model": "gpt-5.1",
+  "fix": "B",
+  "n_claims": 3,
+  "n_challenged": 1,
+  "verdict_summary": "1 of 3 claim(s) CHALLENGED by prior work (re-derived, fix B). Overlap degrees across claims: same x0, substantial x1, partial x9, superficial x0.",
+  "flips": [],
+  "cost_usd": 0.0,
+  "tokens": 4041
+}

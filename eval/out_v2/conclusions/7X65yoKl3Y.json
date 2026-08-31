@@ -1,0 +1,10 @@
+{
+  "text": "The central contribution of this paper is ALLoRA: a LoRA-style adapter that replaces LoRA’s fixed scaling factor and Dropout with a weight-dependent, per-row adaptive learning-rate multiplier based on the ℓ2 norm of BA, specifically tailored to address three identified inefficiencies of LoRA under short-step finetuning. Prior work already diagnoses and partially remedies several aspects of LoRA’s suboptimal optimization: Hayou et al. (2024) and Hayou et al. (2024, LoRA+) analyze LoRA’s parametrization and initialization and propose adjusted/decoupled learning rates; Zhang et al. (2024) introduce a Riemannian preconditioner that rescales LoRA gradients; Liu et al. (2024) (DoRA) and LoRA-FA reformulate and rescale LoRA updates to better match full fine-tuning. However, none of these works (i) articulate the same trio of short-finetuning failure modes (including the specific critique of Dropout) nor (ii) implement ALLoRA’s particular mechanism: a norm-based, row-wise adaptive multiplier that is large at initialization, tapers with row growth, removes both Dropout and explicit scaling, and only modifies A/B gradients. This adaptive scheme is the methodological core and is not present in the surveyed literature. Consequently, the paper’s central contribution appears to be a genuine advance in novelty.",
+  "model": "gpt-5.1",
+  "n_claims": 3,
+  "n_challenged": 0,
+  "verdict_summary": "0 of 3 claim(s) CHALLENGED by prior work. Overlap degrees found across claims: same x0, substantial x0, partial x9, superficial x0.",
+  "cost_usd": 0.0,
+  "tokens": 4054,
+  "generated_at": "2026-07-19 20:53:23"
+}

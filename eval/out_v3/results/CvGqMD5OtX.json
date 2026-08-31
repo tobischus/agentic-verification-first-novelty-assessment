@@ -1,0 +1,151 @@
+{
+  "sid": "CvGqMD5OtX",
+  "steps": {
+    "pipeline_status": "completed",
+    "grobid_ok": true,
+    "title": "CHASE-SQL: MULTI-PATH REASONING AND PREF-ERENCE OPTIMIZED CANDIDATE SELECTION IN TEXT-TO-SQL",
+    "title_source": "grobid",
+    "abstract_chars": 843,
+    "publication_date": "2024-10-02",
+    "date_source": "arxiv_v1",
+    "quality": {
+      "gates": {
+        "title_found": true,
+        "abstract_found": true,
+        "references_found": true,
+        "citation_contexts_found": true,
+        "full_text_found": true
+      },
+      "all_passed": true,
+      "failed_gates": [],
+      "counts": {
+        "cited_papers": 46,
+        "citation_contexts": 64,
+        "sections": 20,
+        "full_text_chars": 57391
+      },
+      "title_source": "grobid",
+      "title_needs_review": false
+    },
+    "n_claims": 3,
+    "n_ranked_papers": 21,
+    "n_pdfs_with": 21,
+    "n_pdfs_total": 21,
+    "per_claim": [
+      {
+        "claim_id": "claim_1",
+        "verdict": "not_challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 21,
+        "n_overlap": 2,
+        "deep_dives": 4
+      },
+      {
+        "claim_id": "claim_2",
+        "verdict": "not_challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 21,
+        "n_overlap": 3,
+        "deep_dives": 3
+      },
+      {
+        "claim_id": "claim_3",
+        "verdict": "not_challenged",
+        "evidence_sufficient": true,
+        "n_comparisons": 21,
+        "n_overlap": 4,
+        "deep_dives": 4
+      }
+    ],
+    "conclusion_ok": true,
+    "elapsed_s": 1279.8
+  },
+  "cost": {
+    "stages_usd": 0.0106,
+    "stages_prompt_tokens": 6411,
+    "stages_completion_tokens": 2713,
+    "agent_usd": 0.0825,
+    "agent_prompt_tokens": 87827,
+    "agent_completion_tokens": 30262,
+    "conclusion_usd": 0.0097,
+    "conclusion_prompt_tokens": 3497,
+    "conclusion_completion_tokens": 340,
+    "total_usd": 0.1028,
+    "total_tokens": 131050,
+    "model": "gpt-5-mini"
+  },
+  "error": null,
+  "conclusion": "The paper’s central contribution is the CHASE-SQL framework: generating diverse SQL candidates via multiple prompting strategies and then selecting a single final query with a learned scoring model. At the framework level, this is substantially overlapped by MCS-SQL (Lee et al., 2024), which already proposes to leverage multiple prompts to produce diverse candidate SQLs and then apply a selection procedure to choose the best candidate, thereby improving Text-to-SQL performance. The present submission extends this idea by (i) instantiating several specific candidate generators (divide-and-conquer CoT, query-plan-based CoT, and online synthetic example generation) and (ii) replacing MCS-SQL’s execution-based filtering plus LLM multiple-choice selection with a trained pairwise comparison classifier that aggregates wins into a final score. While these additions are technically nontrivial, they are best viewed as alternative engineering choices within the same multi-candidate–plus–selection paradigm, rather than a qualitatively new mechanism. The pairwise selection agent and specific candidate generators are themselves not directly challenged, but they refine rather than fundamentally extend the core idea already realized in MCS-SQL. Consequently, the central contribution is not novel enough to meet the bar for a genuine advance.",
+  "conclusion_meta": {
+    "text": "The paper’s central contribution is the CHASE-SQL framework: generating diverse SQL candidates via multiple prompting strategies and then selecting a single final query with a learned scoring model. At the framework level, this is substantially overlapped by MCS-SQL (Lee et al., 2024), which already proposes to leverage multiple prompts to produce diverse candidate SQLs and then apply a selection procedure to choose the best candidate, thereby improving Text-to-SQL performance. The present submission extends this idea by (i) instantiating several specific candidate generators (divide-and-conquer CoT, query-plan-based CoT, and online synthetic example generation) and (ii) replacing MCS-SQL’s execution-based filtering plus LLM multiple-choice selection with a trained pairwise comparison classifier that aggregates wins into a final score. While these additions are technically nontrivial, they are best viewed as alternative engineering choices within the same multi-candidate–plus–selection paradigm, rather than a qualitatively new mechanism. The pairwise selection agent and specific candidate generators are themselves not directly challenged, but they refine rather than fundamentally extend the core idea already realized in MCS-SQL. Consequently, the central contribution is not novel enough to meet the bar for a genuine advance.",
+    "model": "gpt-5.1",
+    "fix": "A",
+    "n_claims": 3,
+    "n_challenged": 1,
+    "verdict_summary": "1 of 3 claim(s) CHALLENGED by prior work (re-derived, fix A). Overlap degrees across claims: same x0, substantial x1, partial x8, superficial x0.",
+    "flips": [
+      {
+        "claim": "claim_3",
+        "old": false,
+        "new": true,
+        "reason": "1 substantial/same overlap(s)"
+      }
+    ],
+    "cost_usd": 0.0,
+    "tokens": 3682
+  },
+  "judge": {
+    "n_human_refs": 1,
+    "per_ref": [
+      {
+        "human_file": "review_0.txt",
+        "afzal": {
+          "n_core": 3,
+          "judgment_similarity": 0.933,
+          "frac_found": 1.0,
+          "conclusion_aligned": true,
+          "reference_conclusion": "INSUFFICIENT",
+          "reviewer_conclusion": "INSUFFICIENT",
+          "positive_shift": false,
+          "negative_shift": false,
+          "prior_work_engagement": "LIMITED",
+          "prior_work_ordinal": 1,
+          "depth_of_analysis": "MODERATE",
+          "depth_ordinal": 1,
+          "cost_usd": 0.0117,
+          "tokens": 2785,
+          "core_judgments": [
+            "The novelty of the framework is limited, as many of the technical innovations have already been addressed in recent comprehensive surveys on NL2SQL, and the contributions largely reiterate established concepts rather than introducing fundamentally new ideas.",
+            "The paper claims a 'unique instance-aware synthetic example generation' approach, but the use of few-shot examples has already been explored in prior work, including DIN-SQL and CodeS.",
+            "While the integration of these techniques into a unified framework is well-executed, the individual components and the overall approach do not represent a significant departure from existing literature."
+          ]
+        },
+        "mine": {
+          "n_core": 3,
+          "judgment_similarity": 0.9,
+          "frac_found": 1.0,
+          "conclusion_aligned": true,
+          "reference_conclusion": "INSUFFICIENT",
+          "reviewer_conclusion": "INSUFFICIENT",
+          "positive_shift": false,
+          "negative_shift": false,
+          "prior_work_engagement": "LIMITED",
+          "prior_work_ordinal": 1,
+          "depth_of_analysis": "MODERATE",
+          "depth_ordinal": 1,
+          "cost_usd": 0.0118,
+          "tokens": 2829,
+          "core_judgments": [
+            "The novelty of the framework is limited, as many of the technical innovations have already been addressed in recent comprehensive surveys on NL2SQL, which cover a broad spectrum of studies leveraging LLMs for similar purposes.",
+            "The paper claims a 'unique instance-aware synthetic example generation' approach; however, the use of few-shot examples has already been explored in prior work, including DIN-SQL and CodeS.",
+            "The integration of these techniques into a unified framework is well-executed, but the individual components and the overall approach do not represent a significant departure from existing literature."
+          ]
+        }
+      }
+    ],
+    "cost": {
+      "usd": 0.0235,
+      "tokens": 5614
+    }
+  }
+}
