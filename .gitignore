@@ -150,3 +150,10 @@ arxiv2025_assessing_paper_novelty/sketch*
 *.pdf
 
 TODO
+
+/eval/out
+
+# local dataset artifacts (not part of this work)
+novelty_Yuan.json
+emnlp_23_sen*.csv
+*.pptx
