@@ -40,33 +40,25 @@ This sentence belongs in the evaluation design notes and in the Method chapter.
 
 ## THIS WEEK — 1–7 September
 
-### [ ] 1. Clean up the remote branches — **not pushed yet, by your decision**
-Actual state on GitHub (checked with `git ls-remote`, the local remote-tracking refs are stale
-because `filter-branch` rewrote them):
+### [x] 1. Remote cleaned up
+Both branches on GitHub now point at the same filtered history; `agent_sections` (the DEFAULT
+branch, which is what feeds the Contributors list) was force-pushed from `257dd49` to the clean
+tip. Authors on the default branch: tobischus (17), Osama Afzal (10), serviceosaurus[bot] (2) —
+no Claude, no Anthropic, zero co-author trailers. The upstream commits are kept deliberately:
+they document what was inherited from the baseline repo versus what is your own contribution.
 
-| branch on GitHub | tip | state |
-|---|---|---|
-| `feature/deep-claim-extraction` | `9710ed5` | **clean** — matches the local filtered history |
-| `agent_sections` | `257dd49` | **stale, still carries the AI attribution trailer** |
-| `dependabot/github_actions/...` ×3 | — | inherited from the upstream template, not your work |
+The three `dependabot/*` branches are gone from the remote, which closes their PRs. Removed the
+template automation that produced them: `.github/dependabot.yml`, plus
+`.github/workflows/rename_project.yml` and `.github/rename_project.sh` — that workflow ran on every
+push with `permissions: write-all` and ended in a `git-auto-commit-action` with
+`push_options: --force`, which is not something to leave next to a freshly rewritten history.
 
-All five local branches are already trailer-free. The trailer exists **only** on GitHub, and GitHub
-state can only be changed by a remote operation — there is no local fix for it. Two options when you
-are ready:
+Two notes: GitHub caches the Contributors list, so it can take hours to drop Claude even though the
+data is already correct; and the old commits stay reachable by direct SHA for a while — only a fresh
+repo removes them entirely, which is not worth doing for a thesis submission.
 
-- **Delete `agent_sections` on GitHub.** It is superseded by `feature/deep-claim-extraction`, which
-  is already there with the clean history. Cleanest, and removes the trailer from every branch tip.
-- Or force-push over it: `git push --force origin feature/deep-claim-extraction:agent_sections`.
-
-Either way the old commits stay reachable by direct SHA on GitHub for a while; only a fresh repo
-removes them entirely. Push before you `git fetch` — a fetch first would pull the old commits back
-into the local repo.
-
-The three `dependabot/*` branches are automated dependency bumps for the GitHub Actions workflows
-in `.github/workflows/` (`actions/checkout`, `actions/setup-python`, `git-auto-commit-action`). They
-came from the project template the upstream repo was generated from (commits `8bb9528 Initial
-commit` / `3d8d916 Ready to clone and code`), not from your work. Close the PRs, delete the
-branches, and either delete `.github/dependabot.yml` or switch Dependabot off in the repo settings.
+Left alone: `.github/workflows/{docs,main,tests}.yml` trigger on `main`, which does not exist on the
+remote, so they never run. Delete them if you want the repo tidy.
 
 ### [~] 2. Grounding + verifiability analysis — **promoted to core**
 Was "supporting". Promote because it is **judge-free**, the data already exists, it is pillar 1 of
