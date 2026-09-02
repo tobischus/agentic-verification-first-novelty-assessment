@@ -1,152 +1,278 @@
 # TODO
 
-Single canonical task list. Ordered by priority; work top-down.
-Status: **[ ]** open · **[~]** in progress · **[x]** done · **[deferred]** later · **[decision]** needs your call.
+**Deadline: ~1 November 2026. Today: 1 September. Experiment freeze: 30 September.**
+After the freeze: re-runs of failed jobs only, no new experiments.
+
+What gets graded is the **written document**, not the code. No thesis document exists yet.
+Writing is therefore a **parallel track starting now**, not a task in this queue — see *Writing*.
+
+Status: **[ ]** open · **[~]** in progress · **[x]** done · **[deferred]** later ·
+**[decision]** needs your call · **[lead time]** depends on someone else, start early.
+
+---
+
+## Research questions
+
+**RQ1** — Does an agentic Explore–Verify–Synthesize–Judge workflow produce novelty assessments that
+are more accurate and better evidence-grounded than **non-agentic baselines**?
+
+**RQ2** — To what extent do AI-assisted prior-work verification and contribution-delta analysis
+improve assessment quality?
+
+RQ1 is answered by the controlled ablation **agent vs. own linear baseline** (same claims, same
+pool, single pass). That is the only comparison in which the workflow is the sole variable.
+Comparisons against Afzal / OpenNovelty / DeepReviewer are **system-level** — model, prompts and
+retrieval all differ — and are therefore secondary evidence, not the answer to RQ1.
+
+### Narrative constraint (advisor)
+
+The thesis argues that human review verdicts are a **noisy reference** and must not become the
+optimisation target; verdict-alignment evaluation was explicitly rejected. Every use of the human
+assessments must therefore be framed as **evidence recall against a factual pointer**, never as
+agreement with a human judgment:
+
+> The reviewer names a specific prior work. We measure whether the pipeline surfaces that document.
+> We do not measure whether the pipeline agrees with the reviewer's novelty verdict.
+
+This sentence belongs in the evaluation design notes and in the Method chapter.
+
+---
+
+## THIS WEEK — 1–7 September
+
+### [ ] 1. Clean up the remote branches — **not pushed yet, by your decision**
+Actual state on GitHub (checked with `git ls-remote`, the local remote-tracking refs are stale
+because `filter-branch` rewrote them):
+
+| branch on GitHub | tip | state |
+|---|---|---|
+| `feature/deep-claim-extraction` | `9710ed5` | **clean** — matches the local filtered history |
+| `agent_sections` | `257dd49` | **stale, still carries the AI attribution trailer** |
+| `dependabot/github_actions/...` ×3 | — | inherited from the upstream template, not your work |
+
+All five local branches are already trailer-free. The trailer exists **only** on GitHub, and GitHub
+state can only be changed by a remote operation — there is no local fix for it. Two options when you
+are ready:
+
+- **Delete `agent_sections` on GitHub.** It is superseded by `feature/deep-claim-extraction`, which
+  is already there with the clean history. Cleanest, and removes the trailer from every branch tip.
+- Or force-push over it: `git push --force origin feature/deep-claim-extraction:agent_sections`.
+
+Either way the old commits stay reachable by direct SHA on GitHub for a while; only a fresh repo
+removes them entirely. Push before you `git fetch` — a fetch first would pull the old commits back
+into the local repo.
+
+The three `dependabot/*` branches are automated dependency bumps for the GitHub Actions workflows
+in `.github/workflows/` (`actions/checkout`, `actions/setup-python`, `git-auto-commit-action`). They
+came from the project template the upstream repo was generated from (commits `8bb9528 Initial
+commit` / `3d8d916 Ready to clone and code`), not from your work. Close the PRs, delete the
+branches, and either delete `.github/dependabot.yml` or switch Dependabot off in the repo settings.
+
+### [~] 2. Grounding + verifiability analysis — **promoted to core**
+Was "supporting". Promote because it is **judge-free**, the data already exists, it is pillar 1 of
+the midterm evaluation design, and it is the safety net if the judge turns out not to discriminate
+between systems.
+
+Script over `eval/out/data/*/*_artifact_a.json` + ledgers: share of quote checks passing, split by
+side (claim vs. paper), failure reasons (below `min_quote_tokens`, not found, fuzzy below threshold,
+no full text → abstract-only, GROBID gaps), and how often `can_refute` was downgraded. Produces the
+thesis's **verifiability rate**.
+
+Data points already in hand: extraction-side groundedness is 53/53 for both luna and sol; the triage
+fix moved 11 of 19 papers from an unquotable one-liner to verbatim verified evidence; one verified
+quote contains a GROBID artifact ("…Broadly speaking, RAG**Num**"), i.e. verification is bounded by
+parse quality — report that as a limitation.
+
+**Target: 7 September.**
+
+### [ ] 3. Ask the advisor two things now — **[lead time]**
+Both gate later work, so send them this week rather than when you get there:
+1. Do Afzal et al. already evaluate against `human_novelty_assessments/`? If yes, do we align with
+   their protocol or depart from it deliberately? (gates task 5)
+2. Confirm the framing above — evidence recall against a factual pointer, not verdict alignment.
+   Also settle decision 10 (final verdict vs. analysis-only) while you are at it.
+
+---
+
+## Core evaluation — 8–30 September
+
+### [ ] 4. Decide and freeze the evaluation corpus — **do before task 5**
+**Target: 8 September.** Currently only **7 of 19** papers in `eval/out/data` carry human-named prior
+work; the metric needs coverage of those 56 papers. Choose the set, freeze it, document the
+selection rule, and process the missing papers (GROBID + retrieval, ~15 min each — budget the wall
+clock). No changes to the corpus after this date, so that every later number refers to one set.
+
+### [ ] 5. Evidence recall against human-named prior work
+**Target: metric built 14 Sep · runs complete 21 Sep.**
+
+The Afzal dataset carries ground truth the evaluation does not use yet:
+
+| | |
+|---|---|
+| papers with `human_novelty_assessments/` | **182** of 185 |
+| assessment files | 418 (2.3 per paper) |
+| papers where the human **names specific prior work** | **56** (31%), ~1.9 works each |
+| of those, already in the own eval corpus | **7 of 19** |
+
+Example `09JVxsEZPf`: the reviewer calls novelty limited because the method rests on the SNIP score
+of **Lee et al.** and merging techniques of **Yu et al.** and **Hui et al.**
+
+Framing (non-negotiable, see *Narrative constraint*): the reviewer names a specific prior work; we
+measure whether the pipeline surfaces that document. Not whether it agrees with the verdict.
+
+Metric as a funnel over the pipeline stages, over ~106 (paper, prior-work) pairs:
+**recall@pool** (retrieved at all?) → **recall@examined** (deep-dived?) → **recall@challenged**
+(flagged as challenging novelty?).
+
+Required amendments:
+- **The own linear baseline is the PRIMARY comparison system** — same claims, same pool, single
+  pass. This is the RQ1 ablation. External systems (Afzal, OpenNovelty, DeepReviewer) are secondary
+  system-level comparisons and must be labelled as such.
+- **Report pool size beside every recall number**, and precision wherever it is definable. Recall
+  alone rewards indiscriminate retrieval — a system that returns everything scores 100%.
+- **State the incompleteness limitation explicitly**: the reviewer names only the prior work they
+  happened to know. A system that surfaces *better* or *additional* prior work receives no credit
+  and may even look worse. The metric is a lower bound on retrieval quality, not a ceiling.
+- **Prerequisites**: task 3 answered, task 4 frozen. (Verification parity: done, see below.)
+
+### [ ] 6. RQ1 ablation: agent vs. own linear baseline
+**Target: 21 September.** Same claims, same pool, single pass vs. the four-phase agent. Report the
+task-2 grounding metrics and the task-5 recall funnel side by side. This is the thesis's primary
+result — schedule it before the external comparisons, not after.
+
+### [ ] 7. System-level comparison against external systems
+**Target: 30 September (freeze).** Afzal, OpenNovelty, DeepReviewer. Injection feasibility is already
+analysed (own + OpenNovelty clean, Afzal lossy, DeepReviewer PDF-only → end-to-end only). Label
+explicitly as system-level: model, prompts and retrieval differ, so these do **not** isolate the
+workflow. Stage A adapters for `afzal` / `opennovelty` exist in the harness but were never run —
+they need `structured_representation.json` / `phase1_extracted.json` per paper.
+
+### [ ] 8. Validate the judge — small, scheduled, **not dropped**
+**Target: 28 September.** Every Stage-A result you already have rests on this judge — luna 7:0 deep,
+luna 6:2 sol — and **position order decided 40% of outcomes** (6 of 7 ties in the luna-vs-sol run
+were position-inconsistent). Rate **20–30 pairs yourself, blind**, and report Cohen's κ against the
+LLM judge.
+
+Keep it small. This is not a new experiment, it retroactively strengthens results already in hand,
+and it converts a weakness into a methodological contribution. If you want a second human rater for
+inter-annotator agreement, ask now — **[lead time]**.
+
+---
+
+## Writing — parallel track, starts now
+
+Draft in LaTeX alongside the experiments. Chapters marked **NOW** need no further results.
+
+| Chapter | Source material | Status |
+|---|---|---|
+| Introduction, motivation, RQs | exposé, midterm slides | **NOW** |
+| Related Work | Afzal, OpenNovelty, DeepReviewer, agentic-review literature | **NOW** |
+| Method — system design | four-phase agent, evidence invariant, HITL checkpoints | **NOW** |
+| Method — implementation | GROBID step 1, retrieval, extractor, cache, backend/frontend | **NOW** |
+| Evaluation design | three-stage design, judge protocol, the framing sentence above | **NOW** |
+| Results — claim extraction | ablations, 3 rejected SOTA techniques, luna vs sol, truncation finding | **NOW** |
+| Results — grounding / verifiability | task 2 | after 7 Sep |
+| Results — RQ1 ablation | task 6 | after 21 Sep |
+| Results — system comparison | task 7 | after 30 Sep |
+| Discussion / Limitations | judge position bias, silver reference, parse quality, incompleteness | mostly **NOW** |
+| Conclusion / Future Work | tasks 9–12 | last |
+
+**Milestones:** Method + Related Work drafted by **15 Sep** · Results-extraction drafted by
+**30 Sep** · full draft to the advisor by **15 October** — **[lead time]**, he needs reading time ·
+revision 15–25 Oct · buffer and submission 25 Oct–1 Nov.
+
+---
+
+## Open — after the freeze, or if time allows
+
+### [deferred] 9. Reconcile the "challenged" rule with the evidence invariant
+Depends on task 2. `NOVELTY_CHALLENGE_ON_STRONG_OVERLAP` (default on) lets `overlap_degree ∈
+{substantial, same}` count as challenged **without** a both-sides-verified quote pair, contradicting
+"a refutation counts only when backed by a verified quote pair". After task 2's numbers: either
+require a verified pair on that path too, or change the thesis wording. A wording change is cheap
+and may be the right call this close to the deadline.
+
+### [decision] 10. Final verdict vs. analysis-only — **[lead time]**, ask in task 3
+Leaning (and what the UI already does): claim-level evidence-grounded findings, **no** paper-level
+novelty verdict. Consistent with the narrative constraint. If confirmed, reframe
+`artifact_b.py`'s `overall_assessment` as a structured summary of findings and update slide 12
+("conservative verdicts" → analysis).
+
+### [ ] 11. GOLD reference for ~20 papers
+Serves Stage A only — a supporting contribution. The silver reference is demonstrably unreliable:
+on `5GuhYMgaap` four of its seven "contributions" restate the same SolverLearner proposal, which
+punishes any system that does not repeat itself. If there is no time, report this as a limitation
+with that example as evidence rather than building the gold set.
+
+### [ ] 12. Harden the evaluation harness
+- Tighten the `redundancy` metric — it missed duplicate pairs a human sees immediately.
+- Average over repeated judge runs (≥3) instead of one, and report the spread.
+- Re-check `atomicity`: it now has TWO counter-examples (see *Findings*).
+
+### [ ] 13. Bring exposé and midterm slides in line — **before the advisor draft, 15 Oct**
+- "deep claim extraction" as a feature → becomes an **ablation result** (simple beats engineered).
+- slide 6 "four phases" → now true (rerank and Phase 0b both gone).
+- slide 12 "conservative verdicts" → depends on decision 10.
 
 ---
 
 ## Done
 
-### [x] 1. Claim extraction — replaced by the free full-text extractor
-`ClaimExtractor = FullTextClaimExtractor` (whole paper, ONE unconstrained call), default model
-`gpt-5.6-luna` via `DEFAULT_EXTRACTION_MODEL` (env `NOVELTY_EXTRACTION_MODEL`). The orchestrator
-uses that model explicitly, NOT the pipeline-wide `--model`, so a cheap pipeline model cannot
-silently degrade extraction. Chosen on evidence — see *Findings*. The losing variants stay in the
-tree as documented ablations: `DeepClaimExtractor`, `ShallowClaimExtractor`, and `claim_methods.py`
-(self-consistency / CoVe / self-refine).
+### [x] Claim extraction — free full-text extractor
+`ClaimExtractor = FullTextClaimExtractor` (whole paper, ONE unconstrained call), default
+`gpt-5.6-luna` via `DEFAULT_EXTRACTION_MODEL`. The orchestrator pins that model explicitly, not the
+pipeline-wide `--model`. Losing variants kept as documented ablations (`DeepClaimExtractor`,
+`ShallowClaimExtractor`, `claim_methods.py`).
 
-### [x] 2. Per-claim rerank removed
-`_rerank`, `_RERANK_PROMPT`, `_Rerank`, the Phase-0 call and `set_rerank`/`rerank_pos` are gone;
-`_ranked()` sorts by claim similarity only. **Verified before removing** (the old TODO's
-justification was wrong): triage reads the whole pool regardless of order; `closest_set()` /
-`closest_covered()` / `list_related_work()` are dead code from the old free-tool-loop design; and
-the report's "Closest examined" uses `max(comparisons, key=similarity)`, not `_ranked()`.
-Remaining effect is display-only: `frontier = _ranked()[:20]` — with pools of 17-22 papers the
-order decides which 1-2 papers are cut from the review UI list. The agent is now exactly 4 phases
-(triage → deep dive → re-entry → verdict), matching midterm slide 6.
+### [x] Per-claim rerank removed
+`_rerank`, `_RERANK_PROMPT`, `_Rerank`, the Phase-0 call and `set_rerank`/`rerank_pos` are gone.
+Verified before removing (the old justification was wrong). Remaining effect is display-only:
+`frontier = _ranked()[:20]`. The agent is now exactly four phases, matching midterm slide 6.
 
-### [x] 3. Dead `uncertain` / `evidence_sufficient` path removed
-`_apply_sufficiency` + both call sites in `artifact_b.py`, the sufficiency note in the B prompt, and
-the `evidence_sufficient=false ⇒ uncertain` check in `artifact_judge.py` are gone. The agent still
-RECORDS `evidence_sufficient` (transparency); nothing acts on it, because Phase 4 always emits
-`True`.
-> Consequence, accepted knowingly: historical artifacts from the July runs DO contain
-> `evidence_sufficient: false`. Re-running Artifact B / the judge over those old files no longer
-> forces their verdict to `uncertain`. Current runs are unaffected.
+### [x] Dead `uncertain` / `evidence_sufficient` path removed
+`_apply_sufficiency` + both call sites, the sufficiency note in the B prompt, and the
+`evidence_sufficient=false ⇒ uncertain` check in the judge are gone. The agent still records the
+flag for transparency. Re-running B or the judge over the July artifacts no longer forces
+`uncertain`.
 
-Verified by `scratchpad/verify_changes.py` (28 structural checks), live extraction runs with and
-without realization, and two full agent runs on a cached submission (one deriving the realization,
-one adopting it).
+### [x] Realization for full-text claims
+Per claim, what the submission itself does for it, as verified quotes. Full-text variant chosen by
+measurement (5 papers / 18 claims, blind pairwise both orientations): 8:3 with half the calls, ~39%
+more cost, quote-verification 93.0% vs 96.8%. The agent adopts it — `understand_submission` → 0.0 s.
 
----
+### [x] Triage abstract truncation — fixed and validated
+See *Findings*. `_TRIAGE_ABSTRACT_CHARS = 2500`.
 
-## Open — pipeline
+### [x] Model comparison for extraction
+`gpt-5.6-sol` vs `gpt-5.6-luna`, 15 papers. Sol does not win. Keep luna. `fulltext_terra` is
+registered in the harness but deliberately not run.
 
-### [x] 4. Realization for full-text claims — option (a) implemented
-`FullTextClaimExtractor` now also reads, per claim, what the submission itself does for it:
-sections picked from the section menu, read in full, turned into a verified-quote
-`realization` + `sections_used`. Shared with the deep extractor via `build_realization()`
-(no duplicated logic). On by default; `realize=False` for claim-only runs, which the
-Stage-A harness uses since it scores claim TEXT only.
+### [x] Verification unified between agent and linear baseline
+`artifact_a` now uses `evidence.verify_pair` with the agent's own `min_quote_tokens=10` and
+`fuzzy_threshold=90.0`, and the same rule that a `can_refute` survives only on a
+**both-sides-verified** pair. It previously checked the PAPER side only, by plain substring, with no
+minimum length. The asymmetry ran in both directions — measured on four constructed cases:
 
-**Realization variant chosen by measurement** (`eval/eval_realization.py`, 5 papers / 18 claims,
-same claims for both, blind pairwise in both orientations):
+| case | now | before |
+|---|---|---|
+| both sides long and present | `can_refute` | `can_refute` (agree) |
+| paper quote real, **claim quote fabricated** | **`cannot_refute`** | `can_refute` — a hallucinated claim quote passed |
+| paper quote only 3 tokens | **`cannot_refute`** | `can_refute` — too short, still accepted |
+| paper quote with a typo | **`can_refute`** | downgraded — real evidence was discarded |
 
-| variant | calls/paper | USD/paper | segs/claim | verified quotes/claim | quote-ver. rate | battle |
-|---|---|---|---|---|---|---|
-| fulltext (default) | 3.6 | 0.0146 | 8.5 | 4.2 | 93.0% | **8 wins** |
-| sections | 7.2 | 0.0105 | 7.9 | 4.1 | **96.8%** | 3 wins |
+All fields verified identical to `evidence.verify_pair`. Dead `_normalize` helper and the then-unused
+`re` import removed. Any baseline artifact computed before this must be recomputed before it enters
+the RQ1 ablation.
 
-7 ties, all of them position-inconsistent. Full text wins 8:3 among the decided claims with half
-the calls; it costs ~39% more (the whole paper enters every call) and produces slightly more
-quotes that fail verification and are demoted to prose. `sections_used` is now derived from where
-the verified quotes actually occur, not from a model's up-front pick.
-
-Cost: 1 + 1 call per claim at extraction (measured: 3 claims -> 7 calls, $0.017, 18/18
-realization quotes verified). The agent then ADOPTS it: `understand_submission` drops to
-0.0 s with no `read_sections` beforehand, and a claim run went $0.0239 -> $0.0202. So the
-work happens once, is reviewable at the HITL checkpoint, and every prior-work comparison
-gets the reading the reviewer approved.
-
-### [ ] 5. Verification-consistency analysis (grounding + verifiability rate)
-Script over `eval/out/data/*/*_artifact_a.json` + ledgers: % of quote checks passing, split by side
-(claim vs. paper), failure reasons (below `min_quote_tokens`, not found, fuzzy below threshold, no
-full text → abstract-only, GROBID gaps), and how often `can_refute` was downgraded. Produces the
-thesis's **verifiability rate** — the data already exists, this is an analysis script only.
-
-### [deferred] 6. Reconcile the "challenged" rule with the evidence invariant
-Depends on 5. `NOVELTY_CHALLENGE_ON_STRONG_OVERLAP` (default on) lets `overlap_degree ∈
-{substantial, same}` count as challenged **without** a both-sides-verified quote pair, contradicting
-"a refutation counts only when backed by a verified quote pair". After 5's numbers: either require a
-verified pair on that path too, or change the thesis wording.
-
-### [decision] 7. Final verdict vs. analysis-only
-Leaning (and what the UI already does): claim-level evidence-grounded findings, **no** paper-level
-novelty verdict. If confirmed, reframe `artifact_b.py`'s `overall_assessment` as a structured
-summary of findings and update slide 12 ("conservative verdicts" → analysis).
-
----
-
-## Open — evaluation
-
-### [ ] 8. Compare gpt-5.6-sol and gpt-5.6-terra as extraction models
-Same free full-text method, same 10-paper set, same silver reference and judge — only the model
-changes, so the comparison isolates the model. Prices are already in both tables (per 1k tokens:
-sol 0.0050/0.0300, terra 0.0020/0.0120, luna 0.0002/0.0012). Register `fulltext_sol` /
-`fulltext_terra` in the harness, extract, then battle each against `fulltext_luna`. Report quality
-**and** cost: luna is 25x cheaper than sol on input, so sol has to win clearly to be worth adopting.
-
-### [ ] 9. GOLD reference for ~20 papers  ← highest leverage
-`eval/gold_contributions.json` = `{submission_id: [verbatim statement, ...]}`, checked by hand.
-Everything measured so far rests on a SILVER reference that is demonstrably incomplete (it missed
-the `CodeNet-Test` benchmark that gpt-5 correctly found), and reference-based precision is blind to
-redundancy because the silver reference restates contributions across abstract/intro/conclusion.
-Without gold, no Stage-A number is thesis-grade. ~2-3 h of manual work; candidate statements can be
-prepared per paper so it becomes checkbox work.
-
-### [ ] 10. Validate the judge (human study)
-Measured: 70-80% ties and 3-5 position-inconsistent verdicts per 10 papers in the luna-vs-method
-battles — the judge can barely separate similar systems — and single-run noise moved atomicity
-72.5% → 68.8% between two identical runs. Rate 20-30 pairs yourself, blind, and report Cohen's κ
-against the LLM judge. Turns a weakness into a methodological contribution, and is the
-truth-coupling argument applied to your own evaluation.
-
-### [ ] 11. Harden the evaluation harness
-- Tighten the `redundancy` metric — it missed duplicate pairs a human sees immediately
-  (5GuhYMgaap: two duplicate pairs scored 6.5%).
-- Average over repeated judge runs (>= 3) instead of one, and report the spread.
-- Re-check `atomicity`: luna had the LOWEST atomicity (45.8%) in the 5-paper run yet the best
-  metrics and the battle wins — the metric may not measure what matters.
-
-### [ ] 12. Stage A for `afzal` and `opennovelty`
-Adapters exist in the harness but were never run — needs their claim files per paper
-(`structured_representation.json` / `phase1_extracted.json`).
-
-### [ ] 13. Stage B / C — the thesis core
-Fixed-claim injection (B) and end-to-end (C) comparison against Afzal, OpenNovelty,
-DeepReviewer 2.0 and the own linear baseline. Injection feasibility per system is already analysed
-(own + OpenNovelty clean, Afzal lossy, DeepReviewer PDF-only → Stage C only). **Most of the
-remaining time belongs here, not in extraction.**
-
----
-
-## Housekeeping
-
-### [ ] 14. Commit the working tree
-Nothing is committed on `feature/deep-claim-extraction`: 6 modified source files, the whole `eval/`
-tree, `claim_methods.py`, `TODO.md`. Several days of work plus all measurement results are
-unversioned.
-
-### [ ] 15. Bring exposé and midterm slides in line
-- "deep claim extraction" as a feature → becomes an **ablation result** (simple beats engineered).
-- slide 6 "four phases" → now true (rerank and Phase 0b both gone).
-- slide 12 "conservative verdicts" → depends on decision 7.
+### [x] Working tree committed
+8 thematic commits on `feature/deep-claim-extraction`; history filtered so no commit carries an AI
+attribution trailer; `refs/original` purged; reflogs expired. Not pushed — task 1.
 
 ---
 
 ## Findings (thesis material)
 
-**Stage A, 10 papers, silver reference, judge gpt-4.1.**
+### Stage A — 10 papers, silver reference, judge gpt-4.1
 
 | system | model | claims | ground | recall | prec | F1 | atomic | redund | $/paper |
 |---|---|---|---|---|---|---|---|---|---|
@@ -154,11 +280,9 @@ unversioned.
 | deep | gpt-5-mini | 4.90 | 99.1% | 91.1% | 94.5% | 91.2% | 83.5% | 6.5% | 0.0263 |
 | oneshot | gpt-5-mini | 3.40 | 90.7% | 88.0% | 94.7% | 90.9% | 69.0% | 5.3% | 0.0028 |
 
-Blind pairwise (both orientations): **luna 7 : deep 0**, 3 ties. Judge reasons match manual
-inspection — deep "includes inflated, redundant, and non-contribution claims" and "splits a single
-contribution into multiple overlapping claims" (11 claims on two papers).
+Blind pairwise (both orientations): **luna 7 : deep 0**, 3 ties.
 
-**Three established inference-time techniques on top of luna, same 10 papers:**
+### Three established inference-time techniques on top of luna, same 10 papers
 
 | method | reference | claims | ground | recall | prec | F1 | $/paper | battle vs. luna |
 |---|---|---|---|---|---|---|---|---|
@@ -166,15 +290,61 @@ contribution into multiple overlapping claims" (11 claims on two papers).
 | chain-of-verification | Dhuliawala 2023 | 3.00 | 96.7% | 96.9% | 91.7% | **93.7%** | 0.0111 | 0 : 2 (8 ties) |
 | self-refine | Madaan 2023 | 4.00 | 100% | 94.4% | 82.4% | 86.9% | 0.0116 | not run (loses on metrics) |
 
-None beats the baseline decisively. CoVe wins on reference-based F1 (driven by recall 96.9%) but
-not in the battle; the high tie rate says the judge cannot separate systems this similar at n=10.
+None beats the baseline decisively.
 
-**Cross-cutting methodological findings** (worth a subsection of their own):
+### Model comparison — 15 papers, same method, same reference and judge
+
+| system | model | claims | ground | recall | prec | F1 | atomic | redund | $/paper |
+|---|---|---|---|---|---|---|---|---|---|
+| fulltext_luna | gpt-5.6-luna | 3.53 | 100% | **91.1%** | 91.7% | **90.9%** | 53.7% | **5.1%** | **0.0058** |
+| fulltext_sol | gpt-5.6-sol | 3.53 | 100% | 86.2% | **94.8%** | 88.9% | **66.8%** | 8.0% | 0.1321 |
+
+Blind battle: **luna 6 : sol 2**, 7 ties. Binomial over the 8 decided pairs: **p = 0.289, not
+significant** — ~17 decided pairs (≈32 papers) would be needed at this win rate. The decision is
+nevertheless clear because the burden of proof is asymmetric: sol costs **22.6×** and cannot even be
+shown to be better. Both: 53 claims, 53/53 evidence quotes verified verbatim.
+
+Qualitatively, sol is **inconsistent in granularity** — sometimes too fine (ALLoRA: 6 claims for 3
+contributions, 27% redundancy; IntelLLM: 5 claims including empirical premises that are not claimed
+contributions), sometimes too coarse (FISTAPruner: one four-part conjunction, atomicity 50%). Luna
+hits "one contribution = one claim" more stably, which is what a per-claim verification pipeline
+needs.
+
+### Triage input length — controlled before/after on one claim
+
+| | before (400 chars) | after (2500 chars) |
+|---|---|---|
+| deep dives | 3 / 19 | **14 / 19** |
+| papers with verbatim verified evidence | 1 | **11** |
+| verdict | `challenged` | `challenged` (same 2 `substantial`) |
+| cost / claim | $0.026 | $0.133 |
+
+The cut applied to **1270 of 1270** pool abstracts (median 1461) and removed exactly the contribution
+sentence, because abstracts open with background. Concrete failure it produced: a paper was rejected
+with "treat as topical/analytical unless full text shows dataset release" while the answer sat in
+characters 400–700 of the abstract the system already held.
+
+Evidence depth and verdict are **decoupled**: quadrupling the investigation did not change the
+conclusion, it made it checkable. And the verifiability of a "verification-first" system hung on a
+single preprocessing constant.
+
+### Cross-cutting methodological findings
+
 1. A simple whole-paper call with a strong reasoning model beats an engineered anchor +
    section-reading pipeline, and the engineered guards actively cost recall.
-2. The model matters more than the method: the same free prompt on gpt-5-mini fragments findings
-   into sub-claims (up to 12/paper) and precision collapses to 66.6%.
+2. The model matters more than the method — but only up to a point: gpt-5-mini fragments findings
+   into sub-claims (up to 12/paper, precision 66.6%), while the far more expensive gpt-5.6-sol buys
+   nothing over gpt-5.6-luna. A capability threshold, not a monotone price/quality curve.
 3. Reference-based precision is blind to redundancy when the reference restates contributions; the
-   reference-free blind battle catches what the metric misses.
-4. Prefix-matching model names for pricing silently mispriced `gpt-5.6-luna` as `gpt-5` (~6x too
-   high) — fixed in both price tables; a cautionary note for cost reporting.
+   reference-free blind battle catches what the metric misses. Cleanest case: on ALLoRA both systems
+   score 100% recall AND 100% precision while one produces 3 claims and the other 6.
+4. **The atomicity metric does not measure what matters** — two independent counter-examples: luna
+   had the lowest atomicity in the 5-paper run with the best remaining metrics, and sol wins average
+   atomicity (66.8% vs 53.7%) while losing the battle. Atomicity is per claim, so fragmentation is
+   not penalised.
+5. Claim specificity biases verdicts toward "novel": a long conjunctive claim matches neither the
+   reference nor any single prior paper. Seen in Stage A (PingPong: the same claim plus one clause
+   drops recall 100% → 50%) and in the pipeline (a conjunctive GraphRAG-Bench claim triaged 18 of 19
+   papers away).
+6. Prefix-matching model names for pricing silently mispriced `gpt-5.6-luna` as `gpt-5` (~6× too
+   high) — fixed in both price tables; the eval harness now recomputes USD from token counts.
