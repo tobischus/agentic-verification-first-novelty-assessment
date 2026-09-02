@@ -60,22 +60,38 @@ repo removes them entirely, which is not worth doing for a thesis submission.
 Left alone: `.github/workflows/{docs,main,tests}.yml` trigger on `main`, which does not exist on the
 remote, so they never run. Delete them if you want the repo tidy.
 
-### [~] 2. Grounding + verifiability analysis — **promoted to core**
-Was "supporting". Promote because it is **judge-free**, the data already exists, it is pillar 1 of
-the midterm evaluation design, and it is the safety net if the judge turns out not to discriminate
-between systems.
+### [x] 2. Grounding + verifiability analysis — done
+`eval/verifiability_analysis.py`, judge-free: every evidence pair in every `artifact_a` is
+RE-VERIFIED offline with the current rule, so runs written under different rules are comparable.
+Over 49 artifacts / 105 claims / 1693 comparisons / **231 evidence pairs**:
 
-Script over `eval/out/data/*/*_artifact_a.json` + ledgers: share of quote checks passing, split by
-side (claim vs. paper), failure reasons (below `min_quote_tokens`, not found, fuzzy below threshold,
-no full text → abstract-only, GROBID gaps), and how often `can_refute` was downgraded. Produces the
-thesis's **verifiability rate**.
+| | verified | exact | fuzzy | near miss | absent | too short |
+|---|---|---|---|---|---|---|
+| claim side | **94.8%** | 198 | 21 | 0 | 10 | 2 |
+| paper side | **92.6%** | 198 | 16 | 9 | 8 | 0 |
+| **both sides** | **88.7%** | \multicolumn — 205 of 231 pairs | | | | |
 
-Data points already in hand: extraction-side groundedness is 53/53 for both luna and sol; the triage
-fix moved 11 of 19 papers from an unquotable one-liner to verbatim verified evidence; one verified
-quote contains a GROBID artifact ("…Broadly speaking, RAG**Num**"), i.e. verification is bounded by
-parse quality — report that as a limitation.
+**The verifiability rate for the thesis is 88.7%.**
 
-**Target: 7 September.**
+Verification depends on parse quality, not on reading depth: pairs whose paper side came from an
+abstract verify at **100%** (15 pairs), from parsed full text at **88.0%** (216). All 9 paper-side
+near misses are parse noise, the same class of defect as the "RAG**Num**" artifact. Depth itself
+barely matters (`targeted_sections` 86.3% vs `fulltext_available_targeted_read` 86.2%).
+
+**The evidence gate is load-bearing but not dominant.** Of 79 refutations the model proposed, **6
+(7.6%) were downgraded at run time** for lacking a both-sides-verified pair. Of the 73 that
+survived, **0 violate the invariant** under re-checking — the gate is sound, and it does fire.
+Note on method: the artifacts store the status AFTER the gate ran, so downgrades are read from the
+marker the gate writes into the note; they cannot be re-derived from the stored status.
+
+Old rule vs. new (the 47 pairs written when `artifact_a` checked one side by substring): 1 flip,
+old-rejected → now-accepted.
+
+One methodological trap found and handled: at run time a claim quote is checked against the
+submission PLUS that claim's own text and description, but `artifact_a` does not store the
+description. Rebuilding the corpus without it produced fuzzy scores of ~86 against a threshold of
+90 — apparent failures that were ours, not the pipeline's. The script now reloads the claims doc
+and refuses to score any claim whose stored text no longer matches it.
 
 ### [ ] 3. Ask the advisor two things now — **[lead time]**
 Both gate later work, so send them this week rather than when you get there:
