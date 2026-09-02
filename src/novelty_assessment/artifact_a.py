@@ -23,7 +23,6 @@ retrieval/navigation signal only, never a direct judgment input.
 import argparse
 import json
 import os
-import re
 from pathlib import Path
 from typing import List, Optional
 
@@ -32,6 +31,8 @@ from pydantic import BaseModel, Field
 from rapidfuzz import fuzz
 from langchain_openai import ChatOpenAI
 from dotenv import load_dotenv
+
+from agent import evidence as ev
 
 load_dotenv()
 #TODO: Definition of Novelty here!
@@ -91,10 +92,6 @@ class ClaimPaperComparison(BaseModel):
     brief_note: str = Field(description="1-2 sentence explanation of the judgment")
 
 
-def _normalize(text: str) -> str:
-    return re.sub(r"\s+", " ", (text or "").lower()).strip()
-
-
 class ArtifactABuilder:
     """Builds Artifact A: per-claim evidence-based comparisons against prior work."""
 
@@ -106,6 +103,8 @@ class ArtifactABuilder:
         k_per_claim: int = 10,
         max_paper_chars: int = 16000,
         max_concurrency: int = 2,
+        min_quote_tokens: int = ev.DEFAULT_MIN_QUOTE_TOKENS,
+        fuzzy_threshold: float = ev.DEFAULT_FUZZY_THRESHOLD,
     ):
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
@@ -117,6 +116,10 @@ class ArtifactABuilder:
         self.max_concurrency = max_concurrency
         self.k_per_claim = k_per_claim
         self.max_paper_chars = max_paper_chars
+        # Identical to the agent's defaults ON PURPOSE: this class is the non-agentic
+        # baseline in the RQ1 ablation, so verification must not be a second variable.
+        self.min_quote_tokens = min_quote_tokens
+        self.fuzzy_threshold = fuzzy_threshold
         self._embedding_model_name = embedding_model
         self._embedder = None  # lazy
 
@@ -152,6 +155,22 @@ class ArtifactABuilder:
             if p.exists():
                 return p.read_text(encoding="utf-8")
         return ""
+
+    def load_submission_text(self, data_dir: str, submission_id: str) -> str:
+        """Corpus a claim_quote is verified against -- the SAME one the agent uses
+        (agent/tools.py ClaimToolbox): the submission's body sections plus its abstract.
+        The per-claim strings are appended in build_one, because the comparison prompt
+        shows the model the claim text and description rather than the paper body."""
+        sub_dir = Path(data_dir) / submission_id
+        parts = []
+        ft = sub_dir / f"{submission_id}_fulltext.json"
+        if ft.exists():
+            doc = json.loads(ft.read_text(encoding="utf-8"))
+            parts += [s.get("text", "") for s in doc.get("sections", [])]
+        meta = sub_dir / f"{submission_id}.json"
+        if meta.exists():
+            parts.append(json.loads(meta.read_text(encoding="utf-8")).get("abstract", "") or "")
+        return "\n\n".join(p for p in parts if p)
 
     def load_related_work(self, data_dir: str, submission_id: str) -> List[dict]:
         """Load the global related-work pool (ranked_papers) with available content."""
@@ -264,27 +283,44 @@ class ArtifactABuilder:
         )
 
     def _verify_and_finalize(self, comp: ClaimPaperComparison, paper: dict,
-                             content_source: str, content: str) -> dict:
-        """Verify paper_quotes against the shown content; downgrade unverified can_refute."""
-        source = _normalize(content)
+                             content_source: str, content: str,
+                             submission_text: str) -> dict:
+        """Verify BOTH sides of every evidence pair; downgrade unverifiable can_refute.
+
+        Deliberately IDENTICAL to the agent (agent/tools.py record_comparison): the same
+        evidence.verify_pair, the same min_quote_tokens and fuzzy_threshold, and the same
+        rule that a can_refute survives only on a both-sides-verified pair.
+
+        It previously checked the PAPER side only, with a plain substring test and no
+        minimum quote length -- so a two-word quote passed while the claim side was never
+        checked at all. That made this class stricter in one direction and far more
+        permissive in the other, which would have turned the RQ1 ablation (agent vs. this
+        linear baseline) partly into a comparison of verification strictness rather than
+        of the workflow.
+        """
         verified_pairs = []
         for ep in comp.evidence_pairs:
-            pq = _normalize(ep.paper_quote)
-            is_verified = bool(pq) and pq in source
+            v = ev.verify_pair(ep.claim_quote, ep.paper_quote, submission_text, content,
+                               self.min_quote_tokens, self.fuzzy_threshold)
+            paper_q = ep.paper_quote
+            if v["paper_quote_verified"]:
+                paper_q = ev.expand_to_sentence(paper_q, content)
             verified_pairs.append(
                 {
                     "claim_quote": ep.claim_quote,
-                    "paper_quote": ep.paper_quote,
+                    "paper_quote": paper_q,
                     "rationale": ep.rationale,
-                    "paper_quote_verified": is_verified,
+                    "claim_quote_verified": v["claim_quote_verified"],
+                    "paper_quote_verified": v["paper_quote_verified"],
+                    "fully_verified": v["fully_verified"],
                 }
             )
         status = comp.refutation_status
         note = comp.brief_note
-        if status == "can_refute" and not any(p["paper_quote_verified"] for p in verified_pairs):
+        if status == "can_refute" and not any(p["fully_verified"] for p in verified_pairs):
             # Verification-first hard constraint: no verified evidence -> downgrade.
             status = "cannot_refute"
-            note = "[downgraded: no verifiable evidence quote found] " + note
+            note = "[downgraded: no both-sides-verified evidence quote pair] " + note
         return {
             "paper_id": paper["paper_id"],
             "title": paper["title"],
@@ -297,7 +333,8 @@ class ArtifactABuilder:
             "brief_note": note,
         }
 
-    def compare_claim(self, claim: dict, candidates: List[dict], title_to_contexts: dict) -> List[dict]:
+    def compare_claim(self, claim: dict, candidates: List[dict], title_to_contexts: dict,
+                      submission_text: str = "") -> List[dict]:
         """Run the LLM comparison for a claim against all its candidates (batched)."""
         if not candidates:
             return []
@@ -312,17 +349,26 @@ class ArtifactABuilder:
         chain = self.llm.with_structured_output(ClaimPaperComparison)
         results = chain.batch(prompts, config={"max_concurrency": self.max_concurrency})
         return [
-            self._verify_and_finalize(r, candidates[i], contents[i][0], contents[i][1])
+            self._verify_and_finalize(r, candidates[i], contents[i][0], contents[i][1],
+                                      submission_text)
             for i, r in enumerate(results)
         ]
 
     # ----------------------------- build ------------------------------- #
 
-    def build_one(self, claim: dict, papers: List[dict], title_to_contexts: dict) -> dict:
+    def build_one(self, claim: dict, papers: List[dict], title_to_contexts: dict,
+                  submission_text: str = "") -> dict:
         """Compute the Artifact-A evidence entry for a SINGLE claim (used for the
         on-demand, per-claim review)."""
+        # The comparison prompt shows the model the claim text and description, so a
+        # claim_quote legitimately comes from either -- append both to the verification
+        # corpus, exactly as the agent does for its own claim-side checks.
+        claim_side = "\n\n".join(
+            x for x in (submission_text, claim.get("claim_text", ""),
+                        claim.get("description", "")) if x
+        )
         candidates = self.select_candidates(claim, papers, self.k_per_claim)
-        comparisons = self.compare_claim(claim, candidates, title_to_contexts)
+        comparisons = self.compare_claim(claim, candidates, title_to_contexts, claim_side)
         refuting = [c for c in comparisons if c["refutation_status"] == "can_refute"]
         return {
             "claim_id": claim["id"],
@@ -341,6 +387,7 @@ class ArtifactABuilder:
 
         papers = self.load_related_work(data_dir, submission_id)
         title_to_contexts = self.load_citation_contexts_by_title(data_dir, submission_id)
+        submission_text = self.load_submission_text(data_dir, submission_id)
 
         try:
             import progress as _progress  # optional sub-progress for the frontend
@@ -354,7 +401,7 @@ class ArtifactABuilder:
         for claim_idx, claim in enumerate(claims):
             if _progress:
                 _progress.report(claim_idx, n_claims)
-            entries.append(self.build_one(claim, papers, title_to_contexts))
+            entries.append(self.build_one(claim, papers, title_to_contexts, submission_text))
 
         if _progress:
             _progress.report(n_claims, n_claims)
