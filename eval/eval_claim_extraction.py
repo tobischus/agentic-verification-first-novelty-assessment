@@ -333,6 +333,15 @@ def _load_opennovelty(doc: dict) -> List[dict]:
             for c in (doc.get("contributions") or [])]
 
 
+# Free full-text extraction with the model swapped and EVERYTHING else held fixed
+# (same prompt, same paper text, same silver reference, same judge), so a difference
+# between these is attributable to the model alone.
+_FULLTEXT_MODELS = {
+    "fulltext_luna": "gpt-5.6-luna",
+    "fulltext_sol": "gpt-5.6-sol",
+    "fulltext_terra": "gpt-5.6-terra",
+}
+
 SYSTEMS = {
     "deep":        ("{id}_claims_deep.json", _load_ours),
     # free full-text extractor: whole paper, ONE unconstrained call to a strong reasoning
@@ -341,7 +350,10 @@ SYSTEMS = {
     #   fulltext_mini -- the SAME model as deep/oneshot, i.e. the method-only control
     "fulltext":      ("{id}_claims_fulltext.json", _load_ours),
     "fulltext_mini": ("{id}_claims_fulltext_mini.json", _load_ours),
-    "fulltext_luna": ("{id}_claims_fulltext_luna.json", _load_ours),
+    # same free full-text method, only the model differs -- isolates MODEL from METHOD
+    "fulltext_luna":  ("{id}_claims_fulltext_luna.json", _load_ours),
+    "fulltext_sol":   ("{id}_claims_fulltext_sol.json", _load_ours),
+    "fulltext_terra": ("{id}_claims_fulltext_terra.json", _load_ours),
     # advanced inference-time methods, all on gpt-5.6-luna (see claim_methods.py)
     "sc_luna":     ("{id}_claims_sc_luna.json", _load_ours),      # self-consistency + USC
     "cove_luna":   ("{id}_claims_cove_luna.json", _load_ours),    # chain-of-verification
@@ -608,10 +620,10 @@ def run_extraction(data_dir: Path, ids: List[str], which: List[str], model: str,
                     FullTextClaimExtractor(model_name=model, realize=False,
                                            reasoning_effort=reasoning_effort).extract(
                         str(data_dir), sid, out_name=out.name)
-                elif system == "fulltext_luna":
+                elif system in _FULLTEXT_MODELS:
                     # realize=False: Stage A scores claim TEXT only, so the per-claim
                     # realization would add cost without affecting any metric.
-                    FullTextClaimExtractor(model_name="gpt-5.6-luna", realize=False,
+                    FullTextClaimExtractor(model_name=_FULLTEXT_MODELS[system], realize=False,
                                            reasoning_effort=reasoning_effort).extract(
                         str(data_dir), sid, out_name=out.name)
                 elif system in ("sc_luna", "cove_luna", "refine_luna"):
