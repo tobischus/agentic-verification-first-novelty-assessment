@@ -3,19 +3,19 @@
 The system's final output as plain text -- the artifact that goes into the comparison
 against other novelty assessment systems.
 
-Nothing here is generated. Every line is copied from artifacts that already exist:
-the overall assessment and per-claim verdicts from Artifact B, and the claim text,
-the submission's own realization and the per-paper comparisons from Artifact A.
-Rendering the deliverable from a template rather than from a model call is what makes
-it reproducible: running this twice on the same run yields byte-identical text.
+Nothing here is generated. Every line is copied from artifacts that already exist: the
+paper metadata, the extracted claims with the quote each rests on, the related work that
+was examined, and the assessment itself (Artifact B) over the evidence (Artifact A).
+Rendering the deliverable from a template rather than from a model call is what makes it
+reproducible: running this twice on the same run yields byte-identical text.
 
-Verbatim quotations are rendered as blockquotes ("> ") and everything else as plain
-prose, so the two are distinguishable without a legend. A quote is only marked as such
-when its verification flag says it was found in the source document; a quote the checker
-could not confirm is demoted to prose rather than presented as quoted evidence.
+Verbatim quotations are wrapped in typographic quotation marks and are only presented as
+quotations when the checker confirmed them in the source document; a quote that failed
+verification is rendered as plain prose instead. A closing note states the convention, so
+the document needs no legend to be read correctly.
 
-Deliberately omitted, because they are reader aids rather than content: the checkmarks,
-the "quote appears verbatim" legend, and the list of sections read for a comparison.
+Deliberately omitted, because they are reader aids rather than content: the per-quote
+checkmarks in the comparison sections and the list of sections read for a comparison.
 
 Usage
 -----
@@ -25,8 +25,9 @@ Usage
 """
 import argparse
 import json
+import re
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 _ORDINALS = ["First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh",
              "Eighth", "Ninth", "Tenth"]
@@ -40,9 +41,18 @@ _VERDICT_LABEL = {
     "not_challenged": "not challenged in the examined literature",
     "uncertain": "uncertain",
 }
-# Which prior work counts as overlapping this claim -- the same rule the review UI and
+# Which prior work counts as overlapping a claim -- the same rule the review UI and
 # artifact_b use, so all three show the same set of papers.
 _OVERLAP_DEGREES = ("same", "substantial", "partial")
+# Lower is stronger; used to pick a paper's best overlap across claims and to order the list.
+_DEGREE_RANK = {"same": 0, "substantial": 1, "partial": 2, "superficial": 3, "none": 4}
+
+_LQ, _RQ = "“", "”"          # “ ”
+_QUOTE_NOTE = (
+    "Text in quotation marks (“…”) is quoted verbatim from the document it is "
+    "attributed to and was checked against that document automatically. Everything else is the "
+    "system's own prose."
+)
 
 
 def _load(path: Path):
@@ -65,16 +75,42 @@ def _cite(authors: str, year) -> str:
     return " · ".join(x for x in (cite, str(year or "")) if x)
 
 
+def _authors_from_tei(sub: Path, sid: str) -> str:
+    """Author list of the submission, read from the GROBID header.
+
+    Document processing stores title, date and abstract in {id}.json but not the authors,
+    even though GROBID extracts them -- so read them here rather than leave the field out.
+    Only the teiHeader is searched; the bibliography further down is full of persName too.
+    """
+    tei = sub / f"{sid}.grobid.tei.xml"
+    if not tei.exists():
+        return ""
+    try:
+        text = tei.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return ""
+    head = text[: text.find("</teiHeader>")] if "</teiHeader>" in text else text[:20000]
+    names = []
+    for block in re.findall(r"<persName[^>]*>(.*?)</persName>", head, re.S):
+        parts = re.findall(r"<(?:forename|surname)[^>]*>([^<]+)<", block)
+        name = " ".join(p.strip() for p in parts if p.strip())
+        if name and name not in names:
+            names.append(name)
+    return ", ".join(names)
+
+
+def _quote(text: str) -> str:
+    return f"{_LQ}{' '.join((text or '').split())}{_RQ}"
+
+
 def _segments(segs, out: List[str]) -> None:
-    """Prose as paragraphs, verified verbatim spans as blockquotes."""
+    """Prose as paragraphs, verified verbatim spans in quotation marks."""
     for s in segs or []:
         content = (s.get("content") or "").strip()
         if not content:
             continue
-        if s.get("kind") == "quote" and s.get("verified"):
-            out.append("> " + content.replace("\n", "\n> "))
-        else:
-            out.append(content)
+        out.append(_quote(content) if (s.get("kind") == "quote" and s.get("verified"))
+                   else content)
         out.append("")
 
 
@@ -89,20 +125,73 @@ def build(data_dir: str, submission_id: str) -> str:
     ranked = _load(sub / "related_work_data" / "ranked_papers.json") or []
     pool = {p.get("paper_id"): p for p in ranked}
 
-    order = [c["id"] for c in claims_doc.get("claims", []) if c.get("status") != "rejected"]
+    claims = [c for c in claims_doc.get("claims", []) if c.get("status") != "rejected"]
+    order = [c["id"] for c in claims]
     a_by = {e.get("claim_id"): e for e in a.get("claims", [])}
     b_by = {v.get("claim_id"): v for v in b.get("per_claim", [])}
     if not order:                     # claims file gone or rewritten: fall back to A's order
         order = [e.get("claim_id") for e in a.get("claims", [])]
 
-    out: List[str] = ["# Novelty Assessment"]
+    out: List[str] = ["# Novelty Assessment", ""]
+
+    # ---------------------------- the paper ---------------------------- #
     title = meta.get("title") or claims_doc.get("title") or ""
     if title:
-        out.append(title)
+        out += [f"**{title}**", ""]
+    authors = _authors_from_tei(sub, submission_id)
+    if authors:
+        out.append(f"Authors: {authors}")
+    if meta.get("publication_date"):
+        out.append(f"Publication date: {meta['publication_date']}")
+    venue = meta.get("venue") or meta.get("journal") or ""
+    out.append(f"Journal / venue: {venue}" if venue
+               else "Journal / venue: not stated in the document")
     out.append("")
 
+    # ------------------------- extracted claims ------------------------ #
+    if claims:
+        out += ["## Extracted claims", ""]
+        for i, c in enumerate(claims, 1):
+            out += [f"### Extracted Claim {i}", "", (c.get("claim_text") or "").strip(), ""]
+            q = (c.get("evidence_quote") or "").strip()
+            if q and c.get("evidence_verified"):
+                out += ["Evidence in paper:", "", _quote(q), "", "✓ verbatim in paper", ""]
+            elif q:
+                out += ["Evidence in paper (could not be confirmed verbatim):", "",
+                        " ".join(q.split()), ""]
+            else:
+                out += ["Evidence in paper: none recorded", ""]
+
+    # ------------------------ related work list ------------------------ #
+    # One entry per paper, carrying its STRONGEST overlap across the claims. A paper can be
+    # superficial for one claim and substantial for another, so keeping whichever claim came
+    # first would understate it.
+    strongest = {}
+    for cid in order:
+        for c in (a_by.get(cid) or {}).get("comparisons", []) or []:
+            pid = c.get("paper_id")
+            pm = pool.get(pid, {})
+            deg = (c.get("overlap_degree") or "").lower()
+            rank = _DEGREE_RANK.get(deg, 9)
+            prev = strongest.get(pid)
+            if prev is None or rank < prev[0]:
+                strongest[pid] = (rank, c.get("title", ""),
+                                  _cite(c.get("authors") or pm.get("authors", ""),
+                                        c.get("year") or pm.get("year")),
+                                  _DEGREE_LABEL.get(deg, deg) if deg in _OVERLAP_DEGREES else "")
+    related = [(t, cite, deg) for _, t, cite, deg in strongest.values()]
+    if related:
+        out += ["## Related work examined", "",
+                f"{len(related)} papers were compared against the claims above.", ""]
+        for t, cite, deg in sorted(related, key=lambda r: (not r[2], r[0].lower())):
+            tail = " — ".join(x for x in (cite, deg) if x)
+            out.append(f"- {t}" + (f" — {tail}" if tail else ""))
+        out.append("")
+
+    # ------------------------------ review ----------------------------- #
+    out += ["## Review", ""]
     if b.get("overall_assessment"):
-        out += ["## Overall assessment", "", b["overall_assessment"].strip(), ""]
+        out += ["### Overall assessment", "", b["overall_assessment"].strip(), ""]
 
     n = 0
     for cid in order:
@@ -110,12 +199,8 @@ def build(data_dir: str, submission_id: str) -> str:
         if e is None:
             continue
         v = b_by.get(cid) or {}
-        out.append("---")
-        out.append("")
-        out.append(f"## {_ordinal(n)}")
-        out.append("")
-        out.append((e.get("claim_text") or e.get("claim_name") or "").strip())
-        out.append("")
+        out += ["---", "", f"### {_ordinal(n)}", "",
+                (e.get("claim_text") or e.get("claim_name") or "").strip(), ""]
         n += 1
 
         if v.get("verdict"):
@@ -125,21 +210,21 @@ def build(data_dir: str, submission_id: str) -> str:
 
         real = e.get("claim_realization") or []
         if real:
-            out += ["### What the submission does for this claim", ""]
+            out += ["#### What the submission does for this claim", ""]
             _segments(real, out)
 
         overlaps = [c for c in (e.get("comparisons") or [])
                     if c.get("refutation_status") == "can_refute"
                     or (c.get("overlap_degree") or "").lower() in _OVERLAP_DEGREES]
         if not overlaps:
-            out += ["### Overlapping prior work", "",
+            out += ["#### Overlapping prior work", "",
                     f"None found among the {len(e.get('comparisons') or [])} papers compared.", ""]
             continue
 
-        out += ["### Overlapping prior work", ""]
+        out += ["#### Overlapping prior work", ""]
         for c in overlaps:
             pm = pool.get(c.get("paper_id"), {})
-            out.append(f"#### {c.get('title', '')}")
+            out.append(f"##### {c.get('title', '')}")
             deg = (c.get("overlap_degree") or "").lower()
             head = [_DEGREE_LABEL.get(deg, deg)] if deg else []
             cite = _cite(c.get("authors") or pm.get("authors", ""), c.get("year") or pm.get("year"))
@@ -154,6 +239,8 @@ def build(data_dir: str, submission_id: str) -> str:
                 _segments(pr, out)
             if c.get("assessment"):
                 out += ["Comparison with the submission", "", c["assessment"].strip(), ""]
+
+    out += ["---", "", _QUOTE_NOTE]
     return "\n".join(out).rstrip() + "\n"
 
 
