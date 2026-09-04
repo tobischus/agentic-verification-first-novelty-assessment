@@ -157,3 +157,8 @@ TODO
 novelty_Yuan.json
 emnlp_23_sen*.csv
 *.pptx
+
+# comparison systems, cloned in for the battle evaluation (each has its own .git)
+/DeepReviewer-v2/
+/OpenNovelty/
+/Beyond Not Novel Enough Code/
