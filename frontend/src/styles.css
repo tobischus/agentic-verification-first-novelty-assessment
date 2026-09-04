@@ -575,3 +575,14 @@ button.begin.sm { padding: 8px 14px; font-size: 13.5px; }
 .sum-verdict { margin: 8px 0 10px; padding: 10px 12px; border-radius: 8px;
   background: #f7f9fc; border: 1px solid #e2e7f2; }
 .sum-rationale { font-size: 13.5px; line-height: 1.6; margin: 8px 0 0; }
+
+/* ---- plain-text export of the assessment (Summary tab) ---- */
+.sum-export { border: 1px solid #d7dceb; border-radius: 10px; padding: 10px 14px; margin: 16px 0; background: #fbfcfe; }
+.sum-export-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 12.5px; }
+.sum-export-btns { display: flex; gap: 14px; flex: 0 0 auto; }
+.sum-export-text {
+  margin: 12px 0 2px; padding: 12px 14px; max-height: 480px; overflow: auto;
+  background: #fff; border: 1px solid var(--line); border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px; line-height: 1.6; white-space: pre-wrap; word-break: break-word;
+}

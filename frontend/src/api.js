@@ -73,4 +73,12 @@ export const api = {
     if (!r.ok) throw new Error((await r.text()) || r.statusText)
     return r.text()
   },
+
+  // The finished assessment as plain text -- the exact artifact used in the system
+  // comparison. Rendered from Artifact A + B by a template, so it is stable across calls.
+  async reviewExport(id) {
+    const r = await fetch(`${BASE}/submissions/${id}/review/export`)
+    if (!r.ok) throw new Error((await r.text()) || r.statusText)
+    return r.text()
+  },
 }

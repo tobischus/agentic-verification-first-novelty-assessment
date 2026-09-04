@@ -33,6 +33,8 @@ export default function ReviewSummary({ submissionId, active }) {
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const [genErr, setGenErr] = useState('')
+  const [exportText, setExportText] = useState(null)   // null = hidden
+  const [exportBusy, setExportBusy] = useState(false)
 
   const load = useCallback(() => {
     api.reviewSummary(submissionId)
@@ -61,6 +63,38 @@ export default function ReviewSummary({ submissionId, active }) {
       setGenErr(String(e))
     } finally {
       setBusy(false)
+    }
+  }
+
+  // Fetches the plain-text export once and keeps it, so toggling it open and shut does
+  // not hit the backend again -- the text is deterministic for a given run anyway.
+  const toggleExport = async () => {
+    if (exportText !== null) { setExportText(null); return }
+    setExportBusy(true); setGenErr('')
+    try {
+      setExportText(await api.reviewExport(submissionId))
+    } catch (e) {
+      setGenErr(String(e))
+    } finally {
+      setExportBusy(false)
+    }
+  }
+
+  const downloadExport = async () => {
+    setExportBusy(true); setGenErr('')
+    try {
+      const text = exportText ?? await api.reviewExport(submissionId)
+      setExportText(text)
+      const url = URL.createObjectURL(new Blob([text], { type: 'text/markdown;charset=utf-8' }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${submissionId}_assessment.md`
+      document.body.appendChild(a); a.click(); a.remove()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      setGenErr(String(e))
+    } finally {
+      setExportBusy(false)
     }
   }
 
@@ -128,6 +162,26 @@ export default function ReviewSummary({ submissionId, active }) {
             </>
           )}
           {genErr && <div className="error">{genErr}</div>}
+        </div>
+      )}
+
+      {claims.length > 0 && (
+        <div className="sum-export">
+          <div className="sum-export-bar">
+            <span className="muted">
+              Text output used for the comparison against other systems
+              {!ready && ' — generate the assessment first for a complete document'}
+            </span>
+            <span className="sum-export-btns">
+              <button className="link" disabled={exportBusy} onClick={toggleExport}>
+                {exportBusy ? 'Loading…' : exportText !== null ? 'hide' : 'show'}
+              </button>
+              <button className="link" disabled={exportBusy} onClick={downloadExport}>
+                download .md
+              </button>
+            </span>
+          </div>
+          {exportText !== null && <pre className="sum-export-text">{exportText}</pre>}
         </div>
       )}
 
