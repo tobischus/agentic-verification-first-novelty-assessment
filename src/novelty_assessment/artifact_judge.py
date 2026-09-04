@@ -107,21 +107,19 @@ class Judge:
 
     @staticmethod
     def _facts_from_a(artifact_a: dict) -> str:
-        lines = []
-        for e in artifact_a["claims"]:
-            refuters = [c["title"] for c in e["comparisons"] if c["refutation_status"] == "can_refute"]
-            if refuters:
-                lines.append(
-                    f"- {e['claim_id']} ({e['claim_name']}): CHALLENGED by verified prior work: "
-                    + "; ".join(f'"{t}"' for t in refuters)
-                    + f". (examined {e['candidates_examined']} papers)"
-                )
-            else:
-                lines.append(
-                    f"- {e['claim_id']} ({e['claim_name']}): NOT challenged by any of the "
-                    f"{e['candidates_examined']} examined papers."
-                )
-        return "\n".join(lines)
+        """The evidence Artifact B was given -- byte for byte the same rendering.
+
+        This used to be a one-line digest per claim: which papers challenge it and how many
+        were examined. B, however, is written from ArtifactBBuilder._format_evidence, which
+        also carries the verified quote pairs, what_is_shared, submission_delta and the
+        related-but-not-challenging papers. Auditing B against the smaller view made the
+        judge flag properly grounded statements as unsupported -- on one run, four of them,
+        including a sentence that merely named papers listed in the evidence. An auditor has
+        to see what the author saw.
+        """
+        from artifact_b import ArtifactBBuilder  # deferred: keeps the modules independent
+
+        return ArtifactBBuilder._format_evidence(artifact_a)
 
     def _llm_entailment(self, artifact_a: dict, artifact_b: dict) -> dict:
         prompt = JUDGE_PROMPT.format(

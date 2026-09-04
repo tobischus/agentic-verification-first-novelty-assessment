@@ -72,6 +72,11 @@ class ArtifactB(BaseModel):
     overall_assessment: str = Field(description="Reviewer-facing prose, grounded only in the evidence")
 
 
+# Overlap degrees that count as "this prior work overlaps the claim". Kept identical to
+# api.review_summary so the evidence the synthesis reads is the evidence the reader sees.
+_OVERLAP_DEGREES = ("same", "substantial", "partial")
+
+
 class ArtifactBBuilder:
     def __init__(self, model_name: str = "gpt-4.1", temperature: float = 0.0):
         api_key = os.getenv("OPENAI_API_KEY")
@@ -117,10 +122,19 @@ class ArtifactBBuilder:
             else:
                 lines.append("No examined prior work challenges this claim (no verified overlap found).")
 
-            # Always surface the most-similar NON-challenging papers + WHY they differ (and what
-            # the submission adds), so B can argue novel vs incremental against close prior work.
+            # Every non-refuting paper the review found to OVERLAP the claim, plus a few of the
+            # closest remaining ones for context. Selecting these by similarity alone (the old
+            # top-4) meant the synthesis silently ignored most of the overlapping prior work the
+            # UI lists directly beneath it -- on one claim, 8 of 11 -- so B argued about papers
+            # the reader could not see while skipping ones they could. The overlap rule here is
+            # deliberately the same one api.review_summary renders with.
             if others:
-                top_others = sorted(others, key=lambda c: c.get("similarity", 0.0), reverse=True)[:4]
+                overlapping = [c for c in others
+                               if (c.get("overlap_degree") or "").lower() in _OVERLAP_DEGREES]
+                rest = sorted((c for c in others if c not in overlapping),
+                              key=lambda c: c.get("similarity", 0.0), reverse=True)[:3]
+                top_others = sorted(overlapping, key=lambda c: c.get("similarity", 0.0),
+                                    reverse=True) + rest
                 lines.append("RELATED BUT NOT CHALLENGING (examined, with reason they differ):")
                 for c in top_others:
                     src = c.get("content_source", "")
