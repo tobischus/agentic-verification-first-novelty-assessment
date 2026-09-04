@@ -1,0 +1,31 @@
+{
+  "paper": "transducing_language_models",
+  "assignment": {
+    "C": {
+      "system": "own agentic pipeline",
+      "source": "transducing_language_models__agentic.md",
+      "words": 10195
+    },
+    "E": {
+      "system": "own linear baseline",
+      "source": "transducing_language_models__linear.md",
+      "words": 17249
+    },
+    "A": {
+      "system": "Afzal et al.",
+      "source": "transducing_language_models__afzal.md",
+      "words": 1881
+    },
+    "B": {
+      "system": "OpenNovelty",
+      "source": "transducing_language_models__opennovelty.md",
+      "words": 4521
+    },
+    "D": {
+      "system": "DeepReviewer 2.0",
+      "source": "transducing_language_models__deepreviewer.md",
+      "words": 694
+    }
+  },
+  "note": "do not open before rating is complete"
+}

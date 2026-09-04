@@ -1,3 +1,15 @@
+# Assessment D
+
+> This is one system's assessment of the paper's novelty. Several systems assessed the
+> same paper; they are presented in a common wrapper so that presentation does not decide
+> the comparison. The text below is each system's own, unedited and complete: it was not
+> shortened, reordered or rewritten, so the systems differ in length and structure.
+>
+> Where a system marks verbatim quotations, they appear in quotation marks; unmarked text
+> is that system's own prose.
+
+---
+
 ## Novelty Verification & Related-Work Matrix
 ### (9A) Contribution Novelty Verdict Board
 | Claim ID | Author Contribution Claim | Key Evidence Papers [n] | Novelty Verdict Tag | Why | Confidence | Required Repositioning |

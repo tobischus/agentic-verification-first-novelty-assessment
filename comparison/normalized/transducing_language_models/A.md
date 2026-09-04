@@ -1,8 +1,18 @@
-This submission presents a general framework for composing language models (LMs) with deterministic string-to-string transformations using finite-state transducers (FSTs), enabling modular inference-time adaptation without retraining. The main novelty lies in generalizing and formalizing prior automata-based and inference-time adaptation methods to arbitrary deterministic mappings, subsuming earlier work on tokenization, canonicalization, and constraint enforcement as special cases. While the framework is broader and more modular than previous approaches, the underlying algorithms are adaptations of standard FST techniques, and the technical advances are primarily in scope rather than fundamentally new methods. The authors’ claims of “first formalization” and “novel algorithms” are somewhat overstated, as prior work formalizes and implements special cases and addresses similar marginalization challenges. Overall, the submission’s contribution is a substantive generalization and unification of existing methods, but reviewers should note that the technical depth is incremental and the practical novelty may be limited for common use cases.
+# Assessment A
+
+> This is one system's assessment of the paper's novelty. Several systems assessed the
+> same paper; they are presented in a common wrapper so that presentation does not decide
+> the comparison. The text below is each system's own, unedited and complete: it was not
+> shortened, reordered or rewritten, so the systems differ in length and structure.
+>
+> Where a system marks verbatim quotations, they appear in quotation marks; unmarked text
+> is that system's own prose.
 
 ---
 
-# NOVELTY DELTA ANALYSIS FOR REVIEWER SUPPORT
+This submission presents a general framework for composing language models (LMs) with deterministic string-to-string transformations using finite-state transducers (FSTs), enabling modular inference-time adaptation without retraining. The main novelty lies in generalizing and formalizing prior automata-based and inference-time adaptation methods to arbitrary deterministic mappings, subsuming earlier work on tokenization, canonicalization, and constraint enforcement as special cases. While the framework is broader and more modular than previous approaches, the underlying algorithms are adaptations of standard FST techniques, and the technical advances are primarily in scope rather than fundamentally new methods. The authors’ claims of “first formalization” and “novel algorithms” are somewhat overstated, as prior work formalizes and implements special cases and addresses similar marginalization challenges. Overall, the submission’s contribution is a substantive generalization and unification of existing methods, but reviewers should note that the technical depth is incremental and the practical novelty may be limited for common use cases.
+
+---
 
 ## 1. RESEARCH CONTEXT POSITIONING
 
