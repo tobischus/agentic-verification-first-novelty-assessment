@@ -51,18 +51,6 @@ function Realization({ segments }) {
   )
 }
 
-// The sections that were read in full to back a comparison (rendered as a blue box).
-function SectionsBox({ sections }) {
-  const list = (sections || []).filter(Boolean)
-  if (!list.length) return null
-  return (
-    <div className="sections-box">
-      <span className="sb-ic">🗂️</span>
-      <span className="sb-label">Sections used:</span>
-      <span className="sb-list">{list.join(' · ')}</span>
-    </div>
-  )
-}
 
 // Outcome of the on-demand GROBID full-text fetch for a deep-dived paper. Only
 // rendered when a fetch was actually attempted (null = abstract-only triage, no
@@ -345,7 +333,6 @@ export default function ReviewWalkthrough({ submissionId, onFinish }) {
             <div className="ev-line"><span className="ev-lab">Why no overlap:</span> {v.analysis || v.assessment || v.submission_delta || v.what_is_shared || '—'}</div>
           )}
           <FulltextFetchBadge status={v.fulltext_fetch_status} />
-          <SectionsBox sections={v.sections_used} />
         </div>
       )
     }

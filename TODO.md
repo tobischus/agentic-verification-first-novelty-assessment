@@ -45,7 +45,7 @@ What replaces it, three legs, none of which needs a human verdict:
 
 1. **Verifiability** — do the evidence quotes hold up against the source documents? (task 2, done,
    88.7%). Deterministic.
-2. **Provenance** — does the paper-level summary follow from the per-claim evidence and nothing
+2. **Derivation** — does the paper-level summary follow from the per-claim evidence and nothing
    else? (task 5). Deterministic in its core check.
 3. **Relative quality** — is the assessment better than what competing systems produce, judged
    blind by domain experts? (task 7, Elo). Human judgment of *assessment quality*, which is not the
@@ -135,7 +135,7 @@ Size is now driven by task 7: every paper in the set must be rated by hand in th
 **8–12 papers** is the realistic ceiling, not 56. Select for diversity of field and paper type, and
 state the rule — a set chosen for where the system does well is the first thing an examiner probes.
 
-### [ ] 5. Artifact-B provenance: does the summary follow from the evidence?
+### [ ] 5. Does the summary follow from the evidence?
 **Target: 14 September.**
 
 The paper-level summary stays, but what gets measured about it is **whether it is derived from
@@ -159,7 +159,7 @@ This is the second judge-free pillar and it closes the chain: quotes verify agai
 ### [ ] 6. RQ1 ablation: agent vs. own linear baseline
 **Target: 21 September.** Same claims, same pool, single pass vs. the four-phase agent — the only
 comparison where the workflow is the sole variable. Report the task-2 grounding metrics and the
-task-5 provenance metrics side by side, plus the process measures the linear baseline structurally
+task-5 derivation metrics side by side, plus the process measures the linear baseline structurally
 cannot produce: re-entry events, papers escalated from triage to deep dive, and refutations
 downgraded by the evidence gate. This is the thesis's primary controlled result.
 
@@ -256,11 +256,11 @@ and may be the right call this close to the deadline.
 ### [x] 10. Final verdict vs. analysis-only — decided 2 September
 **There is a paper-level summary (Artifact B), and it keeps its verdict.** What changes is what is
 claimed about it: the verdict is *not* validated against human judgments. It is checked for
-**provenance** (task 5: does it follow from Artifact A and nothing else) and ranked for **relative
+**derivation** (task 5: does it follow from Artifact A and nothing else) and ranked for **relative
 quality** (task 7: blind battles). `artifact_b.overall_assessment` therefore stays as it is.
 
-Follow-ups: slide 12 ("conservative verdicts") needs rewording toward "verdict with audited
-provenance, ranked against alternatives", and the Method chapter needs the sentence that the
+Follow-ups: slide 12 ("conservative verdicts") needs rewording toward "verdict with an audited
+derivation, ranked against alternatives", and the Method chapter needs the sentence that the
 verdict is an advisory output, not a prediction of a reviewer decision.
 
 ### [ ] 11. GOLD reference for ~20 papers
@@ -269,12 +269,24 @@ on `5GuhYMgaap` four of its seven "contributions" restate the same SolverLearner
 punishes any system that does not repeat itself. If there is no time, report this as a limitation
 with that example as evidence rather than building the gold set.
 
-### [ ] 12. Harden the evaluation harness
+### [ ] 12. Split view: click a paper, get its PDF with the quotes highlighted
+Reviewer-facing only, and explicitly NOT needed for the system comparison — the exported
+assessment is plain text. In the Review tab, selecting a prior-work paper opens its PDF beside the
+comparison, with the quotes used for that comparison highlighted; clicking a single quote scrolls
+the PDF to that spot. The quotes are already verified against the parsed text and the PDFs are
+already on disk, so the missing piece is the mapping from a verified span to a page and bounding
+box — which GROBID's TEI coordinates or a PyMuPDF text search can supply.
+
+Worth building only if time remains after the evaluation. It would, however, make the verification
+claim tangible in a demo: the reviewer sees the sentence in the original paper rather than trusting
+a checkmark.
+
+### [ ] 13. Harden the evaluation harness
 - Tighten the `redundancy` metric — it missed duplicate pairs a human sees immediately.
 - Average over repeated judge runs (≥3) instead of one, and report the spread.
 - Re-check `atomicity`: it now has TWO counter-examples (see *Findings*).
 
-### [ ] 13. Bring exposé and midterm slides in line — **before the advisor draft, 15 Oct**
+### [ ] 14. Bring exposé and midterm slides in line — **before the advisor draft, 15 Oct**
 - "deep claim extraction" as a feature → becomes an **ablation result** (simple beats engineered).
 - slide 6 "four phases" → now true (rerank and Phase 0b both gone).
 - slide 12 "conservative verdicts" → depends on decision 10.

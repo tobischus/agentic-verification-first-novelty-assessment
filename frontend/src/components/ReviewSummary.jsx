@@ -14,19 +14,6 @@ const VERDICT = {
   uncertain: { label: 'uncertain', cls: 'mid' },
 }
 
-// The sections that were read in full to back a comparison (blue box) -- same as in
-// the Review tab, so the summary shows exactly which sections a context came from.
-function SectionsBox({ sections }) {
-  const listx = (sections || []).filter(Boolean)
-  if (!listx.length) return null
-  return (
-    <div className="sections-box">
-      <span className="sb-ic">🗂️</span>
-      <span className="sb-label">Sections used:</span>
-      <span className="sb-list">{listx.join(' · ')}</span>
-    </div>
-  )
-}
 
 const claimLabel = (id) => (/^claim_\d+$/.test(id || '') ? id.replace('claim_', 'Claim ') : id)
 
@@ -63,7 +50,7 @@ export default function ReviewSummary({ submissionId, active }) {
   // refresh whenever the tab becomes active (e.g. right after finishing the review)
   useEffect(() => { if (active) load() }, [active, load])
 
-  // Builds Artifact B from Artifact A and runs the provenance audit, then reloads so the
+  // Builds Artifact B from Artifact A and runs the evidence check, then reloads so the
   // whole page reflects one artifact rather than a mix of loaded and just-returned state.
   const generate = async () => {
     setBusy(true); setGenErr('')
@@ -118,7 +105,7 @@ export default function ReviewSummary({ submissionId, active }) {
                 <div className="conclusion-foot">
                   <span className="muted">
                     {inconsistent === 0 && unsupported === 0
-                      ? '✓ Provenance audit passed — every statement traces back to the evidence'
+                      ? '✓ Checked — every statement traces back to the evidence below'
                       : [inconsistent > 0 && `⚠ ${inconsistent} claim${inconsistent === 1 ? '' : 's'} inconsistent with the evidence`,
                          unsupported > 0 && `${unsupported} unsupported statement${unsupported === 1 ? '' : 's'}`]
                           .filter(Boolean).join(' · ')}
@@ -183,7 +170,6 @@ export default function ReviewSummary({ submissionId, active }) {
                           {o.what_is_shared && <div className="ev-line"><span className="ev-lab">Shared:</span> {o.what_is_shared}</div>}
                           {o.submission_delta && <div className="ev-line"><span className="ev-lab">Submission adds:</span> {o.submission_delta}</div>}
                         </>}
-                    <SectionsBox sections={o.sections_used} />
                   </div>
                 ))}
               </div>
