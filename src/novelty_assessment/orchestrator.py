@@ -51,15 +51,14 @@ except Exception:  # pragma: no cover
     except Exception:
         get_openai_callback = None
 
-# Approximate OpenAI prices, USD per 1K tokens (prompt, completion). Used only when
-# the langchain callback doesn't know the model's price. Edit if prices/models change.
-_PRICES = {
-    "gpt-4.1": (0.0020, 0.0080),
-    "gpt-4.1-mini": (0.0004, 0.0016),
-    "gpt-4o": (0.0025, 0.0100),
-    "gpt-4o-mini": (0.00015, 0.00060),
-    "gpt-3.5-turbo": (0.0005, 0.0015),
-}
+# Pricing is NOT duplicated here. This module used to keep its own small table, which is
+# how claim extraction came to be billed at the pipeline model's rate: the stage runs on
+# gpt-5.6-luna, the table only knew gpt-4.x, and the mismatch overstated the stage by 8.6x.
+# claim_extraction._usd is the single source of truth (and handles the gpt-5.6 variants).
+def _price_usd(model: str, prompt_tokens: int, completion_tokens: int) -> float:
+    sys.path.insert(0, _HERE)
+    from claim_extraction import _usd
+    return _usd(model, prompt_tokens, completion_tokens)
 
 # Fallback per-stage duration estimates (seconds) for the frontend ETA, used until a
 # real rolling-average baseline accumulates in {data_dir}/_stage_baseline.json.
@@ -339,16 +338,30 @@ class NoveltyPipeline:
         except Exception:
             pass
 
-    def _stage_cost(self, cb):
-        """(prompt_tokens, completion_tokens, usd) from an OpenAI callback (None -> skip)."""
+    def _stage_model(self, name: str) -> str:
+        """Which model a stage actually bills to. Not every stage uses self.model:
+        claim extraction deliberately runs on its own, stronger model."""
+        if name == "claim_extraction":
+            sys.path.insert(0, _HERE)
+            from claim_extraction import DEFAULT_EXTRACTION_MODEL
+            return DEFAULT_EXTRACTION_MODEL
+        return self.model
+
+    def _stage_cost(self, cb, stage_name: str = ""):
+        """(prompt_tokens, completion_tokens, usd) from an OpenAI callback (None -> skip).
+
+        Prices against the model the STAGE ran on. Pricing everything at self.model billed
+        claim extraction -- which runs on gpt-5.6-luna -- at gpt-4.1 rates and overstated it
+        by a factor of 8.6 on the first full run, while the artifact itself recorded the
+        correct figure. Cost numbers end up in the thesis, so they have to be right.
+        """
         if cb is None:
             return None
         pt = int(getattr(cb, "prompt_tokens", 0) or 0)
         ct = int(getattr(cb, "completion_tokens", 0) or 0)
         usd = float(getattr(cb, "total_cost", 0.0) or 0.0)
         if not usd and (pt or ct):  # callback didn't know the price -> use our table
-            p_in, p_out = _PRICES.get(self.model, (0.0, 0.0))
-            usd = pt / 1000 * p_in + ct / 1000 * p_out
+            usd = _price_usd(self._stage_model(stage_name), pt, ct)
         return pt, ct, round(usd, 4)
 
     def _write_summary(self, state):
@@ -584,7 +597,7 @@ class NoveltyPipeline:
                 metric = {"seconds": round(seconds, 1), "status": "done"}
                 if phase_secs:
                     metric["phases"] = phase_secs  # within-stage breakdown (retrieval/artifact_a)
-                cost = self._stage_cost(cb)
+                cost = self._stage_cost(cb, name)
                 if cost is not None:
                     pt, ct, usd = cost
                     metric.update({"prompt_tokens": pt, "completion_tokens": ct, "usd": usd})
