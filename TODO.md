@@ -24,17 +24,40 @@ pool, single pass). That is the only comparison in which the workflow is the sol
 Comparisons against Afzal / OpenNovelty / DeepReviewer are **system-level** — model, prompts and
 retrieval all differ — and are therefore secondary evidence, not the answer to RQ1.
 
-### Narrative constraint (advisor)
+### Narrative constraint — what is NOT evaluated
 
-The thesis argues that human review verdicts are a **noisy reference** and must not become the
-optimisation target; verdict-alignment evaluation was explicitly rejected. Every use of the human
-assessments must therefore be framed as **evidence recall against a factual pointer**, never as
-agreement with a human judgment:
+The thesis argues that human review verdicts are a **noisy reference** produced by overloaded
+reviewers, and that a system optimised toward them inherits their blind spots. The system is an
+**advisor**, not a predictor of reviewer judgments. This is already argued in Related Work 2.1 and
+2.3 (You, Cao & Gurevych's truth-coupling) and stated in the midterm talk.
 
-> The reviewer names a specific prior work. We measure whether the pipeline surfaces that document.
-> We do not measure whether the pipeline agrees with the reviewer's novelty verdict.
+Consequence, decided 2 September: the dataset's `human_novelty_assessments/` are **not an
+evaluation target in any form**.
 
-This sentence belongs in the evaluation design notes and in the Method chapter.
+- Not as verdict alignment. That is Afzal et al.'s protocol (see below) and it is exactly what this
+  thesis argues against.
+- **Also not as evidence recall against the prior work a reviewer names.** That framing was
+  considered and rejected: the reviewer names the prior work they happened to know, so scoring
+  against it still installs the human as the reference and penalises a system that finds better or
+  additional work. A weaker bias channel is still a bias channel.
+
+What replaces it, three legs, none of which needs a human verdict:
+
+1. **Verifiability** — do the evidence quotes hold up against the source documents? (task 2, done,
+   88.7%). Deterministic.
+2. **Provenance** — does the paper-level summary follow from the per-claim evidence and nothing
+   else? (task 5). Deterministic in its core check.
+3. **Relative quality** — is the assessment better than what competing systems produce, judged
+   blind by domain experts? (task 7, Elo). Human judgment of *assessment quality*, which is not the
+   same as agreement with a novelty verdict.
+
+### Does Afzal et al. already use these annotations? Yes.
+
+From your own Related Work 2.2: on 182 ICLR 2025 submissions with annotated human novelty
+assessments their pipeline reaches **86.5% alignment with human reasoning** and **75.3% agreement
+on novelty conclusions**. That is verdict/reasoning alignment — precisely the protocol this thesis
+departs from. The departure is therefore deliberate and already argued for in 2.3; it is a
+positioning claim, not a gap in the evaluation.
 
 ---
 
@@ -69,7 +92,7 @@ Over 49 artifacts / 105 claims / 1693 comparisons / **231 evidence pairs**:
 |---|---|---|---|---|---|---|
 | claim side | **94.8%** | 198 | 21 | 0 | 10 | 2 |
 | paper side | **92.6%** | 198 | 16 | 9 | 8 | 0 |
-| **both sides** | **88.7%** | \multicolumn — 205 of 231 pairs | | | | |
+| **both sides** | **88.7%** | 205 of 231 pairs fully verified | | | | |
 
 **The verifiability rate for the thesis is 88.7%.**
 
@@ -93,77 +116,107 @@ description. Rebuilding the corpus without it produced fuzzy scores of ~86 again
 90 — apparent failures that were ours, not the pipeline's. The script now reloads the claims doc
 and refuses to score any claim whose stored text no longer matches it.
 
-### [ ] 3. Ask the advisor two things now — **[lead time]**
-Both gate later work, so send them this week rather than when you get there:
-1. Do Afzal et al. already evaluate against `human_novelty_assessments/`? If yes, do we align with
-   their protocol or depart from it deliberately? (gates task 5)
-2. Confirm the framing above — evidence recall against a factual pointer, not verdict alignment.
-   Also settle decision 10 (final verdict vs. analysis-only) while you are at it.
+### [ ] 3. Book the advisor as second rater — **[lead time], the critical path**
+The Afzal question is answered (see below), so only one thing is left, and it needs the most notice
+of anything in this plan: **the advisor has to rate battles** (task 7). Ask now for a slot and a
+rough budget of hours, because the whole headline result depends on their availability.
+Send along the rating protocol and the anchor design so they can object early.
 
 ---
 
 ## Core evaluation — 8–30 September
 
-### [ ] 4. Decide and freeze the evaluation corpus — **do before task 5**
-**Target: 8 September.** Currently only **7 of 19** papers in `eval/out/data` carry human-named prior
-work; the metric needs coverage of those 56 papers. Choose the set, freeze it, document the
-selection rule, and process the missing papers (GROBID + retrieval, ~15 min each — budget the wall
-clock). No changes to the corpus after this date, so that every later number refers to one set.
+### [ ] 4. Decide and freeze the evaluation corpus
+**Target: 8 September.** Pick the papers, freeze the set, document the selection rule, and process
+whatever is missing (GROBID + retrieval, ~15 min each — budget the wall clock). No changes after
+this date, so every later number refers to one set.
 
-### [ ] 5. Evidence recall against human-named prior work
-**Target: metric built 14 Sep · runs complete 21 Sep.**
+Size is now driven by task 7: every paper in the set must be rated by hand in the battles, so
+**8–12 papers** is the realistic ceiling, not 56. Select for diversity of field and paper type, and
+state the rule — a set chosen for where the system does well is the first thing an examiner probes.
 
-The Afzal dataset carries ground truth the evaluation does not use yet:
+### [ ] 5. Artifact-B provenance: does the summary follow from the evidence?
+**Target: 14 September.**
 
-| | |
-|---|---|
-| papers with `human_novelty_assessments/` | **182** of 185 |
-| assessment files | 418 (2.3 per paper) |
-| papers where the human **names specific prior work** | **56** (31%), ~1.9 works each |
-| of those, already in the own eval corpus | **7 of 19** |
+The paper-level summary stays, but what gets measured about it is **whether it is derived from
+Artifact A and nothing else** — not whether its verdict matches a human. Most of this already
+exists in `artifact_judge.py` and has simply never been run at scale:
 
-Example `09JVxsEZPf`: the reviewer calls novelty limited because the method rests on the SNIP score
-of **Lee et al.** and merging techniques of **Yu et al.** and **Hui et al.**
+- `_deterministic_checks` — every paper B names as challenging must appear among A's verified
+  refuters (fuzzy title match ≥ 85), and the verdict must match whether A holds a verified
+  `can_refute` at all. **No model involved.**
+- `_llm_entailment` — an auditor model lists statements in B that A does not support.
 
-Framing (non-negotiable, see *Narrative constraint*): the reviewer names a specific prior work; we
-measure whether the pipeline surfaces that document. Not whether it agrees with the verdict.
+To do: run both over every submission in the frozen corpus and report, as a companion to the
+task-2 verifiability rate: share of claims whose B verdict is consistent with A, share of named
+challenging papers that trace back to a verified refuter, and the rate and content of unsupported
+statements. Split the deterministic result from the LLM one — the first is unassailable, the second
+inherits judge noise and must be labelled as such.
 
-Metric as a funnel over the pipeline stages, over ~106 (paper, prior-work) pairs:
-**recall@pool** (retrieved at all?) → **recall@examined** (deep-dived?) → **recall@challenged**
-(flagged as challenging novelty?).
-
-Required amendments:
-- **The own linear baseline is the PRIMARY comparison system** — same claims, same pool, single
-  pass. This is the RQ1 ablation. External systems (Afzal, OpenNovelty, DeepReviewer) are secondary
-  system-level comparisons and must be labelled as such.
-- **Report pool size beside every recall number**, and precision wherever it is definable. Recall
-  alone rewards indiscriminate retrieval — a system that returns everything scores 100%.
-- **State the incompleteness limitation explicitly**: the reviewer names only the prior work they
-  happened to know. A system that surfaces *better* or *additional* prior work receives no credit
-  and may even look worse. The metric is a lower bound on retrieval quality, not a ceiling.
-- **Prerequisites**: task 3 answered, task 4 frozen. (Verification parity: done, see below.)
+This is the second judge-free pillar and it closes the chain: quotes verify against the sources
+(task 2), and the synthesis verifies against the quotes (task 5).
 
 ### [ ] 6. RQ1 ablation: agent vs. own linear baseline
-**Target: 21 September.** Same claims, same pool, single pass vs. the four-phase agent. Report the
-task-2 grounding metrics and the task-5 recall funnel side by side. This is the thesis's primary
-result — schedule it before the external comparisons, not after.
+**Target: 21 September.** Same claims, same pool, single pass vs. the four-phase agent — the only
+comparison where the workflow is the sole variable. Report the task-2 grounding metrics and the
+task-5 provenance metrics side by side, plus the process measures the linear baseline structurally
+cannot produce: re-entry events, papers escalated from triage to deep dive, and refutations
+downgraded by the evidence gate. This is the thesis's primary controlled result.
 
-### [ ] 7. System-level comparison against external systems
-**Target: 30 September (freeze).** Afzal, OpenNovelty, DeepReviewer. Injection feasibility is already
-analysed (own + OpenNovelty clean, Afzal lossy, DeepReviewer PDF-only → end-to-end only). Label
-explicitly as system-level: model, prompts and retrieval differ, so these do **not** isolate the
-workflow. Stage A adapters for `afzal` / `opennovelty` exist in the harness but were never run —
-they need `structured_representation.json` / `phase1_extracted.json` per paper.
+### [ ] 7. Battle mode with Elo — the headline result
+**Target: runs 21 Sep · rating 22-30 Sep (freeze).**
 
-### [ ] 8. Validate the judge — small, scheduled, **not dropped**
-**Target: 28 September.** Every Stage-A result you already have rests on this judge — luna 7:0 deep,
-luna 6:2 sol — and **position order decided 40% of outcomes** (6 of 7 ties in the luna-vs-sol run
-were position-inconsistent). Rate **20–30 pairs yourself, blind**, and report Cohen's κ against the
-LLM judge.
+The paper-level assessment is **not** scored against human verdicts. It is ranked against competing
+systems by blind pairwise comparison, rated by you and your advisor, aggregated to Elo (or
+Bradley-Terry, which handles ties better at this sample size).
 
-Keep it small. This is not a new experiment, it retroactively strengthens results already in hand,
-and it converts a weakness into a methodological contribution. If you want a second human rater for
-inter-annotator agreement, ask now — **[lead time]**.
+Field:
+
+| system | kind |
+|---|---|
+| own four-phase agent | the thesis system |
+| own linear baseline | RQ1 ablation partner |
+| Afzal pipeline | the system this builds on |
+| OpenNovelty | evidence-gated, no re-entry |
+| DeepReviewer 2.0 | adaptive control, no evidence gate |
+| frontier model, single pass | e.g. gpt-5.6-sol, claude-fable-5-1 — check what is current at run time |
+
+**The combinatorics need deciding before anything runs.** Six systems is 15 pairs per paper; over
+10 papers that is 150 comparisons, doubled to 300 if positions are swapped. At ~4 minutes to read
+two full assessments, that is 10+ hours per rater. Not feasible. Two ways out:
+
+- **Anchored** — compare every system against the own agent only: 5 pairs x 10 papers = 50
+  judgments (~3.5 h per rater). Gives win rate against the anchor, which supports a ranking claim
+  but is not a full Elo.
+- **Hybrid, recommended** — the LLM judge rates the full round robin and produces the Elo; you and
+  the advisor rate a **stratified subset** (~30 pairs) and Cohen's kappa against the LLM judge is
+  reported alongside. The Elo then rests on a judge that was measured, not assumed, and task 8
+  stops being optional and becomes the thing that licenses the headline number.
+
+Protocol, fixed in advance: blind (no system names in the rendered assessments), randomized
+presentation order, both orientations wherever the LLM judge is used, an explicit rating rubric
+(evidence grounding, correctness of the comparison, usefulness to a reviewer), and ties allowed.
+
+**Self-preference is the obvious attack.** You are the author of one of the systems. Mitigations to
+state in the thesis: blinding, position swap, the advisor as an independent second rater, and
+reported agreement between the two of you. Report your own ratings and the advisor's separately as
+well as pooled.
+
+Preparation: DeepReviewer is PDF-only, so it can only enter end-to-end. Stage-A adapters for
+`afzal` / `opennovelty` exist in the harness but were never run — they need
+`structured_representation.json` / `phase1_extracted.json` per paper.
+
+### [ ] 8. Validate the judge — now load-bearing, not optional
+**Target: 28 September.** Under the hybrid design in task 7 the LLM judge produces the Elo, so its
+reliability is no longer a footnote: it is what makes the headline result citable.
+
+Already measured, and it is not reassuring: **position order decided 40% of outcomes** (6 of 7 ties
+in the luna-vs-sol run were position-inconsistent), tie rates of 70-80% between similar systems, and
+~4 points of single-run noise on atomicity. Every Stage-A result in hand rests on this judge.
+
+Rate a stratified subset blind, report Cohen's kappa against the LLM judge, and report the judge's
+own position-consistency rate as a property of the instrument. If kappa is poor, the honest move is
+to fall back to the anchored human-only design in task 7 and report fewer, better-founded numbers.
 
 ---
 
@@ -200,11 +253,15 @@ Depends on task 2. `NOVELTY_CHALLENGE_ON_STRONG_OVERLAP` (default on) lets `over
 require a verified pair on that path too, or change the thesis wording. A wording change is cheap
 and may be the right call this close to the deadline.
 
-### [decision] 10. Final verdict vs. analysis-only — **[lead time]**, ask in task 3
-Leaning (and what the UI already does): claim-level evidence-grounded findings, **no** paper-level
-novelty verdict. Consistent with the narrative constraint. If confirmed, reframe
-`artifact_b.py`'s `overall_assessment` as a structured summary of findings and update slide 12
-("conservative verdicts" → analysis).
+### [x] 10. Final verdict vs. analysis-only — decided 2 September
+**There is a paper-level summary (Artifact B), and it keeps its verdict.** What changes is what is
+claimed about it: the verdict is *not* validated against human judgments. It is checked for
+**provenance** (task 5: does it follow from Artifact A and nothing else) and ranked for **relative
+quality** (task 7: blind battles). `artifact_b.overall_assessment` therefore stays as it is.
+
+Follow-ups: slide 12 ("conservative verdicts") needs rewording toward "verdict with audited
+provenance, ranked against alternatives", and the Method chapter needs the sentence that the
+verdict is an advisory output, not a prediction of a reviewer decision.
 
 ### [ ] 11. GOLD reference for ~20 papers
 Serves Stage A only — a supporting contribution. The silver reference is demonstrably unreliable:
