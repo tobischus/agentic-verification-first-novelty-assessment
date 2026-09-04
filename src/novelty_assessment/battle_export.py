@@ -9,10 +9,11 @@ was examined, and the assessment itself (Artifact B) over the evidence (Artifact
 Rendering the deliverable from a template rather than from a model call is what makes it
 reproducible: running this twice on the same run yields byte-identical text.
 
-Verbatim quotations are wrapped in typographic quotation marks and are only presented as
-quotations when the checker confirmed them in the source document; a quote that failed
-verification is rendered as plain prose instead. A closing note states the convention, so
-the document needs no legend to be read correctly.
+Text falls into three kinds and each is rendered differently, because conflating them is
+exactly the failure this system exists to prevent: a span confirmed in its source appears
+in typographic quotation marks, a span the checker could not confirm is labelled as an
+unconfirmed quotation, and the system's own prose is left plain. A closing note states the
+convention, so the document needs no legend to be read correctly.
 
 Deliberately omitted, because they are reader aids rather than content: the per-quote
 checkmarks in the comparison sections and the list of sections read for a comparison.
@@ -104,13 +105,24 @@ def _quote(text: str) -> str:
 
 
 def _segments(segs, out: List[str]) -> None:
-    """Prose as paragraphs, verified verbatim spans in quotation marks."""
+    """Verified spans in quotation marks, the system's prose plain, and rejected quotes
+    labelled as such.
+
+    A quote that fails verification is stored as {"kind": "text", "verified": False} while
+    genuine prose carries no `verified` key at all. Rendering both the same way would pass
+    copied text off as the system's own words and make the closing note untrue, which is
+    the opposite of what this document is for.
+    """
     for s in segs or []:
         content = (s.get("content") or "").strip()
         if not content:
             continue
-        out.append(_quote(content) if (s.get("kind") == "quote" and s.get("verified"))
-                   else content)
+        if s.get("kind") == "quote" and s.get("verified"):
+            out.append(_quote(content))
+        elif "verified" in s:                       # a quote the checker could not confirm
+            out += ["Quoted from the source but NOT confirmed verbatim:", content]
+        else:
+            out.append(content)
         out.append("")
 
 
@@ -143,9 +155,6 @@ def build(data_dir: str, submission_id: str) -> str:
         out.append(f"Authors: {authors}")
     if meta.get("publication_date"):
         out.append(f"Publication date: {meta['publication_date']}")
-    venue = meta.get("venue") or meta.get("journal") or ""
-    out.append(f"Journal / venue: {venue}" if venue
-               else "Journal / venue: not stated in the document")
     out.append("")
 
     # ------------------------- extracted claims ------------------------ #
