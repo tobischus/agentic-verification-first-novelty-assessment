@@ -126,6 +126,35 @@ def _segments(segs, out: List[str]) -> None:
         out.append("")
 
 
+def _evidence_pairs(pairs, out: List[str]) -> None:
+    """Render claim/paper quote pairs, the evidence shape the non-agentic builder emits.
+
+    Each pair puts a span of the submission beside a span of the prior work. Only spans the
+    checker confirmed on that side are shown as quotations; an unconfirmed one is labelled,
+    on the same rule as everywhere else in this document.
+    """
+    shown = 0
+    for p in pairs:
+        cq, pq = (p.get("claim_quote") or "").strip(), (p.get("paper_quote") or "").strip()
+        if not (cq or pq):
+            continue
+        if shown == 0:
+            out += ["Evidence found for this claim", ""]
+        shown += 1
+        if cq:
+            out.append("The submission states:")
+            out.append(_quote(cq) if p.get("claim_quote_verified") else
+                       f"(not confirmed verbatim) {cq}")
+            out.append("")
+        if pq:
+            out.append("The prior work states:")
+            out.append(_quote(pq) if p.get("paper_quote_verified") else
+                       f"(not confirmed verbatim) {pq}")
+            out.append("")
+        if p.get("rationale"):
+            out += [p["rationale"].strip(), ""]
+
+
 def build(data_dir: str, submission_id: str, variant: str = "") -> str:
     sub = Path(data_dir) / submission_id
     tail = f"_{variant}" if variant else ""
@@ -247,8 +276,16 @@ def build(data_dir: str, submission_id: str, variant: str = "") -> str:
             if pr:
                 out += ["How this paper realizes the claim", ""]
                 _segments(pr, out)
-            if c.get("assessment"):
-                out += ["Comparison with the submission", "", c["assessment"].strip(), ""]
+            else:
+                # The linear baseline records its evidence as claim/paper quote PAIRS and
+                # writes no narrative -- paper_realization is an agent-only field. Rendering
+                # only the narrative made the baseline look as though it had produced no
+                # evidence at all, when it had produced verified pairs, which would have
+                # handed the agent an unearned advantage in the comparison.
+                _evidence_pairs(c.get("evidence_pairs") or [], out)
+            note = c.get("assessment") or c.get("brief_note") or ""
+            if note:
+                out += ["Comparison with the submission", "", note.strip(), ""]
 
     out += ["---", "", _QUOTE_NOTE]
     return "\n".join(out).rstrip() + "\n"
