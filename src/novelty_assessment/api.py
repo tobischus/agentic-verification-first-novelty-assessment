@@ -933,86 +933,20 @@ def _conclusion_path(sid: str) -> Path:
     return _sub_dir(sid) / f"{sid}_conclusion.json"
 
 
-_CONCLUSION_PROMPT = """You are writing the concluding paragraph of a novelty assessment for a scientific paper under review. Base your assessment STRICTLY and ONLY on the evidence gathered below — do NOT introduce outside knowledge, do NOT invent prior work, methods, or results that are not stated. If the evidence is thin, say so rather than embellishing.
-
-The evidence comes from a claim-by-claim comparison of the submission against prior work. For each claimed contribution you are given: what the submission itself does, and the overlapping prior work found (with the degree of overlap, what is shared, and what the submission adds beyond it).
-
-Write ONE cohesive paragraph (roughly 120-220 words) that concludes on the paper's overall novelty. It should:
-- state what the paper contributes overall;
-- honestly acknowledge overlap with prior work, citing specific papers inline as "Surname et al. (Year)" exactly as given in the evidence;
-- judge whether the contribution is largely incremental or genuinely novel, and WHERE the novelty actually lies (e.g. method vs. scope/depth/analysis/evaluation), grounded in the "submission adds beyond it" notes;
-- note the submission's distinguishing strengths;
-- optionally close with a constructive note (e.g. that the paper should acknowledge the overlap more explicitly), only if the evidence supports it.
-Neutral, precise, evidence-based academic prose. No headings, no bullet lists, no preamble — just the paragraph.
-
-SUBMISSION TITLE: {title}
-SUBMISSION ABSTRACT: {abstract}
-
-EVIDENCE BY CLAIM:
-{evidence}
-"""
-
-
-def _build_conclusion_input(sid: str):
-    """Assemble the (title, abstract, evidence-text) for the conclusion LLM call from
-    artifact_a. Returns None if no claims are computed yet."""
-    sub = _sub_dir(sid)
-    a = _load_json(sub / f"{sid}_artifact_a.json")
-    if a is None or not a.get("claims"):
-        return None
-    submeta = _load_json(sub / f"{sid}.json") or {}
-    claims_doc = _load_json(sub / f"{sid}_claims.json") or {"claims": []}
-    order = [c["id"] for c in claims_doc.get("claims", []) if c.get("status") != "rejected"]
-    ranked = _load_json(sub / "related_work_data" / "ranked_papers.json") or []
-    meta = {p.get("paper_id"): p for p in ranked}
-    a_by = {e.get("claim_id"): e for e in a.get("claims", [])}
-
-    blocks, any_overlap = [], False
-    for cid in order:
-        e = a_by.get(cid)
-        if e is None:
-            continue
-        lines = [f"CLAIM: {e.get('claim_text') or e.get('claim_name','')}"]
-        real = _segments_text(e.get("claim_realization"))
-        if real:
-            lines.append(f"  What the submission does: {real[:900]}")
-        overlaps = []
-        for c in (e.get("comparisons") or []):
-            deg = (c.get("overlap_degree") or "").lower()
-            challenges = c.get("refutation_status") == "can_refute"
-            if not (challenges or deg in _OVERLAP_DEGREES):
-                continue
-            _m = meta.get(c.get("paper_id"), {})
-            cite = _author_year(c.get("authors") or _m.get("authors", ""),
-                                c.get("year") or _m.get("year", ""))
-            head = f"{cite} — \"{c.get('title','')}\"" if cite else f"\"{c.get('title','')}\""
-            bits = [f"overlap: {deg}" + (" (challenges the claim's novelty)" if challenges else "")]
-            if c.get("what_is_shared"):
-                bits.append(f"shared: {c['what_is_shared']}")
-            if c.get("submission_delta"):
-                bits.append(f"submission adds: {c['submission_delta']}")
-            if c.get("assessment"):
-                bits.append(f"assessment: {c['assessment']}")
-            overlaps.append(f"    - {head}; " + "; ".join(bits))
-        if overlaps:
-            any_overlap = True
-            lines.append("  Overlapping prior work:")
-            lines.extend(overlaps)
-        else:
-            lines.append("  Overlapping prior work: none found (no prior work delivers this contribution).")
-        blocks.append("\n".join(lines))
-    return {
-        "title": submeta.get("title", ""),
-        "abstract": (submeta.get("abstract", "") or "")[:2500],
-        "evidence": "\n\n".join(blocks),
-        "n_claims": len(blocks),
-        "any_overlap": any_overlap,
-    }
-
-
 @app.get("/submissions/{sid}/review/conclusion")
 def get_conclusion(sid: str):
-    """Cached overall-novelty conclusion, or {text: None} if not generated yet."""
+    """The paper-level assessment: Artifact B's overall_assessment, plus its per-claim
+    verdicts and the Judge's provenance audit. Falls back to the cached doc for runs
+    produced before the summary was unified onto Artifact B."""
+    sub = _sub_dir(sid)
+    b = _load_json(sub / f"{sid}_artifact_b.json")
+    if b and b.get("overall_assessment"):
+        cached = _load_json(_conclusion_path(sid)) or {}
+        return {"text": b["overall_assessment"],
+                "per_claim": b.get("per_claim", []),
+                "judge": _load_json(sub / f"{sid}_judge.json"),
+                "model": cached.get("model"), "generated_at": cached.get("generated_at"),
+                "n_claims": len(b.get("per_claim", []))}
     doc = _load_json(_conclusion_path(sid))
     if doc and doc.get("text"):
         return doc
@@ -1021,32 +955,41 @@ def get_conclusion(sid: str):
 
 @app.post("/submissions/{sid}/review/conclusion")
 def generate_conclusion(sid: str):
-    """Generate (and cache) the concluding overall-novelty paragraph from the gathered
-    claim-level evidence. Grounded ONLY in artifact_a -- no fresh analysis."""
-    data = _build_conclusion_input(sid)
-    if data is None:
+    """Build the paper-level assessment = Artifact B, then audit it with the Judge.
+
+    Artifact B is the ONE paper-level summary: it is synthesized solely from Artifact A,
+    surfaces only both-sides-verified evidence, and is what artifact_judge checks for
+    provenance. The UI previously rendered a second, parallel summary generated by its own
+    prompt, so the object a reviewer read was not the object that got audited. Same
+    endpoint and same response key, so the frontend is unaffected."""
+    sub = _sub_dir(sid)
+    a = _load_json(sub / f"{sid}_artifact_a.json")
+    if a is None or not a.get("claims"):
         raise HTTPException(404, "no claims computed yet -- run the claim-level review first")
-    from langchain_openai import ChatOpenAI
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
+    if not os.getenv("OPENAI_API_KEY"):
         raise HTTPException(500, "OPENAI_API_KEY not set")
     model = os.getenv("NOVELTY_CONCLUSION_MODEL", "gpt-4.1")
-    kw = {} if model.startswith(("gpt-5", "o1", "o3", "o4")) else {"temperature": 0.2}
-    llm = ChatOpenAI(model_name=model, api_key=api_key, max_retries=4, timeout=180, **kw)
-    prompt = _CONCLUSION_PROMPT.format(title=data["title"], abstract=data["abstract"],
-                                       evidence=data["evidence"])
     try:
-        text = (llm.invoke(prompt).content or "").strip()
+        from artifact_b import ArtifactBBuilder
+        from artifact_judge import Judge
+        b = ArtifactBBuilder(model_name=model).build(DATA_DIR, sid)
     except Exception as e:
-        raise HTTPException(502, f"conclusion generation failed: {repr(e)[:200]}")
-    doc = {"text": text, "model": model, "n_claims": data["n_claims"],
+        raise HTTPException(502, f"artifact B generation failed: {repr(e)[:200]}")
+    judge = None
+    try:
+        judge = Judge(model_name=model).judge(DATA_DIR, sid)
+    except Exception:
+        pass  # the assessment stands on its own; the audit is additional
+    doc = {"text": b.get("overall_assessment", ""), "model": model,
+           "n_claims": len(b.get("per_claim", [])),
            "generated_at": time.strftime("%Y-%m-%d %H:%M:%S")}
     try:
-        _conclusion_path(sid).write_text(json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
+        _conclusion_path(sid).write_text(json.dumps(doc, ensure_ascii=False, indent=2),
+                                         encoding="utf-8")
     except Exception:
         pass
-    _snapshot_cache(sid)  # cache the finished conclusion alongside the agent results
-    return doc
+    _snapshot_cache(sid)
+    return {**doc, "per_claim": b.get("per_claim", []), "judge": judge}
 
 
 @app.get("/submissions/{sid}/{artifact}")
