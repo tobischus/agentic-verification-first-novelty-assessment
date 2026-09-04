@@ -33,63 +33,29 @@ from langchain_openai import ChatOpenAI
 from dotenv import load_dotenv
 
 from agent import evidence as ev
+# The comparison prompt and its output schema are IMPORTED from the agent rather than
+# restated here. RQ1 asks what the agentic workflow adds; that only isolates the workflow
+# if the comparison step is literally the same call with the same instructions and the same
+# fields. Two copies would drift, and the ablation would quietly start measuring prompt
+# wording instead. This module differs from the agent in HOW it selects and reads papers,
+# and in that it never re-enters -- not in what it asks the model.
+from agent.claim_agent import (_PAPER_COMPARE, _SectionComparison, _fmt_sections_full,
+                               _segments_to_text)
 
 load_dotenv()
 #TODO: Definition of Novelty here!
 
-COMPARISON_PROMPT = """You are a meticulous comparative reviewer assessing whether a PRIOR-WORK paper challenges the novelty of a specific claimed contribution from a submission.
-
-## Submission's claimed contribution
-- Name: {claim_name}
-- Verbatim claim: "{claim_text}"
-- Normalized description: {claim_description}
-{citation_context_block}
-## Candidate prior-work paper
-- Title: {cand_title}
-- Content ({content_source}):
-{cand_content}
-
-## Task
-First, briefly state WHY this candidate paper is relevant to THIS specific claim and was selected for comparison -- i.e. what it has in common with the claimed contribution (shared topic, problem, method family, or goal). This is a relevance rationale, NOT a judgment of overlap: do not yet decide whether it challenges the claim. Put this in `relevance_reason` (1-2 sentences).
-
-Then decide whether the candidate paper substantially presents the same idea, method, or finding as the claimed contribution, such that it challenges the claim that the submission is the first/novel in this respect.
-
-Output one of:
-- can_refute: the candidate clearly presents substantially the same contribution (the claim of novelty is challenged). REQUIRES evidence.
-- cannot_refute: the candidate is related but does NOT challenge this specific claim (explain the key difference in brief_note).
-- unclear: cannot be determined from the provided text.
-
-## Evidence requirements (only for can_refute)
-Provide evidence_pairs. Each pair has:
-- claim_quote: a VERBATIM span from the submission's claim text/description above.
-- paper_quote: a VERBATIM span copied EXACTLY from the candidate paper content above (no paraphrasing, copy character-for-character).
-- rationale: one sentence on why this pair shows overlap.
-
-Do NOT invent quotes. If you cannot find a verbatim paper_quote in the provided candidate content, do not use can_refute.
-Do NOT create artificial refutations from superficial topical similarity.
-"""
+def _fill(tpl: str, **kw) -> str:
+    """str.format is unusable here: the prompts contain literal braces."""
+    out = tpl
+    for k, v in kw.items():
+        out = out.replace("{" + k + "}", str(v))
+    return out
 
 
-class EvidencePair(BaseModel):
-    claim_quote: str = Field(description="Verbatim span from the submission's claim")
-    paper_quote: str = Field(description="Verbatim span from the candidate paper's abstract/introduction")
-    rationale: str = Field(description="One sentence on why this pair shows overlap")
-
-
-class ClaimPaperComparison(BaseModel):
-    relevance_reason: str = Field(
-        default="",
-        description="1-2 sentences on WHY this paper is relevant to the claim and was "
-                    "selected for comparison (shared topic/problem/method/goal). NOT an "
-                    "overlap judgment.",
-    )
-    refutation_status: str = Field(
-        description="One of: can_refute, cannot_refute, unclear"
-    )
-    evidence_pairs: List[EvidencePair] = Field(
-        default_factory=list, description="Verbatim evidence pairs (only when can_refute)"
-    )
-    brief_note: str = Field(description="1-2 sentence explanation of the judgment")
+def _claim_str(claim: dict) -> str:
+    """The claim as the comparison prompt expects it -- same shape the agent passes."""
+    return " ".join(x for x in (claim.get("claim_text", ""), claim.get("description", "")) if x)
 
 
 def variant_path(sub_dir: Path, submission_id: str, kind: str, variant: str = "") -> Path:
@@ -113,7 +79,7 @@ class ArtifactABuilder:
         embedding_model: str = "allenai/specter2_base",
         temperature: float = 0.0,
         k_per_claim: int = 10,
-        max_paper_chars: int = 16000,
+        max_paper_chars: int = 24000,
         max_concurrency: int = 2,
         min_quote_tokens: int = ev.DEFAULT_MIN_QUOTE_TOKENS,
         fuzzy_threshold: float = ev.DEFAULT_FUZZY_THRESHOLD,
@@ -183,6 +149,40 @@ class ArtifactABuilder:
         if meta.exists():
             parts.append(json.loads(meta.read_text(encoding="utf-8")).get("abstract", "") or "")
         return "\n\n".join(p for p in parts if p)
+
+    def prepare_fulltexts(self, data_dir: str, submission_id: str,
+                          grobid_server: str = "http://localhost:8070") -> dict:
+        """GROBID-parse every pool paper that has a PDF, before any comparison runs.
+
+        The pipeline parses full text lazily, only for papers the AGENT chooses to deep-dive.
+        This baseline then read whichever full texts happened to be on disk, so its evidence
+        depended on what the agent had done first: run it before the agent and it sees
+        abstracts only, run it after and it inherits the agent's selection. Neither isolates
+        the workflow, which is the one thing the RQ1 ablation has to do. Parsing everything
+        up front gives both systems the same text and makes the run order irrelevant.
+        """
+        import sys as _sys
+        _sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from fetch_fulltext import FullTextFetcher
+
+        sub_dir = Path(data_dir) / submission_id
+        ranked = json.loads(
+            (sub_dir / "related_work_data" / "ranked_papers.json").read_text(encoding="utf-8"))
+        fetcher = FullTextFetcher(grobid_server)
+        stats = {"already_had": 0, "ok": 0, "no_pdf": 0, "failed": 0}
+        for p in ranked:
+            pid = p.get("paper_id")
+            if not pid:
+                continue
+            if (sub_dir / "related_work_data" / "grobid_fulltext" / f"{pid}.txt").exists():
+                stats["already_had"] += 1
+                continue
+            try:
+                status = fetcher.parse_one(data_dir, submission_id, pid)
+            except Exception:
+                status = "parse_error"
+            stats[status if status in ("ok", "no_pdf") else "failed"] += 1
+        return stats
 
     def load_related_work(self, data_dir: str, submission_id: str) -> List[dict]:
         """Load the global related-work pool (ranked_papers) with available content."""
@@ -278,23 +278,25 @@ class ArtifactABuilder:
 
     def _build_prompt(self, claim: dict, content_source: str, content: str,
                       paper: dict, citation_ctxs: List[str]) -> str:
-        cc_block = ""
-        if citation_ctxs:
-            joined = "\n".join(f"  - {c}" for c in citation_ctxs[:4])
-            cc_block = (
-                "- How the submission cites this paper (citation context):\n" + joined + "\n"
-            )
-        return COMPARISON_PROMPT.format(
-            claim_name=claim["name"],
-            claim_text=claim.get("claim_text", ""),
-            claim_description=claim.get("description", ""),
-            citation_context_block=cc_block,
-            cand_title=paper["title"],
-            content_source=content_source,
-            cand_content=content,
+        """The agent's comparison prompt, filled from ONE pass over the whole document.
+
+        The agent picks sections and passes them as `sections`; this baseline passes the
+        paper as a single block, which is precisely the difference under test: same question,
+        same fields, no selection and no second look."""
+        return _fill(
+            _PAPER_COMPARE,
+            claim=_claim_str(claim)[:1200],
+            realization=_segments_to_text(claim.get("realization") or [])[:1600],
+            title=paper["title"],
+            sections=_fmt_sections_full([{"name": content_source, "text": content}]),
         )
 
-    def _verify_and_finalize(self, comp: ClaimPaperComparison, paper: dict,
+    def _verify(self, quote: str, source: str) -> tuple:
+        """(verified, repaired) against the text the model was actually shown."""
+        chk = ev.verify_quote(quote, source, self.min_quote_tokens, self.fuzzy_threshold)
+        return (True, ev.expand_to_sentence(quote, source)) if chk.verified else (False, quote)
+
+    def _verify_and_finalize(self, comp, paper: dict,
                              content_source: str, content: str,
                              submission_text: str) -> dict:
         """Verify BOTH sides of every evidence pair; downgrade unverifiable can_refute.
@@ -327,8 +329,23 @@ class ArtifactABuilder:
                     "fully_verified": v["fully_verified"],
                 }
             )
+        # The narrative of what the paper does about this claim, with its verbatim spans
+        # checked against the same text the model was shown -- the agent verifies its
+        # paper_realization the same way, so the two artifacts carry the same guarantee.
+        realization = []
+        for seg in (getattr(comp, "paper_realization", None) or []):
+            text = (seg.content or "").strip()
+            if not text:
+                continue
+            if (seg.kind or "text").lower() == "quote":
+                ok, repaired = self._verify(text, content)
+                realization.append({"kind": "quote", "verified": True, "content": repaired} if ok
+                                   else {"kind": "text", "verified": False, "content": text})
+            else:
+                realization.append({"kind": "text", "content": text})
+
         status = comp.refutation_status
-        note = comp.brief_note
+        note = comp.assessment or ""
         if status == "can_refute" and not any(p["fully_verified"] for p in verified_pairs):
             # Verification-first hard constraint: no verified evidence -> downgrade.
             status = "cannot_refute"
@@ -336,10 +353,16 @@ class ArtifactABuilder:
         return {
             "paper_id": paper["paper_id"],
             "title": paper["title"],
+            "authors": paper.get("authors", "") or "",
+            "year": paper.get("year", "") or "",
             "cited_by_submission": paper["cited_paper"],
             "similarity": round(paper.get("similarity", 0.0), 4),
             "content_source": content_source,
-            "relevance_reason": comp.relevance_reason,
+            "paper_realization": realization,
+            "overlap_degree": (comp.overlap_degree or "").lower(),
+            "what_is_shared": comp.what_is_shared,
+            "submission_delta": comp.submission_delta,
+            "assessment": note,
             "refutation_status": status,
             "evidence_pairs": verified_pairs,
             "brief_note": note,
@@ -358,7 +381,7 @@ class ArtifactABuilder:
             self._build_prompt(claim, contents[i][0], contents[i][1], c, ctxs_per_cand[i])
             for i, c in enumerate(candidates)
         ]
-        chain = self.llm.with_structured_output(ClaimPaperComparison)
+        chain = self.llm.with_structured_output(_SectionComparison)
         results = chain.batch(prompts, config={"max_concurrency": self.max_concurrency})
         return [
             self._verify_and_finalize(r, candidates[i], contents[i][0], contents[i][1],
@@ -397,6 +420,11 @@ class ArtifactABuilder:
         # validated = not rejected (reuse Step 2 semantics)
         claims = [c for c in claims_doc["claims"] if c.get("status") != "rejected"]
 
+        stats = self.prepare_fulltexts(data_dir, submission_id)
+        logger_msg = (f"full text ready for {stats['already_had'] + stats['ok']} pool papers "
+                      f"({stats['ok']} newly parsed, {stats['no_pdf']} without a PDF, "
+                      f"{stats['failed']} failed)")
+        print(logger_msg)
         papers = self.load_related_work(data_dir, submission_id)
         title_to_contexts = self.load_citation_contexts_by_title(data_dir, submission_id)
         submission_text = self.load_submission_text(data_dir, submission_id)
