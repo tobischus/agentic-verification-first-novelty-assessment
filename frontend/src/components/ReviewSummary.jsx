@@ -6,6 +6,14 @@ const DEGREE_LABEL = {
   superficial: 'no overlap', none: 'no overlap',
 }
 
+// Artifact B's per-claim verdict. `uncertain` exists in the schema but the agent never
+// emits it today; it is rendered anyway so an old artifact does not fall through blank.
+const VERDICT = {
+  challenged: { label: 'challenged by prior work', cls: 'low' },
+  not_challenged: { label: 'not challenged in the examined literature', cls: 'mid' },
+  uncertain: { label: 'uncertain', cls: 'mid' },
+}
+
 // The sections that were read in full to back a comparison (blue box) -- same as in
 // the Review tab, so the summary shows exactly which sections a context came from.
 function SectionsBox({ sections }) {
@@ -36,9 +44,8 @@ function fmtAuthors(a, year) {
 export default function ReviewSummary({ submissionId, active }) {
   const [data, setData] = useState(null)
   const [err, setErr] = useState('')
-  const [concl, setConcl] = useState(null)     // { text, generated_at } | { text: null }
-  const [conclBusy, setConclBusy] = useState(false)
-  const [conclErr, setConclErr] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [genErr, setGenErr] = useState('')
 
   const load = useCallback(() => {
     api.reviewSummary(submissionId)
@@ -50,22 +57,23 @@ export default function ReviewSummary({ submissionId, active }) {
           setData({ claims: [], n_claims: 0, n_overlap_papers: 0 }); setErr('')
         } else setErr(msg)
       })
-    api.reviewConclusion(submissionId).then(setConcl).catch(() => {})
   }, [submissionId])
 
   useEffect(() => { load() }, [load])
   // refresh whenever the tab becomes active (e.g. right after finishing the review)
   useEffect(() => { if (active) load() }, [active, load])
 
-  const genConclusion = async () => {
-    setConclBusy(true); setConclErr('')
+  // Builds Artifact B from Artifact A and runs the provenance audit, then reloads so the
+  // whole page reflects one artifact rather than a mix of loaded and just-returned state.
+  const generate = async () => {
+    setBusy(true); setGenErr('')
     try {
-      const d = await api.generateConclusion(submissionId)
-      setConcl(d)
+      await api.generateConclusion(submissionId)
+      load()
     } catch (e) {
-      setConclErr(String(e))
+      setGenErr(String(e))
     } finally {
-      setConclBusy(false)
+      setBusy(false)
     }
   }
 
@@ -73,88 +81,116 @@ export default function ReviewSummary({ submissionId, active }) {
   if (!data) return <div className="panel">Loading summary…</div>
 
   const claims = data.claims || []
+  const ready = !!data.assessment_ready
+  const judge = data.judge
+  const inconsistent = (judge?.deterministic_per_claim || []).filter((c) => !c.consistent).length
+  const unsupported = (judge?.prose_entailment?.unsupported_statements || []).length
+
   return (
     <div className="panel review-summary">
       <div className="review-head">
         <div>
-          <h2>Review Summary</h2>
+          <h2>Novelty Assessment</h2>
           <div className="muted">
-            Overlapping prior work across {data.n_claims} claim{data.n_claims === 1 ? '' : 's'}
-            {' · '}{data.n_overlap_papers} overlap {data.n_overlap_papers === 1 ? 'paper' : 'papers'}
+            {data.n_claims} claim{data.n_claims === 1 ? '' : 's'}
+            {' · '}{data.n_overlap_papers} overlapping {data.n_overlap_papers === 1 ? 'paper' : 'papers'}
+            {ready ? ' · assessment generated' : ' · assessment not generated yet'}
           </div>
         </div>
       </div>
       <p className="muted rv-sub">
-        The most relevant contexts gathered during the claim-level review: for each claim, only the prior
-        work that overlaps the claimed contribution, with the machine-verified comparison. This summarizes
-        the evidence — it does not pass a novelty verdict.
+        The complete output of this review. The assessment is synthesized strictly from the
+        claim-level evidence below — every statement about prior work traces back to a comparison
+        whose quotes were machine-verified on both sides.
       </p>
 
       {claims.length === 0 && (
         <div className="muted">No claims have been reviewed yet. Open the <strong>Review</strong> tab and run the claim-level review first.</div>
       )}
 
-      {claims.map((c) => (
-        <div className="sum-claim" key={c.claim_id}>
-          <div className="sum-claim-head">
-            <span className="sum-claim-tag">{claimLabel(c.claim_id)}</span>
-            <span className="sum-claim-text">{c.claim_text}</span>
-          </div>
-          {c.overlaps.length === 0 ? (
-            <div className="sum-none">No overlapping prior work found for this claim ({c.n_compared} papers compared).</div>
-          ) : (
-            <div className="sum-overlaps">
-              <div className="sum-ov-count">{c.overlaps.length} overlapping paper{c.overlaps.length === 1 ? '' : 's'}</div>
-              {c.overlaps.map((o) => (
-                <div className={'sum-paper' + (o.challenges ? ' challenges' : '')} key={o.paper_id}>
-                  <div className="ev-head">
-                    <span className="ev-title">{o.title}</span>
-                    <span className={'relbadge ' + (o.challenges ? 'low' : 'mid')}>
-                      {DEGREE_LABEL[o.overlap_degree] || o.overlap_degree}
-                    </span>
-                    {o.cited_by_submission && <span className="citedbadge">cited</span>}
-                  </div>
-                  {fmtAuthors(o.authors, o.year) && <div className="ev-authors">{fmtAuthors(o.authors, o.year)}</div>}
-                  {o.assessment
-                    ? <div className="ev-analysis">{o.assessment}</div>
-                    : <>
-                        {o.what_is_shared && <div className="ev-line"><span className="ev-lab">Shared:</span> {o.what_is_shared}</div>}
-                        {o.submission_delta && <div className="ev-line"><span className="ev-lab">Submission adds:</span> {o.submission_delta}</div>}
-                      </>}
-                  <SectionsBox sections={o.sections_used} />
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      ))}
-
       {claims.length > 0 && (
         <div className="sum-conclusion">
-          <div className="rv-h sm"><span className="rv-ic">🧭</span><h4>Overall novelty assessment</h4></div>
-          <p className="muted rv-sub">
-            A concluding synthesis of the evidence above, generated by an LLM strictly from the gathered
-            claim-level comparisons (cited prior work, shared content, and what the submission adds). It is a
-            summary of the evidence, not an editorial decision — read it critically.
-          </p>
-          {concl && concl.text ? (
+          <div className="rv-h sm"><span className="rv-ic">🧭</span><h4>Overall assessment</h4></div>
+          {ready ? (
             <>
-              <p className="conclusion-text">{concl.text}</p>
-              <div className="conclusion-foot">
-                <span className="muted">{concl.generated_at ? `Generated ${concl.generated_at}` : ''}{concl.model ? ` · ${concl.model}` : ''}</span>
-                <button className="link" disabled={conclBusy} onClick={genConclusion}>
-                  {conclBusy ? 'Regenerating…' : '↻ regenerate'}
-                </button>
-              </div>
+              <p className="conclusion-text">{data.overall_assessment}</p>
+              {judge && (
+                <div className="conclusion-foot">
+                  <span className="muted">
+                    {inconsistent === 0 && unsupported === 0
+                      ? '✓ Provenance audit passed — every statement traces back to the evidence'
+                      : [inconsistent > 0 && `⚠ ${inconsistent} claim${inconsistent === 1 ? '' : 's'} inconsistent with the evidence`,
+                         unsupported > 0 && `${unsupported} unsupported statement${unsupported === 1 ? '' : 's'}`]
+                          .filter(Boolean).join(' · ')}
+                  </span>
+                  <button className="link" disabled={busy} onClick={generate}>
+                    {busy ? 'Regenerating…' : '↻ regenerate'}
+                  </button>
+                </div>
+              )}
             </>
           ) : (
-            <button className="begin sm" disabled={conclBusy} onClick={genConclusion}>
-              {conclBusy ? 'Writing the overall assessment…' : '✨ Generate overall assessment'}
-            </button>
+            <>
+              <p className="muted rv-sub">
+                Not generated yet. This is the last step of the review and the output that gets
+                compared against other systems.
+              </p>
+              <button className="begin sm" disabled={busy} onClick={generate}>
+                {busy ? 'Writing the assessment…' : '✨ Generate assessment'}
+              </button>
+            </>
           )}
-          {conclErr && <div className="error">{conclErr}</div>}
+          {genErr && <div className="error">{genErr}</div>}
         </div>
       )}
+
+      {claims.map((c) => {
+        const v = VERDICT[c.verdict] || null
+        return (
+          <div className="sum-claim" key={c.claim_id}>
+            <div className="sum-claim-head">
+              <span className="sum-claim-tag">{claimLabel(c.claim_id)}</span>
+              <span className="sum-claim-text">{c.claim_text}</span>
+            </div>
+
+            {v && (
+              <div className="sum-verdict">
+                <span className={'relbadge ' + v.cls}>{v.label}</span>
+                {c.rationale && <p className="sum-rationale">{c.rationale}</p>}
+              </div>
+            )}
+
+            {c.overlaps.length === 0 ? (
+              <div className="sum-none">No overlapping prior work found for this claim ({c.n_compared} papers compared).</div>
+            ) : (
+              <div className="sum-overlaps">
+                <div className="sum-ov-count">
+                  Evidence: {c.overlaps.length} overlapping paper{c.overlaps.length === 1 ? '' : 's'} of {c.n_compared} compared
+                </div>
+                {c.overlaps.map((o) => (
+                  <div className={'sum-paper' + (o.challenges ? ' challenges' : '')} key={o.paper_id}>
+                    <div className="ev-head">
+                      <span className="ev-title">{o.title}</span>
+                      <span className={'relbadge ' + (o.challenges ? 'low' : 'mid')}>
+                        {DEGREE_LABEL[o.overlap_degree] || o.overlap_degree}
+                      </span>
+                      {o.cited_by_submission && <span className="citedbadge">cited</span>}
+                    </div>
+                    {fmtAuthors(o.authors, o.year) && <div className="ev-authors">{fmtAuthors(o.authors, o.year)}</div>}
+                    {o.assessment
+                      ? <div className="ev-analysis">{o.assessment}</div>
+                      : <>
+                          {o.what_is_shared && <div className="ev-line"><span className="ev-lab">Shared:</span> {o.what_is_shared}</div>}
+                          {o.submission_delta && <div className="ev-line"><span className="ev-lab">Submission adds:</span> {o.submission_delta}</div>}
+                        </>}
+                    <SectionsBox sections={o.sections_used} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }

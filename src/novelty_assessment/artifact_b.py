@@ -100,8 +100,12 @@ class ArtifactBBuilder:
                         f"compared against: {src}; overlap: {c.get('overlap_degree', '?')})"
                     )
                     for ep in c["evidence_pairs"]:
-                        # only surface pairs verified on BOTH sides (claim + prior work)
-                        if ep.get("paper_quote_verified") and ep.get("claim_quote_verified", True):
+                        # Only pairs verified on BOTH sides (claim + prior work). The claim
+                        # side defaults to FALSE when the field is absent: artifacts written
+                        # before artifact_a checked the claim side carry no such flag, and
+                        # treating that as verified would let an unchecked quote reach the
+                        # synthesis -- exactly where the evidence invariant must hold.
+                        if ep.get("paper_quote_verified") and ep.get("claim_quote_verified"):
                             lines.append(f'    - submission says: "{ep["claim_quote"][:240]}"')
                             lines.append(f'      prior work says: "{ep["paper_quote"][:240]}"')
                     if c.get("what_is_shared"):

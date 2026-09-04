@@ -902,12 +902,26 @@ def review_summary(sid: str):
             "n_compared": len(comps),
             "overlaps": overlaps,
         })
+    # Artifact B is the deliverable: the per-claim verdicts and the overall assessment that
+    # go into the battle. Merge them in here so this one endpoint returns the complete
+    # output rather than only the evidence it was derived from.
+    b = _load_json(sub / f"{sid}_artifact_b.json") or {}
+    b_by = {v.get("claim_id"): v for v in b.get("per_claim", [])}
+    for oc in out_claims:
+        v = b_by.get(oc["claim_id"]) or {}
+        oc["verdict"] = v.get("verdict")
+        oc["rationale"] = v.get("rationale", "")
+        oc["challenging_papers"] = v.get("challenging_papers", [])
+
     return {
         "submission_id": sid, "title": claims_doc.get("title", ""),
         "n_claims": len(out_claims),
         # DISTINCT overlapping papers -- a paper that overlaps several claims counts once
         "n_overlap_papers": len(distinct_overlap),
         "claims": out_claims,
+        "overall_assessment": b.get("overall_assessment", ""),
+        "judge": _load_json(sub / f"{sid}_judge.json"),
+        "assessment_ready": bool(b.get("overall_assessment")),
     }
 
 
