@@ -92,6 +92,18 @@ class ClaimPaperComparison(BaseModel):
     brief_note: str = Field(description="1-2 sentence explanation of the judgment")
 
 
+def variant_path(sub_dir: Path, submission_id: str, kind: str, variant: str = "") -> Path:
+    """{id}_{kind}.json, or {id}_{kind}_{variant}.json when a variant is named.
+
+    The agent and the linear baseline are two systems producing the same kind of artifact
+    for the same submission. Without a variant they write to the same file, so running one
+    silently destroys the other's result -- which is fatal for the RQ1 ablation, where both
+    have to sit side by side and be compared.
+    """
+    tail = f"_{variant}" if variant else ""
+    return sub_dir / f"{submission_id}_{kind}{tail}.json"
+
+
 class ArtifactABuilder:
     """Builds Artifact A: per-claim evidence-based comparisons against prior work."""
 
@@ -379,7 +391,7 @@ class ArtifactABuilder:
             "comparisons": comparisons,
         }
 
-    def build(self, data_dir: str, submission_id: str) -> dict:
+    def build(self, data_dir: str, submission_id: str, variant: str = "") -> dict:
         sub_dir = Path(data_dir) / submission_id
         claims_doc = json.loads((sub_dir / f"{submission_id}_claims.json").read_text(encoding="utf-8"))
         # validated = not rejected (reuse Step 2 semantics)
@@ -412,7 +424,7 @@ class ArtifactABuilder:
             "n_related_pool": len(papers),
             "claims": entries,
         }
-        out_path = sub_dir / f"{submission_id}_artifact_a.json"
+        out_path = variant_path(sub_dir, submission_id, "artifact_a", variant)
         out_path.write_text(json.dumps(artifact, ensure_ascii=False, indent=2), encoding="utf-8")
         return artifact
 
@@ -423,10 +435,12 @@ def main():
     ap.add_argument("--submission-id", required=True)
     ap.add_argument("--model", default="gpt-4.1")
     ap.add_argument("--k", type=int, default=10, help="candidates compared per claim")
+    ap.add_argument("--variant", default="", help="write {id}_artifact_a_{variant}.json instead, "
+                                                 "so a run does not overwrite another system's")
     args = ap.parse_args()
 
     builder = ArtifactABuilder(model_name=args.model, k_per_claim=args.k)
-    art = builder.build(args.data_dir, args.submission_id)
+    art = builder.build(args.data_dir, args.submission_id, variant=args.variant)
 
     ft = sum(1 for e in art["claims"] for c in e["comparisons"] if c["content_source"].startswith("full"))
     tot = sum(len(e["comparisons"]) for e in art["claims"])

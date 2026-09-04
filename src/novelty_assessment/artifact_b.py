@@ -159,9 +159,11 @@ class ArtifactBBuilder:
                  "verdict": "uncertain", "rationale": "", "challenging_papers": []}
         return v
 
-    def build(self, data_dir: str, submission_id: str) -> dict:
+    def build(self, data_dir: str, submission_id: str, variant: str = "") -> dict:
         sub_dir = Path(data_dir) / submission_id
-        artifact_a = json.loads((sub_dir / f"{submission_id}_artifact_a.json").read_text(encoding="utf-8"))
+        from artifact_a import variant_path
+        artifact_a = json.loads(
+            variant_path(sub_dir, submission_id, "artifact_a", variant).read_text(encoding="utf-8"))
 
         evidence = self._format_evidence(artifact_a)
         prompt = ARTIFACT_B_PROMPT.format(evidence=evidence)
@@ -170,14 +172,14 @@ class ArtifactBBuilder:
         per_claim = [v.model_dump() for v in result.per_claim]
         artifact_b = {
             "submission_id": submission_id,
-            "generated_from": f"{submission_id}_artifact_a.json",
+            "generated_from": variant_path(sub_dir, submission_id, "artifact_a", variant).name,
             "per_claim": per_claim,
             "overall_assessment": result.overall_assessment,
         }
-        (sub_dir / f"{submission_id}_artifact_b.json").write_text(
+        variant_path(sub_dir, submission_id, "artifact_b", variant).write_text(
             json.dumps(artifact_b, ensure_ascii=False, indent=2), encoding="utf-8"
         )
-        (sub_dir / f"{submission_id}_assessment.txt").write_text(
+        (sub_dir / f"{submission_id}_assessment{('_' + variant) if variant else ''}.txt").write_text(
             result.overall_assessment, encoding="utf-8"
         )
         return artifact_b
@@ -188,9 +190,11 @@ def main():
     ap.add_argument("--data-dir", required=True)
     ap.add_argument("--submission-id", required=True)
     ap.add_argument("--model", default="gpt-4.1")
+    ap.add_argument("--variant", default="", help="read/write the {variant}-suffixed artifacts")
     args = ap.parse_args()
 
-    b = ArtifactBBuilder(model_name=args.model).build(args.data_dir, args.submission_id)
+    b = ArtifactBBuilder(model_name=args.model).build(args.data_dir, args.submission_id,
+                                                       variant=args.variant)
     print("Per-claim verdicts:")
     for v in b["per_claim"]:
         cp = f" -> {', '.join(v['challenging_papers'])}" if v["challenging_papers"] else ""

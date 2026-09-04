@@ -126,12 +126,13 @@ def _segments(segs, out: List[str]) -> None:
         out.append("")
 
 
-def build(data_dir: str, submission_id: str) -> str:
+def build(data_dir: str, submission_id: str, variant: str = "") -> str:
     sub = Path(data_dir) / submission_id
-    a = _load(sub / f"{submission_id}_artifact_a.json")
+    tail = f"_{variant}" if variant else ""
+    a = _load(sub / f"{submission_id}_artifact_a{tail}.json")
     if a is None:
-        raise FileNotFoundError(f"{submission_id}_artifact_a.json not found")
-    b = _load(sub / f"{submission_id}_artifact_b.json") or {}
+        raise FileNotFoundError(f"{submission_id}_artifact_a{tail}.json not found")
+    b = _load(sub / f"{submission_id}_artifact_b{tail}.json") or {}
     meta = _load(sub / f"{submission_id}.json") or {}
     claims_doc = _load(sub / f"{submission_id}_claims.json") or {"claims": []}
     ranked = _load(sub / "related_work_data" / "ranked_papers.json") or []
@@ -258,8 +259,9 @@ def main():
     ap.add_argument("--data-dir", required=True)
     ap.add_argument("--submission-id", required=True)
     ap.add_argument("--out", default=None, help="write here instead of stdout")
+    ap.add_argument("--variant", default="", help="export the {variant}-suffixed artifacts")
     args = ap.parse_args()
-    text = build(args.data_dir, args.submission_id)
+    text = build(args.data_dir, args.submission_id, variant=args.variant)
     if args.out:
         p = Path(args.out)
         p.parent.mkdir(parents=True, exist_ok=True)

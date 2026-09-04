@@ -129,10 +129,13 @@ class Judge:
         r = self.llm.with_structured_output(EntailmentVerdict).invoke(prompt)
         return r.model_dump()
 
-    def judge(self, data_dir: str, submission_id: str) -> dict:
+    def judge(self, data_dir: str, submission_id: str, variant: str = "") -> dict:
         sub_dir = Path(data_dir) / submission_id
-        artifact_a = json.loads((sub_dir / f"{submission_id}_artifact_a.json").read_text(encoding="utf-8"))
-        artifact_b = json.loads((sub_dir / f"{submission_id}_artifact_b.json").read_text(encoding="utf-8"))
+        from artifact_a import variant_path
+        artifact_a = json.loads(
+            variant_path(sub_dir, submission_id, "artifact_a", variant).read_text(encoding="utf-8"))
+        artifact_b = json.loads(
+            variant_path(sub_dir, submission_id, "artifact_b", variant).read_text(encoding="utf-8"))
 
         checks, det_issues = self._deterministic_checks(artifact_a, artifact_b)
         entailment = self._llm_entailment(artifact_a, artifact_b)
@@ -144,7 +147,7 @@ class Judge:
             "deterministic_issues": det_issues,
             "prose_entailment": entailment,
         }
-        (sub_dir / f"{submission_id}_judge.json").write_text(
+        variant_path(sub_dir, submission_id, "judge", variant).write_text(
             json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
         )
         return report
@@ -155,9 +158,11 @@ def main():
     ap.add_argument("--data-dir", required=True)
     ap.add_argument("--submission-id", required=True)
     ap.add_argument("--model", default="gpt-4.1")
+    ap.add_argument("--variant", default="", help="audit the {variant}-suffixed artifacts")
     args = ap.parse_args()
 
-    r = Judge(model_name=args.model).judge(args.data_dir, args.submission_id)
+    r = Judge(model_name=args.model).judge(args.data_dir, args.submission_id,
+                                          variant=args.variant)
     print(f"follows_from_a: {r['follows_from_a']}\n")
     print("Deterministic per-claim consistency:")
     for c in r["deterministic_per_claim"]:
