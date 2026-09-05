@@ -33,6 +33,7 @@ from pydantic import BaseModel
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from orchestrator import NoveltyPipeline
 import claim_extraction as ce
+import verdict as vd
 
 DATA_DIR = os.getenv("NOVELTY_DATA_DIR", "data")
 
@@ -520,7 +521,7 @@ def _assemble_claim(entry, meta):
                 "relevance": sim, "band": _relevance_band(sim),
                 "provenance": p.get("source"), "cited_by_submission": p.get("cited_by_submission", False),
                 "examined": bool(p.get("examined")), "compared": bool(p.get("compared")),
-                "challenges": c.get("refutation_status") == "can_refute",
+                "challenges": vd.challenges(c),
                 "overlap_degree": c.get("overlap_degree"),
                 "note": c.get("relevance_reason") or c.get("brief_note", ""),
                 "source": _source_label(c.get("content_source")) if c
@@ -537,7 +538,7 @@ def _assemble_claim(entry, meta):
                 "authors": m.get("authors", ""), "year": m.get("year", ""), "venue": m.get("venue", ""),
                 "relevance": sim, "band": _relevance_band(sim), "provenance": p.get("source"),
                 "examined": True, "compared": bool(p.get("has_comparison")),
-                "challenges": c.get("refutation_status") == "can_refute",
+                "challenges": vd.challenges(c),
                 "overlap_degree": c.get("overlap_degree"),
                 "note": c.get("relevance_reason") or c.get("brief_note", ""),
                 "source": _source_label(c.get("content_source")),
@@ -550,7 +551,7 @@ def _assemble_claim(entry, meta):
                 "paper_id": c.get("paper_id"), "title": c.get("title"),
                 "authors": m.get("authors", ""), "year": m.get("year", ""), "venue": m.get("venue", ""),
                 "relevance": sim, "band": _relevance_band(sim), "examined": True, "compared": True,
-                "challenges": c.get("refutation_status") == "can_refute",
+                "challenges": vd.challenges(c),
                 "overlap_degree": c.get("overlap_degree"),
                 "note": c.get("relevance_reason") or c.get("brief_note", ""),
                 "source": _source_label(c.get("content_source")),
@@ -568,7 +569,7 @@ def _assemble_claim(entry, meta):
             # claims computed before authors were stored on the comparison itself)
             "authors": c.get("authors") or _m.get("authors", ""),
             "year": c.get("year") or _m.get("year", ""),
-            "challenges": c.get("refutation_status") == "can_refute",
+            "challenges": vd.challenges(c),
             "status": c.get("refutation_status"), "analysis": c.get("brief_note", ""),
             "source": _source_label(c.get("content_source")),
             "depth": c.get("depth"),
@@ -578,6 +579,11 @@ def _assemble_claim(entry, meta):
             # attempted, e.g. an abstract-only triage comparison)
             "fulltext_fetch_status": c.get("fulltext_fetch_status"),
             "overlap_degree": c.get("overlap_degree"),
+            # The overlap decision and its ordering are made once, in verdict.py, and sent
+            # to the UI -- rather than restated in JavaScript, where nothing keeps the two
+            # copies in step.
+            "is_overlap": vd.is_overlap(c),
+            "overlap_rank": vd.degree_rank(vd.degree(c)),
             "overlap_dimensions": c.get("overlap_dimensions", []),
             "what_is_shared": c.get("what_is_shared", ""),
             "submission_delta": c.get("submission_delta", ""),
@@ -848,11 +854,6 @@ def claim_trajectory(sid: str, claim_id: str):
     }
 
 
-# Overlap degrees that count as "the prior work delivers (part of) the same contribution".
-_OVERLAP_DEGREES = ("same", "substantial", "partial")
-_DEGREE_RANK = {"same": 0, "substantial": 1, "partial": 2}
-
-
 @app.get("/submissions/{sid}/review/summary")
 def review_summary(sid: str):
     """Cross-claim summary of the evidence-based review: for every computed claim, the
@@ -876,9 +877,9 @@ def review_summary(sid: str):
         comps = e.get("comparisons", []) or []
         overlaps = []
         for c in comps:
-            deg = (c.get("overlap_degree") or "").lower()
-            challenges = c.get("refutation_status") == "can_refute"
-            if not (challenges or deg in _OVERLAP_DEGREES):
+            deg = vd.degree(c)
+            challenges = vd.challenges(c)
+            if not vd.is_overlap(c):
                 continue
             _m = meta.get(c.get("paper_id"), {})
             distinct_overlap.add(c.get("paper_id"))
@@ -894,7 +895,7 @@ def review_summary(sid: str):
                 "sections_used": c.get("sections_used", []),
                 "cited_by_submission": c.get("cited_by_submission", False),
             })
-        overlaps.sort(key=lambda o: (not o["challenges"], _DEGREE_RANK.get(o["overlap_degree"], 9)))
+        overlaps.sort(key=lambda o: (not o["challenges"], vd.degree_rank(o["overlap_degree"])))
         out_claims.append({
             "claim_id": cid,
             "claim_text": e.get("claim_text") or e.get("claim_name", ""),

@@ -30,23 +30,10 @@ import re
 from pathlib import Path
 from typing import List
 
+import verdict as vd
+
 _ORDINALS = ["First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh",
              "Eighth", "Ninth", "Tenth"]
-
-_DEGREE_LABEL = {
-    "same": "same contribution", "substantial": "substantial overlap",
-    "partial": "partial overlap", "superficial": "no overlap", "none": "no overlap",
-}
-_VERDICT_LABEL = {
-    "challenged": "challenged by prior work",
-    "not_challenged": "not challenged in the examined literature",
-    "uncertain": "uncertain",
-}
-# Which prior work counts as overlapping a claim -- the same rule the review UI and
-# artifact_b use, so all three show the same set of papers.
-_OVERLAP_DEGREES = ("same", "substantial", "partial")
-# Lower is stronger; used to pick a paper's best overlap across claims and to order the list.
-_DEGREE_RANK = {"same": 0, "substantial": 1, "partial": 2, "superficial": 3, "none": 4}
 
 _LQ, _RQ = "“", "”"          # “ ”
 _QUOTE_NOTE = (
@@ -210,14 +197,14 @@ def build(data_dir: str, submission_id: str, variant: str = "") -> str:
         for c in (a_by.get(cid) or {}).get("comparisons", []) or []:
             pid = c.get("paper_id")
             pm = pool.get(pid, {})
-            deg = (c.get("overlap_degree") or "").lower()
-            rank = _DEGREE_RANK.get(deg, 9)
+            deg = vd.degree(c)
+            rank = vd.degree_rank(deg)
             prev = strongest.get(pid)
             if prev is None or rank < prev[0]:
                 strongest[pid] = (rank, c.get("title", ""),
                                   _cite(c.get("authors") or pm.get("authors", ""),
                                         c.get("year") or pm.get("year")),
-                                  _DEGREE_LABEL.get(deg, deg) if deg in _OVERLAP_DEGREES else "")
+                                  vd.overlap_label(deg))
     related = [(t, cite, deg) for _, t, cite, deg in strongest.values()]
     if related:
         out += ["## Related work examined", "",
@@ -243,7 +230,7 @@ def build(data_dir: str, submission_id: str, variant: str = "") -> str:
         n += 1
 
         if v.get("verdict"):
-            out += [f"**Verdict:** {_VERDICT_LABEL.get(v['verdict'], v['verdict'])}", ""]
+            out += [f"**Verdict:** {vd.verdict_label(v['verdict'])}", ""]
         if v.get("rationale"):
             out += [v["rationale"].strip(), ""]
 
@@ -252,9 +239,7 @@ def build(data_dir: str, submission_id: str, variant: str = "") -> str:
             out += ["#### What the submission does for this claim", ""]
             _segments(real, out)
 
-        overlaps = [c for c in (e.get("comparisons") or [])
-                    if c.get("refutation_status") == "can_refute"
-                    or (c.get("overlap_degree") or "").lower() in _OVERLAP_DEGREES]
+        overlaps = vd.overlapping(e.get("comparisons"))
         if not overlaps:
             out += ["#### Overlapping prior work", "",
                     f"None found among the {len(e.get('comparisons') or [])} papers compared.", ""]
@@ -264,8 +249,8 @@ def build(data_dir: str, submission_id: str, variant: str = "") -> str:
         for c in overlaps:
             pm = pool.get(c.get("paper_id"), {})
             out.append(f"##### {c.get('title', '')}")
-            deg = (c.get("overlap_degree") or "").lower()
-            head = [_DEGREE_LABEL.get(deg, deg)] if deg else []
+            deg = vd.degree(c)
+            head = [vd.degree_label(deg)] if deg else []
             cite = _cite(c.get("authors") or pm.get("authors", ""), c.get("year") or pm.get("year"))
             if cite:
                 head.append(cite)

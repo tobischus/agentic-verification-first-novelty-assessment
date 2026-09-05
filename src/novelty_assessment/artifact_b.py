@@ -23,6 +23,8 @@ from pydantic import BaseModel, Field
 from langchain_openai import ChatOpenAI
 from dotenv import load_dotenv
 
+import verdict as vd
+
 load_dotenv()
 
 
@@ -72,11 +74,6 @@ class ArtifactB(BaseModel):
     overall_assessment: str = Field(description="Reviewer-facing prose, grounded only in the evidence")
 
 
-# Overlap degrees that count as "this prior work overlaps the claim". Kept identical to
-# api.review_summary so the evidence the synthesis reads is the evidence the reader sees.
-_OVERLAP_DEGREES = ("same", "substantial", "partial")
-
-
 class ArtifactBBuilder:
     def __init__(self, model_name: str = "gpt-4.1", temperature: float = 0.0):
         api_key = os.getenv("OPENAI_API_KEY")
@@ -92,8 +89,8 @@ class ArtifactBBuilder:
             lines.append(f'Claimed contribution (verbatim): "{e["claim_text"]}"')
             lines.append(f"Prior-work papers examined for this claim: {e['candidates_examined']}")
             comps = e["comparisons"]
-            refuters = [c for c in comps if c["refutation_status"] == "can_refute"]
-            others = [c for c in comps if c["refutation_status"] != "can_refute"]
+            refuters = [c for c in comps if vd.challenges(c)]
+            others = [c for c in comps if not vd.challenges(c)]
 
             if refuters:
                 lines.append("CHALLENGING PRIOR WORK (verified overlap):")
@@ -129,8 +126,7 @@ class ArtifactBBuilder:
             # the reader could not see while skipping ones they could. The overlap rule here is
             # deliberately the same one api.review_summary renders with.
             if others:
-                overlapping = [c for c in others
-                               if (c.get("overlap_degree") or "").lower() in _OVERLAP_DEGREES]
+                overlapping = [c for c in others if vd.is_overlap(c)]
                 rest = sorted((c for c in others if c not in overlapping),
                               key=lambda c: c.get("similarity", 0.0), reverse=True)[:3]
                 top_others = sorted(overlapping, key=lambda c: c.get("similarity", 0.0),
