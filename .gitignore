@@ -162,3 +162,6 @@ emnlp_23_sen*.csv
 /DeepReviewer-v2/
 /OpenNovelty/
 /Beyond Not Novel Enough Code/
+
+# render snapshots taken around behaviour-preserving refactors (eval/render_snapshot.py)
+/.snapshots/

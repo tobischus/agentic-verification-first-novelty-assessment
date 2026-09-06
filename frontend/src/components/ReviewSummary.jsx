@@ -1,18 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api'
+import { DEGREE_LABEL, VERDICT } from '../verdict'
 
-const DEGREE_LABEL = {
-  same: 'same contribution', substantial: 'substantial overlap', partial: 'partial overlap',
-  superficial: 'no overlap', none: 'no overlap',
-}
-
-// Artifact B's per-claim verdict. `uncertain` exists in the schema but the agent never
-// emits it today; it is rendered anyway so an old artifact does not fall through blank.
-const VERDICT = {
-  challenged: { label: 'challenged by prior work', cls: 'low' },
-  not_challenged: { label: 'not challenged in the examined literature', cls: 'mid' },
-  uncertain: { label: 'uncertain', cls: 'mid' },
-}
 
 
 const claimLabel = (id) => (/^claim_\d+$/.test(id || '') ? id.replace('claim_', 'Claim ') : id)

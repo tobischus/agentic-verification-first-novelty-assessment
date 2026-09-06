@@ -3,6 +3,7 @@ import { api } from '../api'
 import PipelineCostBadge from './PipelineCostBadge.jsx'
 import SplitView from '../pdf/SplitView.jsx'
 import PdfViewer, { colorFor } from '../pdf/PdfViewer.jsx'
+import { DEGREE_LABEL } from '../verdict'
 
 // icon per agent tool action, for the live trajectory
 const ACTION_ICON = {
@@ -13,11 +14,6 @@ const ACTION_ICON = {
 }
 const usd = (v) => '$' + (Number(v || 0)).toFixed(4)
 
-const DEGREE_LABEL = {
-  same: 'same contribution', substantial: 'substantial overlap', partial: 'partial overlap',
-  superficial: 'no overlap', none: 'no overlap',
-}
-const OVERLAP_DEGREES = ['same', 'substantial', 'partial']
 
 // "Haoyu Han, Harry Shomer, ..." (+ year) -> "Han et al. · 2025"
 function fmtAuthors(a, year) {
@@ -325,12 +321,13 @@ export default function ReviewWalkthrough({ submissionId, onFinish }) {
   const claimPage = () => {
     const verify = data.verify || []
 
-    // overlap grouping: papers whose contribution overlaps the claim come first, worst first
-    const DEG_RANK = { same: 0, substantial: 1, partial: 2, superficial: 3, none: 4 }
-    const isOverlap = (v) => v.challenges || OVERLAP_DEGREES.includes(v.overlap_degree)
+    // overlap grouping: papers whose contribution overlaps the claim come first, worst
+    // first. Both the predicate and the ordering are decided by the backend (verdict.py)
+    // and arrive as `is_overlap` / `overlap_rank`.
+    const isOverlap = (v) => v.is_overlap === true
     const bySeverity = (a, b) =>
       (b.challenges === true) - (a.challenges === true) ||
-      (DEG_RANK[a.overlap_degree] ?? 5) - (DEG_RANK[b.overlap_degree] ?? 5)
+      (a.overlap_rank ?? 9) - (b.overlap_rank ?? 9)
     const evOverlap = verify.filter(isOverlap).sort(bySeverity)
     const evDistinct = verify.filter((v) => !isOverlap(v))
 
