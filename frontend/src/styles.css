@@ -17,6 +17,12 @@ body {
   color: var(--ink);
 }
 .app { max-width: 1080px; margin: 0 auto; padding: 18px 22px 64px; }
+/* A tab showing a document beside the assessment gets the whole window: 1080px is a
+   reading measure for ONE column, and splitting it in two leaves neither the prose nor
+   the page wide enough to read. Scoped to the visible tab -- the others stay mounted but
+   hidden -- so the single-column tabs keep their measure. Browsers without :has() simply
+   keep today's width. */
+.app:has(.tabpane:not([hidden]) .splitview) { max-width: 1760px; padding-left: 14px; padding-right: 14px; }
 h2 { font-size: 17px; margin: 0 0 10px; }
 
 /* ---------- header: title (left) + 4-step stepper (right) ---------- */
@@ -593,7 +599,7 @@ button.begin.sm { padding: 8px 14px; font-size: 13.5px; }
 
 .splitview { display: flex; align-items: stretch; gap: 0; width: 100%; }
 .splitview.dragging { user-select: none; cursor: col-resize; }
-.split-left { min-width: 0; overflow: auto; max-height: calc(100vh - 190px); }
+.split-left { min-width: 0; overflow: auto; max-height: calc(100vh - 148px); }
 .split-right { min-width: 0; display: flex; }
 .split-handle {
   flex: 0 0 10px; cursor: col-resize; position: relative;
@@ -609,7 +615,7 @@ button.begin.sm { padding: 8px 14px; font-size: 13.5px; }
 .pdfpane {
   display: flex; flex-direction: column; flex: 1; min-width: 0;
   border: 1px solid #e2e4e8; border-radius: 8px; background: #f6f7f9;
-  max-height: calc(100vh - 190px);
+  max-height: calc(100vh - 148px);
 }
 .pdfpane.empty {
   align-items: center; justify-content: center; color: #6b7280;
@@ -623,7 +629,7 @@ button.begin.sm { padding: 8px 14px; font-size: 13.5px; }
 .pdfzoom { font-variant-numeric: tabular-nums; font-size: 12px; color: #4b5563; min-width: 42px; text-align: center; }
 .pdfhits { font-size: 12px; }
 .pdfopen { margin-left: auto; }
-.pdfscroll { overflow: auto; padding: 12px; flex: 1 1 auto; position: relative; }
+.pdfscroll { overflow: auto; padding: 8px; flex: 1 1 auto; position: relative; }
 /* Shrink-to-fit so the pages centre while they fit and still scroll when they do not --
    `margin: auto` alone cannot centre content wider than its scroll container, which made
    an unzoomed page look permanently off to one side. */

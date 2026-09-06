@@ -102,16 +102,31 @@ export default function PdfViewer({ url, highlights = [], focusId = null, onLoca
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [located, highlights.length])
 
-  // Open at a width that fits, rather than at a fixed 120% that leaves a wide paper
-  // hanging off the right edge -- where `margin: auto` cannot centre it, so the page looks
-  // shifted until the reviewer zooms out by hand.
+  // Keep the page as wide as the pane allows, rather than at a fixed 120% that leaves a
+  // wide paper hanging off the right edge -- where `margin: auto` cannot centre it, so the
+  // page looks shifted until the reviewer zooms out by hand.
+  //
+  // Tracked rather than set once, because the pane's width is something the reviewer
+  // changes constantly: dragging the divider to see more of the document should show more
+  // of the document, not the same small page with more grey around it. An explicit zoom
+  // ends the tracking -- past that point the scale is the reviewer's choice, not ours.
   useEffect(() => {
-    if (!pages.length || userZoomed.current) return
-    const avail = (paneRef.current?.clientWidth || 0) - 34   // padding + scrollbar
-    const w = pages[0].viewportAt1.width
-    if (avail > 100 && w > 0) {
-      setScale(Math.min(2, Math.max(0.4, Math.round((avail / w) * 100) / 100)))
+    const pane = paneRef.current
+    if (!pages.length || !pane) return
+    const fit = () => {
+      if (userZoomed.current) return
+      const avail = pane.clientWidth - 26          // the scroll container's padding
+      const w = pages[0].viewportAt1.width
+      // clientWidth excludes the inner scrollbar, so refitting cannot feed back into
+      // itself through a scrollbar appearing and disappearing
+      if (avail > 100 && w > 0) {
+        setScale(Math.min(2.5, Math.max(0.4, Math.round((avail / w) * 100) / 100)))
+      }
     }
+    fit()
+    const ro = new ResizeObserver(fit)
+    ro.observe(pane)
+    return () => ro.disconnect()
   }, [pages])
 
   const zoom = (d) => {
