@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 import PipelineCostBadge from './PipelineCostBadge.jsx'
+import SplitView from '../pdf/SplitView.jsx'
+import PdfViewer from '../pdf/PdfViewer.jsx'
 
 // Map long Semantic Scholar venue names to short, readable abbreviations.
 const VENUE_ABBR = [
@@ -52,6 +54,7 @@ export default function PapersReview({ submissionId, status, onApproved }) {
   const [dragOver, setDragOver] = useState(false)
   const [pdfBusy, setPdfBusy] = useState(new Set())   // paper_ids currently uploading a PDF
   const [pdfErr, setPdfErr] = useState({})            // paper_id -> error message
+  const [selected, setSelected] = useState(null)      // paper shown in the right-hand pane
 
   // This component mounts as soon as retrieval is done (tab becomes available) --
   // which is BEFORE the fetch_pdfs stage has finished downloading the PDFs. A single
@@ -115,11 +118,17 @@ export default function PapersReview({ submissionId, status, onApproved }) {
     const url = s2Url(p.paper_id)
     const meta = [fmtAuthors(p.authors), p.year, abbrevVenue(p.venue)].filter(Boolean).join(' · ')
     return (
-      <li key={p.paper_id} className={'pcard' + (removed ? ' removed' : '')}>
+      <li key={p.paper_id}
+          className={'pcard' + (removed ? ' removed' : '')
+            + (selected === p.paper_id ? ' selected' : '')}>
         <input className="pkeep" type="checkbox" checked={!removed}
           onChange={() => toggle(p.paper_id, setRemove)} />
         <div className="pbody">
-          <div className="ptitle-row">
+          <div
+            className={'ptitle-row' + (p.pdf_available ? ' paper-open' : '')}
+            title={p.pdf_available ? 'Show this PDF beside the list' : undefined}
+            onClick={() => p.pdf_available && setSelected(p.paper_id)}
+          >
             <span className="ptitle">{p.title}</span>
             {p.cited_paper && <span className="badge">cited</span>}
             {p.added_by && <span className="badge added">added</span>}
@@ -134,7 +143,7 @@ export default function PapersReview({ submissionId, status, onApproved }) {
               <label className="link pdf-upload-btn">
                 {pdfBusy.has(p.paper_id) ? 'Uploading…' : '⬆ upload PDF for this paper'}
                 <input type="file" accept="application/pdf" hidden disabled={pdfBusy.has(p.paper_id)}
-                  onChange={(e) => uploadPdf(p.paper_id, e.target.files[0])} />
+                  onChange={(e) => { uploadPdf(p.paper_id, e.target.files[0]); setSelected(p.paper_id) }} />
               </label>
               {pdfErr[p.paper_id] && <span className="pdf-upload-err">{pdfErr[p.paper_id]}</span>}
             </div>
@@ -181,7 +190,10 @@ export default function PapersReview({ submissionId, status, onApproved }) {
 
   const nNoPdf = papers.filter((p) => !p.pdf_available).length
 
-  return (
+  const chosen = papers.find((x) => x.paper_id === selected)
+  const withPdf = papers.filter((x) => x.pdf_available)
+
+  const panel = (
     <div className="panel checkpoint">
       <div className="paper-head-row">
         <h2>Related work — {papers.length - remove.size}/{papers.length} kept</h2>
@@ -246,4 +258,27 @@ export default function PapersReview({ submissionId, status, onApproved }) {
       {err && <div className="error">{err}</div>}
     </div>
   )
+
+  // The PDFs arrive in the background during fetch_pdfs, so this pane fills up while the
+  // reviewer works through the list; a paper added by hand is served from the same place
+  // and opens the same way.
+  const viewer = (
+    <div className="pdfpane">
+      <div className="pdfpicker">
+        <select value={selected || ''} onChange={(e) => setSelected(e.target.value || null)}>
+          <option value="">
+            {withPdf.length ? `Select a paper to read (${withPdf.length} with a PDF)` : 'No PDFs downloaded yet'}
+          </option>
+          {withPdf.map((x) => (
+            <option key={x.paper_id} value={x.paper_id}>{x.title}</option>
+          ))}
+        </select>
+      </div>
+      {chosen
+        ? <PdfViewer key={chosen.paper_id} url={api.paperPdfUrl(submissionId, chosen.paper_id)} />
+        : <div className="pdfpane empty">Click a paper's title to read it here.</div>}
+    </div>
+  )
+
+  return <SplitView storageKey="related" left={panel} right={viewer} />
 }

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../api'
 import PipelineCostBadge from './PipelineCostBadge.jsx'
+import SplitView from '../pdf/SplitView.jsx'
+import PdfViewer, { colorFor } from '../pdf/PdfViewer.jsx'
 
 // icon per agent tool action, for the live trajectory
 const ACTION_ICON = {
@@ -30,15 +32,24 @@ function fmtAuthors(a, year) {
 
 // A flowing explanation built from prose + verbatim quote segments. Quote segments
 // (verified === true) render as a quote with a ✓ meaning "appears verbatim in the source".
-function Realization({ segments }) {
+function Realization({ segments, docKey, onPick, activeId }) {
   const segs = (segments || []).filter((s) => (s.content || '').trim())
   if (!segs.length) return null
   const hasQuote = segs.some((s) => s.kind === 'quote')
+  // Quote ids must be stable across renders AND across the two places the same list is
+  // used (here and when the highlight set is built), so they are derived from the
+  // document key and the segment's position -- never from array identity.
+  const qid = (i) => `${docKey}#${i}`
   return (
     <div className="realization">
       {segs.map((s, i) =>
         s.kind === 'quote' ? (
-          <blockquote className="rz-quote" key={i}>
+          <blockquote
+            className={'rz-quote' + (onPick ? ' qjump' : '') + (activeId === qid(i) ? ' active' : '')}
+            key={i}
+            onClick={onPick ? () => onPick(qid(i)) : undefined}
+            title={onPick ? 'Show this passage in the PDF' : undefined}
+          >
             <span className="rz-qmark" title="This quote appears verbatim in the source text">✓</span>
             <span className="rz-qtext">{s.content}</span>
           </blockquote>
@@ -46,9 +57,23 @@ function Realization({ segments }) {
           <p className="rz-text" key={i}>{s.content}</p>
         )
       )}
-      {hasQuote && <div className="rz-legend"><span className="ok">✓</span> = quote appears verbatim in the paper</div>}
+      {hasQuote && (
+        <div className="rz-legend">
+          <span className="ok">✓</span> = quote appears verbatim in the paper
+          {onPick && ' · click a quote to jump to it in the PDF'}
+        </div>
+      )}
     </div>
   )
+}
+
+/** The verified quote segments of a realization, as highlights for the viewer. */
+function quotesOf(segments, docKey, color) {
+  return (segments || [])
+    .filter((s) => (s.content || '').trim())
+    .map((s, i) => ({ seg: s, id: `${docKey}#${i}` }))
+    .filter(({ seg }) => seg.kind === 'quote')
+    .map(({ seg, id }) => ({ id, text: seg.content, color }))
 }
 
 
@@ -155,6 +180,10 @@ export default function ReviewWalkthrough({ submissionId, onFinish }) {
   const [loading, setLoading] = useState(false)
   const [live, setLive] = useState(null)     // live agent progress for the current claim
   const [costTick, setCostTick] = useState(0) // bump to re-fetch the pipeline cost badge
+  // Which document the right-hand pane shows and which quote it should scroll to.
+  // paperId === null means the submission itself, which is where the reader starts:
+  // the reviewer's own paper, with every passage the assessment quotes marked in it.
+  const [reader, setReader] = useState({ paperId: null, focusId: null })
   const pollRef = useRef(null)
   const trajRef = useRef(null)
 
@@ -162,6 +191,8 @@ export default function ReviewWalkthrough({ submissionId, onFinish }) {
     api.reviewClaims(submissionId).then(setList).catch((e) => setErr(String(e)))
     return () => clearTimeout(pollRef.current)
   }, [submissionId])
+
+  useEffect(() => { setReader({ paperId: null, focusId: null }) }, [ci])
 
   const trajLen = live && live.trajectory ? live.trajectory.length : 0
   useEffect(() => {
@@ -314,7 +345,12 @@ export default function ReviewWalkthrough({ submissionId, onFinish }) {
               {v.paper_realization && v.paper_realization.length > 0 && (
                 <div className="ev-realize">
                   <div className="ev-sublab">How this paper realizes the claim</div>
-                  <Realization segments={v.paper_realization} />
+                  <Realization
+                    segments={v.paper_realization}
+                    docKey={'pap:' + v.paper_id}
+                    activeId={reader.focusId}
+                    onPick={(id) => setReader({ paperId: v.paper_id, focusId: id })}
+                  />
                 </div>
               )}
               {(v.assessment || v.what_is_shared || v.submission_delta) && (
@@ -361,7 +397,43 @@ export default function ReviewWalkthrough({ submissionId, onFinish }) {
     )
   }
 
-  return (
+  // Every passage the assessment quotes from whichever document is on the right. The
+  // submission is the default: it is the reviewer's own paper, and seeing all of it
+  // marked at once shows which parts of the contribution the evidence actually rests on.
+  // Colours run per prior paper so two papers quoted on the same claim stay apart.
+  const verify = (data && data.verify) || []
+  const paperColor = {}
+  verify.forEach((v, i) => { paperColor[v.paper_id] = colorFor(i + 1) })
+
+  const readerDoc = reader.paperId
+    ? verify.find((v) => v.paper_id === reader.paperId)
+    : null
+  const highlights = readerDoc
+    ? quotesOf(readerDoc.paper_realization, 'pap:' + readerDoc.paper_id, paperColor[readerDoc.paper_id])
+    : quotesOf(data && data.claim_realization, 'sub', colorFor(0))
+  const readerUrl = readerDoc
+    ? api.paperPdfUrl(submissionId, readerDoc.paper_id)
+    : api.pdfUrl(submissionId)
+  const papersWithQuotes = verify.filter((v) => (v.paper_realization || []).some((x) => x.kind === 'quote'))
+
+  const viewer = (
+    <div className="pdfpane">
+      <div className="pdfpicker">
+        <select
+          value={reader.paperId || ''}
+          onChange={(e) => setReader({ paperId: e.target.value || null, focusId: null })}
+        >
+          <option value="">The submission (claim evidence)</option>
+          {papersWithQuotes.map((v) => (
+            <option key={v.paper_id} value={v.paper_id}>{v.title}</option>
+          ))}
+        </select>
+      </div>
+      <PdfViewer key={readerUrl} url={readerUrl} highlights={highlights} focusId={reader.focusId} />
+    </div>
+  )
+
+  const panel = (
     <div className="panel review-wt">
       <div className="review-head">
         <div>
@@ -385,7 +457,12 @@ export default function ReviewWalkthrough({ submissionId, onFinish }) {
         <div className="rv-block realize-block">
           <div className="rv-h sm"><span className="rv-ic">📝</span><h4>What the submission does for this claim</h4></div>
           <p className="muted rv-sub">Read from the submission's own sections about this contribution (not its results). Quotes are verbatim from your paper.</p>
-          <Realization segments={data.claim_realization} />
+          <Realization
+            segments={data.claim_realization}
+            docKey="sub"
+            activeId={reader.focusId}
+            onPick={(id) => setReader({ paperId: null, focusId: id })}
+          />
         </div>
       )}
 
@@ -405,4 +482,6 @@ export default function ReviewWalkthrough({ submissionId, onFinish }) {
       ) : livePanel()}
     </div>
   )
+
+  return <SplitView storageKey="review" left={panel} right={viewer} />
 }

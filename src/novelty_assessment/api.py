@@ -27,7 +27,7 @@ from typing import List, Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -239,6 +239,45 @@ async def upload_paper_pdf(sid: str, paper_id: str, file: UploadFile = File(...)
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_bytes(raw)
     return {"paper_id": paper_id, "pdf_available": True}
+
+
+# --------------------------- PDFs for the reader ---------------------------- #
+# The split view shows the reviewer the document a quote was taken from, beside the
+# quote. Both endpoints stream the file the pipeline already has on disk -- nothing is
+# converted or re-rendered, so what the reviewer checks against is the same artifact
+# GROBID parsed. Declared here, above the /{sid}/{artifact} catch-all, which would
+# otherwise swallow /{sid}/pdf and try to read it as JSON.
+
+def _submission_pdf_path(sid: str) -> Optional[Path]:
+    """The uploaded manuscript. Normally {sid}.pdf; the recorded path wins if a run was
+    started from a file elsewhere on disk."""
+    recorded = (_load_json(_sub_dir(sid) / f"{sid}_pipeline_state.json") or {}).get("pdf_path")
+    for cand in (Path(recorded) if recorded else None, _sub_dir(sid) / f"{sid}.pdf"):
+        if cand and cand.exists():
+            return cand
+    return None
+
+
+@app.get("/submissions/{sid}/pdf")
+def submission_pdf(sid: str):
+    path = _submission_pdf_path(sid)
+    if path is None:
+        raise HTTPException(404, "no PDF stored for this submission")
+    # inline: the viewer renders it in place rather than offering a download
+    return FileResponse(path, media_type="application/pdf",
+                        headers={"Content-Disposition": f'inline; filename="{sid}.pdf"'})
+
+
+@app.get("/submissions/{sid}/papers/{paper_id}/pdf")
+def paper_pdf(sid: str, paper_id: str):
+    """A related-work paper's PDF -- downloaded by the fetch_pdfs stage or uploaded by
+    the reviewer. Both land in the same place, so a manually added paper reads exactly
+    like a retrieved one."""
+    path = _pdf_path(sid, paper_id)
+    if not path.exists():
+        raise HTTPException(404, "no PDF stored for this paper")
+    return FileResponse(path, media_type="application/pdf",
+                        headers={"Content-Disposition": f'inline; filename="{paper_id}.pdf"'})
 
 
 class PaperEdit(BaseModel):

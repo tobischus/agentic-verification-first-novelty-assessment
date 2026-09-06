@@ -15,6 +15,12 @@ async function j(method, path, body, timeoutMs = 30000) {
 export const api = {
   base: BASE,
 
+  // Direct URLs, not fetches: the PDF viewer streams these itself, and passing it a URL
+  // lets the browser cache and range-request the file instead of holding it in JS memory.
+  pdfUrl: (id) => `${BASE}/submissions/${encodeURIComponent(id)}/pdf`,
+  paperPdfUrl: (id, paperId) =>
+    `${BASE}/submissions/${encodeURIComponent(id)}/papers/${encodeURIComponent(paperId)}/pdf`,
+
   async upload(file, submissionId) {
     const fd = new FormData()
     fd.append('file', file)
