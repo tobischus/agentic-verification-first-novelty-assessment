@@ -230,3 +230,134 @@ def degree_from_coverage(score: Optional[float], n_core: int) -> str:
     if score > 0.0:
         return "partial"
     return "none"
+
+
+# ======================================================================== #
+# Free comparison: the model decides the shape, the verifier checks it     #
+# ======================================================================== #
+#
+# The decomposition above imposes a grid: split the claim into N features, then answer N
+# questions per paper. That guarantees an answer for every cell whether or not the cell is
+# a real question, and it makes the model manufacture distinctions -- on one claim it split
+# "a benchmark with graded tasks" into a peripheral element and a core element with the
+# same anchor, because the schema asked for more parts than the claim has.
+#
+# So here the model is asked what it would say anyway: where do these two actually meet?
+# It returns as many points of contact as it finds, possibly none, each one carrying the
+# evidence for itself. Nothing forces a point to exist and nothing caps how many there are.
+#
+# The invariant does not move. What the model may decide is WHAT to report; whether the
+# report is grounded is still settled by the verifier, against the two documents, outside
+# the model. Reasoning chooses the shape; verification keeps it honest.
+
+
+def sentences_of(passages: List[str], min_words: int = 8) -> List[str]:
+    """Verified passages cut into sentences, so an anchor can point at a claim, not a page.
+
+    Anchoring at paragraph granularity degenerates: given four contacts and one passage that
+    mentions the benchmark, the model anchored all four to that passage, and the anchor then
+    said nothing about WHICH part of the claim each contact touched. A sentence taken from a
+    span already verified against the submission is itself in the submission, so nothing is
+    given up by cutting them.
+    """
+    import re
+    out = []
+    for para in passages:
+        for sent in re.split(r"(?<=[.!?])\s+", " ".join((para or "").split())):
+            sent = sent.strip()
+            if len(sent.split()) >= min_words:
+                out.append(sent)
+    return out
+
+
+class ContactPoint(BaseModel):
+    what_is_shared: str = Field(
+        description="ONE specific sentence: the concrete thing both the claim and this "
+                    "paper deliver. Not the topic they share -- the thing.")
+    submission_sentence: int = Field(
+        description="1-based number of the ONE submission sentence below that states the "
+                    "claim side of this contact. Point at it, do not retype it. Two "
+                    "contacts must not point at the same sentence -- if they would, they "
+                    "are one contact.")
+    paper_quote: str = Field(
+        description="VERBATIM span from the paper text below showing the paper's side, "
+                    "copied character for character, at least 10 words")
+    strength: str = Field(
+        description="full  (the paper delivers this outright)  |  "
+                    "weaker  (narrower, partial, or a special case)")
+
+
+class FreeComparison(BaseModel):
+    reasoning: str = Field(description="2-4 sentences: how you weighed this paper against the claim")
+    contacts: List[ContactPoint] = Field(
+        default_factory=list,
+        description="every point where the two genuinely meet -- as many or as few as there "
+                    "are, and none at all if they do not meet")
+    submission_delta: str = Field(description="what the claim delivers that this paper does not")
+    degree: str = Field(description="same | substantial | partial | superficial | none")
+
+
+FREE_PROMPT = """Judge how far ONE prior paper anticipates ONE claimed contribution.
+
+Work it out as a reviewer would. Read the claim, read what the paper actually does, and decide where the two genuinely meet. Report exactly the points you find -- one, four, or none. Do not manufacture a point to fill space, and do not compress two real ones into one.
+
+A point of contact is a CONCRETE thing both deliver: the same construction, the same artifact, the same property. Working on the same topic is not a point of contact. If the paper only shares the field, report no contacts and say so in `degree`.
+
+Evidence for every point:
+- `submission_sentence`: the number of the ONE sentence below that states the claim's side. Point at it. If two of your contacts would point at the same sentence, they are the same contact -- merge them.
+- `paper_quote`: copied VERBATIM from the paper text below, character for character, at least 10 words, stating what THIS PAPER does -- never what it says about work it cites.
+
+`degree` follows from the points you found and how much of the claim they leave standing:
+- same / substantial: this paper by itself delivers most or all of the claimed contribution.
+- partial: it delivers a real part, and the claim clearly adds beyond it.
+- superficial: same area, different contribution.
+- none: unrelated to what is claimed.
+
+Judge only from the text below. If it does not show something, that is not evidence that the paper lacks it -- say so in the reasoning rather than counting it against the paper.
+
+## The claim
+{claim}
+
+## Numbered sentences of the submission -- `submission_sentence` is one of these numbers
+{passages}
+
+## The prior paper: {title}
+{sections}"""
+
+
+def compare_free(struct_call, claim_str: str, passages: List[str], title: str,
+                 sections_text: str, paper_text: str,
+                 min_quote_tokens: int = 10, fuzzy_threshold: float = 90.0) -> dict:
+    """One paper against one claim, shaped by the model, grounded by the verifier.
+
+    A contact whose paper_quote cannot be found in the paper is kept but marked, never
+    silently dropped: that the model asserted it is itself part of what a reviewer should
+    see, and hiding it would make the output look cleaner than the evidence warrants.
+    """
+    numbered = "\n\n".join(f"[{i + 1}] {p}" for i, p in enumerate(passages))
+    parsed = struct_call(FreeComparison, FREE_PROMPT.format(
+        claim=claim_str[:1500], passages=numbered[:12000], title=title, sections=sections_text))
+    if parsed is None:
+        return {"contacts": [], "degree": "", "reasoning": "", "submission_delta": ""}
+
+    contacts = []
+    for c in parsed.contacts:
+        i = (c.submission_sentence or 0) - 1
+        anchor = passages[i] if 0 <= i < len(passages) else ""
+        chk = ev.verify_quote(c.paper_quote, paper_text, min_quote_tokens, fuzzy_threshold)
+        contacts.append({
+            "what_is_shared": (c.what_is_shared or "").strip(),
+            "strength": (c.strength or "").strip().lower(),
+            "claim_quote": anchor,
+            "claim_anchored": bool(anchor),
+            "paper_quote": ev.expand_to_sentence(c.paper_quote, paper_text) if chk.verified
+                           else (c.paper_quote or "").strip(),
+            "paper_quote_verified": chk.verified,
+            "grounded": bool(anchor) and chk.verified,
+        })
+    return {
+        "reasoning": (parsed.reasoning or "").strip(),
+        "contacts": contacts,
+        "submission_delta": (parsed.submission_delta or "").strip(),
+        "degree": (parsed.degree or "").strip().lower(),
+    }
