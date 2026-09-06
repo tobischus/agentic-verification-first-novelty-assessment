@@ -29,7 +29,6 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
-from . import elements as el
 from .tools import ClaimToolbox
 
 load_dotenv()
@@ -496,74 +495,7 @@ class ClaimNoveltyAgent:
 
     # ------------------------------ phase 2 ------------------------------ #
 
-    def _free_compare(self, tb: ClaimToolbox, claim: dict, pid: str, sections_text: str,
-                      passages: List[str]):
-        """Compare by asking where the two papers meet, not by filling a fixed template.
-
-        The old comparison asked for a degree and a narrative in one call, and evidence
-        pairs only when the answer happened to be `can_refute` -- the schema said so
-        outright. Measured across every run on disk, that produced pairs for 100% of
-        refutations and 19% of partial overlaps: the grounding tracked the label, not the
-        strength of the overlap. On one claim of the GraphRAG submission the reviewer was
-        shown 11 overlapping papers, 57 quotes, and ONE pair.
-
-        Here the model reports every point where the claim and the paper genuinely meet,
-        each carrying a sentence of the submission beside a span of the paper. On that same
-        claim: 36 points, all 36 paired. What the model decides is which points exist; that
-        they are real is still settled by record_comparison, against both documents.
-        """
-        spend = [0, 0]
-
-        def struct(schema, prompt):
-            parsed, a, b = self._struct(schema, prompt)
-            spend[0] += a; spend[1] += b
-            return parsed
-
-        r = el.compare_free(
-            struct,
-            self._claim_str(claim), passages, tb.pool[pid]["title"],
-            sections_text, tb._paper_source_text(pid),
-            self.min_quote_tokens, self.fuzzy_threshold,
-        )
-        contacts = r.get("contacts") or []
-        degree = (r.get("degree") or "none").lower()
-        if degree not in ("same", "substantial", "partial", "superficial", "none"):
-            degree = "none"
-
-        # A refutation still needs evidence: the degree alone cannot carry it, which is the
-        # failure the gate measurement found in 18 of 18 "substantial, cannot refute" cases.
-        grounded = [c for c in contacts if c.get("grounded")]
-        status = "can_refute" if (degree in ("same", "substantial") and grounded) else "cannot_refute"
-
-        # The narrative the UI and the export already render: the model's own reasoning as
-        # prose, then the paper's side of each point as a quote segment.
-        realization = []
-        if r.get("reasoning"):
-            realization.append({"kind": "text", "content": r["reasoning"]})
-        for c in contacts:
-            if c.get("what_is_shared"):
-                realization.append({"kind": "text", "content": c["what_is_shared"]})
-            if c.get("paper_quote"):
-                realization.append({"kind": "quote", "content": c["paper_quote"]})
-
-        return {
-            "_pt": spend[0], "_ct": spend[1],
-            "refutation_status": status,
-            "overlap_degree": degree,
-            "what_is_shared": "; ".join(c["what_is_shared"] for c in contacts if c.get("what_is_shared")),
-            "submission_delta": r.get("submission_delta", ""),
-            "brief_note": r.get("reasoning", "")[:400],
-            "assessment": r.get("reasoning", ""),
-            "paper_realization": realization,
-            "evidence_pairs": [
-                {"claim_quote": c["claim_quote"], "paper_quote": c["paper_quote"],
-                 "rationale": c.get("what_is_shared", "")}
-                for c in contacts if c.get("claim_quote") and c.get("paper_quote")
-            ],
-        }
-
-    def _section_compare(self, tb: ClaimToolbox, claim: dict, pid: str, claim_ctx: str,
-                         passages: Optional[List[str]] = None):
+    def _section_compare(self, tb: ClaimToolbox, claim: dict, pid: str, claim_ctx: str):
         """Section-based deep dive: the model picks the prior paper's relevant sections,
         reads them in full, and returns a realization (narrative + verified quotes) + the
         overlap judgment."""
@@ -577,16 +509,9 @@ class ClaimNoveltyAgent:
             hits = tb.read_paper(pid, query=self._claim_str(claim))
             secs = [{"name": "Abstract", "text": _fmt_passages(
                 hits.get("passages") or ([{"text": hits.get("abstract", "")}] if hits.get("abstract") else []))}]
-        sections_text = _fmt_sections_full(secs)
-        if passages:
-            # Free comparison whenever the claim has verified submission passages to anchor
-            # to. Without them there is nothing to pair a paper quote with, so the old
-            # one-call comparison stands in -- a claim the reviewer added by hand, say.
-            comp = self._free_compare(tb, claim, pid, sections_text, passages)
-            return comp, pt + comp.pop("_pt"), ct + comp.pop("_ct")
         parsed, a, b = self._struct(_SectionComparison, _fill(
             _PAPER_COMPARE, claim=self._claim_str(claim)[:1200], realization=claim_ctx[:1600],
-            title=tb.pool[pid]["title"], sections=sections_text)); pt += a; ct += b
+            title=tb.pool[pid]["title"], sections=_fmt_sections_full(secs))); pt += a; ct += b
         return self._to_comp(parsed), pt, ct
 
     @staticmethod
@@ -641,8 +566,7 @@ class ClaimNoveltyAgent:
             log=log,
         )
 
-    def _deep_dive(self, tb: ClaimToolbox, claim: dict, pid: str, degree: str, claim_ctx: str,
-                   passages: Optional[List[str]] = None):
+    def _deep_dive(self, tb: ClaimToolbox, claim: dict, pid: str, degree: str, claim_ctx: str):
         tb._log("deep_dive", f"{pid} ({degree})", progress=True)
         # In-process PDF parse NOW, on demand -- only deep-dived papers ever get parsed
         # (most of the pool doesn't reach this point). Timed separately from the LLM
@@ -651,7 +575,7 @@ class ClaimNoveltyAgent:
         fts = tb.ensure_fulltext(pid)
         parse_s = time.perf_counter() - _p0
         _c0 = time.perf_counter()
-        comp, pt, ct = self._section_compare(tb, claim, pid, claim_ctx, passages)
+        comp, pt, ct = self._section_compare(tb, claim, pid, claim_ctx)
         compare_s = time.perf_counter() - _c0
         comp["fulltext_fetch_status"] = fts
         self._record(tb, pid, comp)
@@ -720,12 +644,12 @@ class ClaimNoveltyAgent:
             workers = min(self.deep_dive_workers, len(items))
             if workers <= 1:
                 for pid, deg in items:
-                    a, b, tinfo = self._deep_dive(tb, claim, pid, deg, claim_ctx, passages)
+                    a, b, tinfo = self._deep_dive(tb, claim, pid, deg, claim_ctx)
                     lp += a; lc += b
                     timings["deep_dive_papers"].append(tinfo); emit()
                 return lp, lc
             with ThreadPoolExecutor(max_workers=workers) as ex:
-                futs = [ex.submit(self._deep_dive, tb, claim, pid, deg, claim_ctx, passages)
+                futs = [ex.submit(self._deep_dive, tb, claim, pid, deg, claim_ctx)
                         for pid, deg in items]
                 for fut in as_completed(futs):
                     a, b, tinfo = fut.result()
@@ -740,13 +664,6 @@ class ClaimNoveltyAgent:
         # claim. Reused as context for every prior-work comparison.
         _t = time.perf_counter()
         _real, claim_ctx, a, b = self._understand_submission(tb, claim); pt += a; ct += b
-        # The submission side every comparison anchors to: the realization's quote segments,
-        # already verified against the submission, cut into sentences. Anchoring at paragraph
-        # granularity degenerated in testing -- four contacts all pointed at the one passage
-        # that mentions the contribution, so the anchor said nothing about which part of the
-        # claim each one touched.
-        passages = el.sentences_of([x["content"] for x in (_real or [])
-                                    if x.get("kind") == "quote" and x.get("verified")])
         timings["understand_submission"] = round(time.perf_counter() - _t, 1)
         emit()
 
