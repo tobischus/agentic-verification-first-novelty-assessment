@@ -53,6 +53,13 @@ function Realization({ segments, docKey, onPick, activeId }) {
             <span className="rz-qmark" title="This quote appears verbatim in the source text">✓</span>
             <span className="rz-qtext">{s.content}</span>
           </blockquote>
+        ) : 'verified' in s ? (
+          // stored as {kind:'text', verified:false}: copied from the source, but the
+          // checker could not confirm it there
+          <div className="rz-unverified" key={i}>
+            <span className="rz-ulab">Quoted from the source but not confirmed verbatim</span>
+            {s.content}
+          </div>
         ) : (
           <p className="rz-text" key={i}>{s.content}</p>
         )

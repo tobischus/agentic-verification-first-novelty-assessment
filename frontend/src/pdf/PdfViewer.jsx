@@ -30,9 +30,11 @@ export default function PdfViewer({ url, highlights = [], focusId = null, onLoca
   const [doc, setDoc] = useState(null)
   const [pages, setPages] = useState([])       // [{viewportAt1, textContent, tokens}]
   const [scale, setScale] = useState(1.2)
+  const userZoomed = useRef(false)   // once the reviewer zooms, stop refitting under them
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const scrollRef = useRef(null)
+  const paneRef = useRef(null)
   const pageRefs = useRef([])
   const docRef = useRef(null)     // for cleanup: destroying inside a state updater would
                                   // run twice under StrictMode
@@ -100,6 +102,23 @@ export default function PdfViewer({ url, highlights = [], focusId = null, onLoca
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [located, highlights.length])
 
+  // Open at a width that fits, rather than at a fixed 120% that leaves a wide paper
+  // hanging off the right edge -- where `margin: auto` cannot centre it, so the page looks
+  // shifted until the reviewer zooms out by hand.
+  useEffect(() => {
+    if (!pages.length || userZoomed.current) return
+    const avail = (paneRef.current?.clientWidth || 0) - 34   // padding + scrollbar
+    const w = pages[0].viewportAt1.width
+    if (avail > 100 && w > 0) {
+      setScale(Math.min(2, Math.max(0.4, Math.round((avail / w) * 100) / 100)))
+    }
+  }, [pages])
+
+  const zoom = (d) => {
+    userZoomed.current = true
+    setScale((sc) => Math.min(3, Math.max(0.4, +(sc + d).toFixed(2))))
+  }
+
   const byPage = useMemo(() => {
     const m = new Map()
     for (const h of located) {
@@ -115,11 +134,20 @@ export default function PdfViewer({ url, highlights = [], focusId = null, onLoca
     const target = located.find((h) => h.id === focusId)
     if (!target) return
     const el = pageRefs.current[target.pageIndex]
-    if (!el || !scrollRef.current) return
-    const top = target.rects.reduce((min, r) => Math.min(min, r.top), Infinity)
-    // a little headroom so the passage does not sit flush against the top edge
-    scrollRef.current.scrollTo({
-      top: Math.max(0, el.offsetTop + top * scale - 80),
+    const box = scrollRef.current
+    if (!el || !box) return
+    // The FIRST line of the passage: rects are merged per row and ordered by position, so
+    // the smallest `top` is where the quote begins. Landing on the last line -- which is
+    // what offsetTop produced here, measured against the wrong positioned ancestor -- puts
+    // the reviewer at the end of the sentence they wanted to read.
+    const first = target.rects.reduce((min, r) => Math.min(min, r.top), Infinity)
+    // Measured, not derived from offsetTop: the page's offset parent depends on which
+    // ancestors happen to be positioned, and getting that wrong silently scrolls to the
+    // wrong place. Rects are relative to the viewport, so the arithmetic holds whatever
+    // the layout above looks like.
+    const delta = el.getBoundingClientRect().top - box.getBoundingClientRect().top
+    box.scrollTo({
+      top: Math.max(0, box.scrollTop + delta + first * scale - 90),  // headroom above
       behavior: 'smooth',
     })
   }, [focusId, located, scale])
@@ -128,11 +156,11 @@ export default function PdfViewer({ url, highlights = [], focusId = null, onLoca
   if (error) return <div className="pdfpane empty">Could not open this PDF — {error}</div>
 
   return (
-    <div className="pdfpane">
+    <div className="pdfpane" ref={paneRef}>
       <div className="pdftools">
-        <button className="link" onClick={() => setScale((s) => Math.max(0.5, +(s - 0.15).toFixed(2)))}>−</button>
+        <button className="link" onClick={() => zoom(-0.15)}>−</button>
         <span className="pdfzoom">{Math.round(scale * 100)}%</span>
-        <button className="link" onClick={() => setScale((s) => Math.min(3, +(s + 0.15).toFixed(2)))}>+</button>
+        <button className="link" onClick={() => zoom(0.15)}>+</button>
         {!!highlights.length && (
           <span className="pdfhits muted">
             {located.length}/{highlights.length} quote{highlights.length === 1 ? '' : 's'} located
@@ -142,6 +170,7 @@ export default function PdfViewer({ url, highlights = [], focusId = null, onLoca
       </div>
       <div className="pdfscroll" ref={scrollRef}>
         {loading && <div className="pdfloading muted">Loading document…</div>}
+        <div className="pdfpages">
         {pages.map((pg, i) => (
           <PdfPage
             key={i}
@@ -153,6 +182,7 @@ export default function PdfViewer({ url, highlights = [], focusId = null, onLoca
             pageRefs={pageRefs}
           />
         ))}
+        </div>
       </div>
     </div>
   )
