@@ -314,7 +314,9 @@ Work it out as a reviewer would. Read the claim, read what the paper actually do
 
 Report EVERY point you can support from the text below -- this is a complete list, not a selection of the best ones. Two reviewers given the same two papers should arrive at the same list, so do not stop early because the picture is already clear: a point you leave out is one the next reader has to find again. Where several passages support the same point, that is still ONE point; pick the passage that shows it most directly.
 
-A point of contact is a CONCRETE thing both deliver: the same construction, the same artifact, the same property. Working on the same topic is not a point of contact. If the paper only shares the field, report no contacts and say so in `degree`.
+A point of contact is a CONCRETE thing both deliver AS THEIR CONTRIBUTION: the same construction, the same artifact, the same property. Working on the same topic is not a point of contact. Neither is using the same standard machinery -- both building a knowledge graph, both retrieving passages, both calling an LLM -- when the claimed contribution is something else entirely.
+
+Most papers retrieved for a claim share its field and not its contribution. `superficial` is therefore the ordinary answer, not a rare one, and reporting no contacts at all is a normal outcome you should reach often. A list of contacts that could be written about almost any paper in the area is a sign you have described the field rather than the overlap.
 
 Evidence for every point:
 - `submission_sentence`: the number of the ONE sentence below that states the claim's side. Point at it. If two of your contacts would point at the same sentence, they are the same contact -- merge them.
@@ -391,9 +393,24 @@ def compare_free(struct_call, claim_str: str, passages: List[str], title: str,
             "paper_quote_verified": chk.verified,
             "grounded": bool(anchor) and chk.verified,
         })
+    # Cap the degree at what the grounded contacts can carry. Across 37 comparisons the
+    # model never once returned `superficial` or `none`, so everything it examined entered
+    # the reviewer's overlap list -- the same over-inclusion this design set out to fix,
+    # moved one stage later. The prompt now says superficial is the ordinary answer; these
+    # two rules only refuse a verdict the evidence does not reach, and deliberately no more.
+    # A third rule -- capping a single weaker contact at superficial -- was tried and
+    # removed: it demoted a genuine substantial overlap on the strength of a count.
+    degree = (parsed.degree or "").strip().lower()
+    grounded = [c for c in contacts if c["grounded"]]
+    full = [c for c in grounded if c["strength"].startswith("full")]
+    if not grounded:
+        degree = "none" if not contacts else "superficial"
+    elif not full and degree in ("same", "substantial"):
+        degree = "partial"          # only weaker contacts cannot carry anticipation
+
     return {
         "reasoning": (parsed.reasoning or "").strip(),
         "contacts": contacts,
         "submission_delta": (parsed.submission_delta or "").strip(),
-        "degree": (parsed.degree or "").strip().lower(),
+        "degree": degree,
     }
