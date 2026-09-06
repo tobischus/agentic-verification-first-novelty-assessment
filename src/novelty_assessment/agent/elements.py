@@ -263,8 +263,19 @@ def sentences_of(passages: List[str], min_words: int = 8) -> List[str]:
     import re
     out = []
     for para in passages:
-        for sent in re.split(r"(?<=[.!?])\s+", " ".join((para or "").split())):
-            sent = sent.strip()
+        text = " ".join((para or "").split())
+        # Sentence ends first, then the enumerations papers write inside one sentence.
+        # A single run-on listing every part of a contribution -- "features (i) tasks of
+        # increasing difficulty ... and (ii) real-world corpora ..." -- otherwise becomes a
+        # catch-all every contact anchors to, which is the failure this splitting exists to
+        # prevent.
+        parts = re.split(r"(?<=[.!?])\s+", text)
+        parts = [q for part in parts
+                 for q in re.split(r"\s*(?:,\s*)?(?:and\s+)?(?:\(\s*(?:i{1,3}|iv|v|vi{0,3})\s*\)"
+                                   r"|[❶-❿①-⑳])\s*", part)]
+        parts = [q for part in parts for q in re.split(r"\s*;\s*", part)]
+        for sent in parts:
+            sent = sent.strip(" ,;")
             if len(sent.split()) >= min_words:
                 out.append(sent)
     return out
@@ -291,21 +302,23 @@ class FreeComparison(BaseModel):
     reasoning: str = Field(description="2-4 sentences: how you weighed this paper against the claim")
     contacts: List[ContactPoint] = Field(
         default_factory=list,
-        description="every point where the two genuinely meet -- as many or as few as there "
-                    "are, and none at all if they do not meet")
+        description="EVERY point where the two genuinely meet -- a complete list, not a "
+                    "selection; empty only if they do not meet at all")
     submission_delta: str = Field(description="what the claim delivers that this paper does not")
     degree: str = Field(description="same | substantial | partial | superficial | none")
 
 
 FREE_PROMPT = """Judge how far ONE prior paper anticipates ONE claimed contribution.
 
-Work it out as a reviewer would. Read the claim, read what the paper actually does, and decide where the two genuinely meet. Report exactly the points you find -- one, four, or none. Do not manufacture a point to fill space, and do not compress two real ones into one.
+Work it out as a reviewer would. Read the claim, read what the paper actually does, and decide where the two genuinely meet. Do not manufacture a point to fill space, and do not compress two real ones into one.
+
+Report EVERY point you can support from the text below -- this is a complete list, not a selection of the best ones. Two reviewers given the same two papers should arrive at the same list, so do not stop early because the picture is already clear: a point you leave out is one the next reader has to find again. Where several passages support the same point, that is still ONE point; pick the passage that shows it most directly.
 
 A point of contact is a CONCRETE thing both deliver: the same construction, the same artifact, the same property. Working on the same topic is not a point of contact. If the paper only shares the field, report no contacts and say so in `degree`.
 
 Evidence for every point:
 - `submission_sentence`: the number of the ONE sentence below that states the claim's side. Point at it. If two of your contacts would point at the same sentence, they are the same contact -- merge them.
-- `paper_quote`: copied VERBATIM from the paper text below, character for character, at least 10 words, stating what THIS PAPER does -- never what it says about work it cites.
+- `paper_quote`: ONE CONTIGUOUS span copied VERBATIM from the paper text below, character for character, at least 10 words, stating what THIS PAPER does -- never what it says about work it cites. Do not join separate parts of the text with "..." or any other gap: a stitched quote appears nowhere in the paper and cannot be checked. If one span does not cover the point, pick the single most telling one.
 
 `degree` follows from the points you found and how much of the claim they leave standing:
 - same / substantial: this paper by itself delivers most or all of the claimed contribution.
@@ -323,6 +336,30 @@ Judge only from the text below. If it does not show something, that is not evide
 
 ## The prior paper: {title}
 {sections}"""
+
+
+def _verify_span(quote: str, paper_text: str, min_quote_tokens: int, fuzzy_threshold: float):
+    """Verify a quote, salvaging the longest real fragment if the model stitched one.
+
+    Models join distant parts of a paper with an ellipsis to show more in one quote. Every
+    fragment is genuine; the concatenation is in no document, so it fails verification and
+    a sound point of contact is lost with it. Rather than discard the point, the fragments
+    are checked separately and the longest one that holds is kept -- an unbroken span the
+    reviewer can find. The prompt asks for a contiguous span in the first place; this is
+    what happens when it is not obeyed.
+    """
+    q = (quote or "").strip()
+    chk = ev.verify_quote(q, paper_text, min_quote_tokens, fuzzy_threshold)
+    if chk.verified:
+        return chk, ev.expand_to_sentence(q, paper_text)
+    import re
+    parts = [x.strip() for x in re.split(r"\s*(?:\.\s*){3,}\s*|\s*…\s*", q) if x.strip()]
+    if len(parts) > 1:
+        for frag in sorted(parts, key=lambda x: -len(x)):
+            c2 = ev.verify_quote(frag, paper_text, min_quote_tokens, fuzzy_threshold)
+            if c2.verified:
+                return c2, ev.expand_to_sentence(frag, paper_text)
+    return chk, q
 
 
 def compare_free(struct_call, claim_str: str, passages: List[str], title: str,
@@ -344,14 +381,13 @@ def compare_free(struct_call, claim_str: str, passages: List[str], title: str,
     for c in parsed.contacts:
         i = (c.submission_sentence or 0) - 1
         anchor = passages[i] if 0 <= i < len(passages) else ""
-        chk = ev.verify_quote(c.paper_quote, paper_text, min_quote_tokens, fuzzy_threshold)
+        chk, quote = _verify_span(c.paper_quote, paper_text, min_quote_tokens, fuzzy_threshold)
         contacts.append({
             "what_is_shared": (c.what_is_shared or "").strip(),
             "strength": (c.strength or "").strip().lower(),
             "claim_quote": anchor,
             "claim_anchored": bool(anchor),
-            "paper_quote": ev.expand_to_sentence(c.paper_quote, paper_text) if chk.verified
-                           else (c.paper_quote or "").strip(),
+            "paper_quote": quote,
             "paper_quote_verified": chk.verified,
             "grounded": bool(anchor) and chk.verified,
         })
