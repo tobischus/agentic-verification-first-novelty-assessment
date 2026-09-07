@@ -74,15 +74,26 @@ def run(data_dir: str, sid: str, claim_id: str, model: str, budget: int) -> dict
         before = (spend["pt"], spend["ct"])
         comp, a, b = ag._section_compare(tb, claim, pid, claim_ctx)
         spend["pt"] += a; spend["ct"] += b; spend["calls"] += 2
-        comp["_paper"] = p
-        examined.append(comp)
+        # Record it the way the pipeline does. Calling the comparison directly and skipping
+        # this left every quote unverified -- record_comparison is where both the
+        # realization segments and the evidence pairs are checked against their documents,
+        # so without it the run produced an assessment with no confirmed evidence at all.
+        ag._record(tb, pid, comp, log=False)
+        # Read back the LEDGER entry, which is the comparison with its quotes checked --
+        # record_comparison returns only a status summary, and the raw dict from the model
+        # carries no `verified` flag at all.
+        stored = next((x for x in reversed(tb.ledger["comparisons"])
+                       if x.get("paper_id") == pid), comp)
+        stored["_paper"] = p
+        examined.append(stored)
+        comp = stored
 
         nxt = ranked[i + 1]["threat"] if i + 1 < len(ranked) else None
         deg = (comp.get("overlap_degree") or "").lower()
         miscal = miscal + 1 if deg in ("superficial", "none") else 0
         stop = th.settled(examined, nxt, miscal)
         print(f"    examined [{p['threat']}] {p.get('title', '')[:44]:46} "
-              f"-> {comp.get('overlap_degree'):12} {'STOP: ' + stop if stop else ''}")
+              f"-> {str(comp.get('overlap_degree')):12} {'STOP: ' + stop if stop else ''}")
         if stop:
             break
 
@@ -96,11 +107,11 @@ def run(data_dir: str, sid: str, claim_id: str, model: str, budget: int) -> dict
     repaired, withdrawn = [], []
     for c in th.ungrounded(examined):
         pid = c["_paper"]["paper_id"]
-        secs, a, b = ag._pick_sections(tb, pid, "")
-        spend["pt"] += a; spend["ct"] += b; spend["calls"] += 1
-        if not secs:
-            names = [m.get("name") for m in (tb.section_menu(pid) or [])[:4] if m.get("name")]
-            secs = (tb.read_sections(pid, names) or {}).get("sections") or []
+        # The comparison already chose and read this paper's relevant sections; picking them
+        # again would be a second model call to answer a question already answered.
+        names = tb._sections_read.get(pid) or [
+            m.get("name") for m in (tb.section_menu(pid) or [])[:4] if m.get("name")]
+        secs = (tb.read_sections(pid, names) or {}).get("sections") or []
         got = struct(th.GroundedPair, th.GROUND_PROMPT.format(
             claim=ag._claim_str(claim)[:1200], realization=claim_ctx[:1600],
             title=c["_paper"].get("title", ""), sections=_fmt_sections_full(secs),
@@ -109,7 +120,10 @@ def run(data_dir: str, sid: str, claim_id: str, model: str, budget: int) -> dict
         if got is None:
             continue
         if got.withdraw:
-            c["overlap_degree"] = "partial"
+            # a challenge that cannot be evidenced drops a band; a partial that cannot be
+            # evidenced was never a claim about overlap worth showing
+            c["overlap_degree"] = ("partial" if (c.get("overlap_degree") or "") in
+                                   ("same", "substantial") else "superficial")
             c["withdraw_reason"] = got.withdraw_reason
             withdrawn.append(pid)
             print(f"    ground [{c['_paper']['threat']}] {title:42} -> WITHDRAWN")

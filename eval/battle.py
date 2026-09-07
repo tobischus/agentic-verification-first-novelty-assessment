@@ -104,18 +104,34 @@ def _paper_meta(paper: str, data_dir: str) -> tuple:
     return m.get("title", paper), (m.get("abstract", "") or "")[:2500]
 
 
-def _judge(llm, crit_key: str, title: str, abstract: str, d1: str, d2: str) -> dict:
+def _judge(llm, crit_key: str, title: str, abstract: str, d1: str, d2: str,
+           repeats: int = 1) -> dict:
+    """Majority over `repeats` samples in ONE orientation.
+
+    A single sample proved unusable on this project: in a two-system duel the judge picked
+    whichever document came first in all ten comparisons. Sampling several times and taking
+    the majority separates a real preference from a coin flip that landed on position one,
+    and no majority is itself informative -- it means the judge cannot tell them apart.
+    """
     name, detail = CRITERIA[crit_key]
     prompt = _PROMPT.format(criterion_name=name, criterion_detail=detail,
                             title=title, abstract=abstract, doc1=d1, doc2=d2)
-    try:
-        r = llm.with_structured_output(_Verdict).invoke(prompt)
-        return {"winner": (r.winner or "tie").strip().lower(), "reason": r.reason}
-    except Exception as e:
-        return {"winner": "tie", "reason": f"[judge failed: {repr(e)[:120]}]"}
+    votes, reasons = [], []
+    for _ in range(max(1, repeats)):
+        try:
+            r = llm.with_structured_output(_Verdict).invoke(prompt)
+            votes.append((r.winner or "tie").strip().lower())
+            reasons.append(r.reason)
+        except Exception as e:
+            votes.append("tie"); reasons.append(f"[judge failed: {repr(e)[:120]}]")
+    counts = {v: votes.count(v) for v in set(votes)}
+    top = max(counts, key=counts.get)
+    winner = top if counts[top] > len(votes) / 2 else "tie"
+    return {"winner": winner, "reason": reasons[0], "votes": votes}
 
 
-def run(paper: str, norm_dir: str, data_dir: str, judge_model: str, out_path: str) -> dict:
+def run(paper: str, norm_dir: str, data_dir: str, judge_model: str, out_path: str,
+        repeats: int = 1) -> dict:
     docs = _load_docs(paper, norm_dir)
     if len(docs) < 2:
         raise SystemExit(f"need at least two assessments in {norm_dir}/{paper}")
@@ -134,8 +150,8 @@ def run(paper: str, norm_dir: str, data_dir: str, judge_model: str, out_path: st
         wins = {k: 0 for k in letters}
         ties = inconsistent = 0
         for x, y in itertools.combinations(letters, 2):
-            a = _judge(llm, crit, title, abstract, docs[x], docs[y])   # x first
-            b = _judge(llm, crit, title, abstract, docs[y], docs[x])   # y first
+            a = _judge(llm, crit, title, abstract, docs[x], docs[y], repeats)   # x first
+            b = _judge(llm, crit, title, abstract, docs[y], docs[x], repeats)   # y first
             # translate each verdict into a letter, then require agreement
             first = {"1": x, "2": y}.get(a["winner"])
             second = {"1": y, "2": x}.get(b["winner"])
@@ -194,9 +210,11 @@ def main():
     ap.add_argument("--data-dir", default="data")
     ap.add_argument("--judge-model", default=os.getenv("NOVELTY_JUDGE_MODEL", "gpt-4.1"))
     ap.add_argument("--out", default="")
+    ap.add_argument("--repeats", type=int, default=1,
+                    help="samples per orientation; the majority decides (3 recommended)")
     args = ap.parse_args()
     out = args.out or f"eval/out/battle_{args.paper}.json"
-    run(args.paper, args.norm_dir, args.data_dir, args.judge_model, out)
+    run(args.paper, args.norm_dir, args.data_dir, args.judge_model, out, args.repeats)
 
 
 if __name__ == "__main__":

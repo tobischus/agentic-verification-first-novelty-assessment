@@ -107,15 +107,18 @@ def settled(comparisons: List[dict], next_threat: Optional[int],
     return None
 
 
-def ungrounded(comparisons: List[dict]) -> List[dict]:
-    """Challenges asserted without a verified quote pair -- what re-entry should repair.
+def ungrounded(comparisons: List[dict],
+               degrees=("same", "substantial", "partial")) -> List[dict]:
+    """Overlaps asserted without a verified quote pair -- what re-entry should repair.
 
-    This is the deficit the evidence gate measures: a paper presented to the reviewer as
-    substantially overlapping, with nothing they can check.
+    This is the deficit the evidence gate measures: a paper put in front of the reviewer as
+    overlapping, with nothing they can check. `partial` is included because a blind rating
+    marked verifiability down for exactly the papers it excluded -- an overlap the reviewer
+    is shown is an overlap they should be able to check, whatever its strength.
     """
     out = []
     for c in comparisons:
-        if (c.get("overlap_degree") or "").lower() not in ("same", "substantial"):
+        if (c.get("overlap_degree") or "").lower() not in degrees:
             continue
         if any(p.get("claim_quote_verified") and p.get("paper_quote_verified")
                for p in (c.get("evidence_pairs") or [])):

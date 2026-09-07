@@ -550,7 +550,14 @@ class ClaimNoveltyAgent:
         }
 
     def _record(self, tb: ClaimToolbox, pid: str, comp: dict, log: bool = True):
-        tb.record_comparison(
+        """Record the comparison; returns record_comparison's status summary.
+
+        The comparison as STORED -- with every quote checked against its document -- lands
+        in tb.ledger["comparisons"], not in this return value. Reading the model's raw dict
+        instead of the ledger entry is how a caller ends up with an assessment whose quotes
+        were never verified.
+        """
+        return tb.record_comparison(
             paper_id=pid,
             refutation_status=comp["refutation_status"],
             relevance_reason="",

@@ -33,6 +33,7 @@ from pathlib import Path
 # key file, never into a rated document.
 SYSTEMS = {
     "agentic": "own agentic pipeline",
+    "threat": "own threat-first agent",
     "linear": "own linear baseline",
     "afzal": "Afzal et al.",
     "opennovelty": "OpenNovelty",
@@ -73,13 +74,16 @@ def _redact(text: str) -> str:
     return re.sub(r"\n{3,}", "\n\n", text).strip()
 
 
-def normalize(paper: str, in_dir: str, out_dir: str, seed: int | None = None) -> dict:
+def normalize(paper: str, in_dir: str, out_dir: str, seed: int | None = None,
+              only: list | None = None) -> dict:
     src = Path(in_dir)
     dst = Path(out_dir) / paper
     dst.mkdir(parents=True, exist_ok=True)
 
     found = []
     for suffix, label in SYSTEMS.items():
+        if only and suffix not in only:
+            continue
         f = src / f"{paper}__{suffix}.md"
         if f.exists():
             found.append((suffix, label, f))
@@ -110,8 +114,10 @@ def main():
     ap.add_argument("--in-dir", default="comparison/outputs")
     ap.add_argument("--out-dir", default="comparison/normalized")
     ap.add_argument("--seed", type=int, default=None)
+    ap.add_argument("--only", default="", help="comma-separated suffixes to include")
     args = ap.parse_args()
-    key = normalize(args.paper, args.in_dir, args.out_dir, args.seed)
+    only = [x.strip() for x in args.only.split(",") if x.strip()]
+    key = normalize(args.paper, args.in_dir, args.out_dir, args.seed, only or None)
     print(f"{args.paper}: {len(key['assignment'])} assessments -> {args.out_dir}/{args.paper}/")
     for letter, meta in sorted(key["assignment"].items()):
         print(f"  {letter}.md  {meta['words']:>6} words")
