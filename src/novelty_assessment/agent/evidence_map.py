@@ -123,7 +123,8 @@ def _clauses(sentence: str, min_words: int = 8) -> List[str]:
     return [x for x in out if x]
 
 
-def trim_to_sentence(span: str, rationale: str, claim: str, min_tokens: int) -> str:
+def trim_to_sentence(span: str, rationale: str, claim: str, min_tokens: int,
+                     counterpart: str = "") -> str:
     """Cut a multi-sentence span down to the sentence that carries the correspondence.
 
     The model was asked for the shortest span that states the matched point and returned
@@ -150,7 +151,7 @@ def trim_to_sentence(span: str, rationale: str, claim: str, min_tokens: int) -> 
     # never has a second sentence to choose between.
     if len(sents) < 2:
         best = sents[0] if sents else span
-        return _pick_clause(best, key, min_tokens)
+        return _pick_clause(best, key, min_tokens, counterpart)
     best, best_score = None, -1.0
     for s in sents:
         if len(s.split()) < min_tokens:
@@ -179,7 +180,7 @@ def _drop_lead(clause: str) -> str:
     return re.sub(r"^(?:and|or|but|as well as)\s+", "", clause.strip(), flags=re.I)
 
 
-def _pick_clause(sentence: str, key: set, min_tokens: int) -> str:
+def _pick_clause(sentence: str, key: set, min_tokens: int, counterpart: str = "") -> str:
     """Of a sentence's separable clauses, the one this correspondence is about.
 
     Scored against the RATIONALE alone. The claim is what picked the sentence; inside it
@@ -190,12 +191,24 @@ def _pick_clause(sentence: str, key: set, min_tokens: int) -> str:
     cl = [_drop_lead(c) for c in _clauses(sentence)]
     if len(cl) < 2 or not key:
         return sentence
+    # The clause has to keep the PAIR intact. Scored on the rationale alone, narrowing the
+    # submission side to one component produced spans that no longer answered to the prior
+    # paper's sentence -- and the audit then rejected the pair, correctly, for a mismatch the
+    # trim had introduced: it cost the strongest competitor on one claim. The counterpart is
+    # scored alongside, and a clause that shares nothing with it is not used at all.
+    other = {x for x in re.findall(r"[a-z]{3,}", (counterpart or "").lower()) if x not in _STOP}
     pick, ps = None, 0.0
     for c in cl:
         if len(c.split()) < min_tokens:
             continue          # too short to stand as evidence on its own
         w = {x for x in re.findall(r"[a-z]{3,}", c.lower()) if x not in _STOP}
-        sc = len(w & key) / (len(w) ** 0.5 or 1)
+        if other and len(w & other) < 2:
+            # One shared word is coincidence -- "graph" appears in every clause of a GraphRAG
+            # paper. Below two, narrowing to this clause would break the correspondence, and
+            # keeping the whole sentence is the honest answer: the pair is about the
+            # contribution as a whole, not about one of its parts.
+            continue
+        sc = (len(w & key) + len(w & other)) / (len(w) ** 0.5 or 1)
         if sc > ps:
             pick, ps = c, sc
     # A clause is only worth cutting to when it actually answers to the rationale. With the
@@ -330,8 +343,8 @@ def build_map(struct_call: Callable, claim_str: str, submission_text: str,
             continue
         rel = (c.relation or "").strip()
         pairs.append({
-            "claim_quote": trim_to_sentence(s_span, rel, claim_str, min_quote_tokens),
-            "paper_quote": trim_to_sentence(p_span, rel, claim_str, min_quote_tokens),
+            "claim_quote": trim_to_sentence(s_span, rel, claim_str, min_quote_tokens, p_span),
+            "paper_quote": trim_to_sentence(p_span, rel, claim_str, min_quote_tokens, s_span),
             "rationale": rel,
             "strength": (c.strength or "").strip().lower(),
             "claim_quote_verified": True, "paper_quote_verified": True,
