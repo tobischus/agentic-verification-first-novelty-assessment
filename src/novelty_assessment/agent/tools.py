@@ -491,6 +491,7 @@ class ClaimToolbox:
         paper_realization: Optional[List[dict]] = None,
         assessment: str = "",
         fulltext_fetch_status: Optional[str] = None,
+        extra: Optional[dict] = None,
         log: bool = True,
     ) -> dict:
         if paper_id not in self.pool:
@@ -500,13 +501,18 @@ class ClaimToolbox:
         for ep in (evidence_pairs or []):
             # Salvage a stitched span on either side before judging the pair, on the same
             # rule as the realization segments above.
-            _, cq_span = evidence.verify_contiguous(
-                ep.get("claim_quote", ""), self._submission_text,
-                self.min_quote_tokens, self.fuzzy_threshold)
-            _, pq_span = evidence.verify_contiguous(
-                ep.get("paper_quote", ""), paper_text,
-                self.min_quote_tokens, self.fuzzy_threshold)
-            ep = {**ep, "claim_quote": cq_span, "paper_quote": pq_span}
+            # Salvaging replaces the quote with the region verify_contiguous located in the
+            # source, which is WIDER than a deliberately trimmed span -- so for `exact`
+            # pairs it silently undid the evidence map's trim and put the neighbouring
+            # sentence back. Salvage what was guessed at; leave alone what was chosen.
+            if not ep.get("exact"):
+                _, cq_span = evidence.verify_contiguous(
+                    ep.get("claim_quote", ""), self._submission_text,
+                    self.min_quote_tokens, self.fuzzy_threshold)
+                _, pq_span = evidence.verify_contiguous(
+                    ep.get("paper_quote", ""), paper_text,
+                    self.min_quote_tokens, self.fuzzy_threshold)
+                ep = {**ep, "claim_quote": cq_span, "paper_quote": pq_span}
             v = evidence.verify_pair(
                 ep.get("claim_quote", ""), ep.get("paper_quote", ""),
                 self._submission_text, paper_text,
@@ -515,11 +521,21 @@ class ClaimToolbox:
             # passages are cut to a char budget, so copied quotes can end mid-sentence;
             # once verified, restore the complete sentence from the true source text
             claim_q, paper_q = ep.get("claim_quote", ""), ep.get("paper_quote", "")
-            if v["claim_quote_verified"]:
+            # `exact` means the span was chosen deliberately and is already a whole sentence
+            # -- the evidence map trims each side down to the one sentence that carries the
+            # correspondence, and expanding it again pulls the neighbouring sentence back in,
+            # undoing the trim and overstating the overlap. Everything else still gets the
+            # expansion, which is there because passages are cut to a char budget.
+            if v["claim_quote_verified"] and not ep.get("exact"):
                 claim_q = evidence.expand_to_sentence(claim_q, self._submission_text)
-            if v["paper_quote_verified"]:
+            if v["paper_quote_verified"] and not ep.get("exact"):
                 paper_q = evidence.expand_to_sentence(paper_q, paper_text)
+            carried = {k: val for k, val in ep.items()
+                       if k not in ("claim_quote", "paper_quote", "rationale",
+                                    "claim_quote_verified", "paper_quote_verified",
+                                    "fully_verified")}
             verified_pairs.append({
+                **carried,
                 "claim_quote": claim_q,
                 "paper_quote": paper_q,
                 "rationale": ep.get("rationale", ""),
@@ -566,6 +582,11 @@ class ClaimToolbox:
             # attempted, e.g. an abstract-only triage comparison that never went deep)
             "fulltext_fetch_status": fulltext_fetch_status,
             "brief_note": note,
+            # Whatever the caller needs to survive into the artifact. Everything else on the
+            # dict a caller passes is dropped here, which silently lost the evidence map's
+            # per-paper diagnosis and its rejected candidates -- and made "the map found
+            # nothing" indistinguishable from "the field was never stored".
+            **(extra or {}),
         }
         # Serialize the shared-ledger read-modify-write: parallel deep dives call this
         # concurrently, and the rebuild-then-append below would otherwise lose a comparison.

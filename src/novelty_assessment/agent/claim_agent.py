@@ -29,6 +29,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
+from . import evidence_map
 from .tools import ClaimToolbox
 
 load_dotenv()
@@ -204,6 +205,10 @@ paper_quote must state what THE PAPER ITSELF does or contributes. NEVER quote te
 {passages}
 
 Give refutation_status, overlap_degree (none/superficial/partial/substantial/same), what_is_shared, submission_delta."""
+
+# Off by one env var so the pipeline can be run both ways for a like-for-like
+# comparison, not because the old path is a fallback worth keeping.
+_USE_EVIDENCE_MAP = os.getenv("NOVELTY_EVIDENCE_MAP", "1").strip().lower() not in ("0", "false", "no")
 
 _DEEP_SYSTEM = """You are doing a CLOSE comparison of ONE prior paper against a claimed contribution to decide whether it challenges the claim's novelty. You are given some of the paper's full-text passages. If you need other parts of the paper, call read_more(query) (at most a couple of times). When ready, call conclude_comparison with refutation_status, overlap_degree, what_is_shared, submission_delta, and verbatim evidence_pairs (paper_quote copied CHARACTER-FOR-CHARACTER from passages you saw, without any leading [Section] tag; claim_quote verbatim from the submission passages). paper_quote must state what THE PAPER ITSELF does or contributes -- never quote descriptions of OTHER cited work (related-work summaries, "X [12] is a ... dataset", "we adopt the following datasets"): that is the cited paper's contribution, not this paper's. overlap_degree measures overlap of CONTRIBUTIONS (claim vs paper), not topical similarity: same area + different kind of contribution = superficial at most. Be efficient."""
 
@@ -567,11 +572,99 @@ class ClaimNoveltyAgent:
             what_is_shared=comp["what_is_shared"],
             submission_delta=comp["submission_delta"],
             evidence_pairs=comp["evidence_pairs"],
+            extra={k: comp[k] for k in ("map_diag", "rejected_pairs") if k in comp},
             paper_realization=comp.get("paper_realization"),
             assessment=comp.get("assessment", ""),
             fulltext_fetch_status=comp.get("fulltext_fetch_status"),
             log=log,
         )
+
+
+    def _map_evidence(self, tb: "ClaimToolbox", claim: dict, pid: str, comp: dict):
+        """Replace the comparison's own quotes and degree with a verified claim-evidence map.
+
+        The deep-dive call decides the degree and produces the quotes in one breath, and it
+        sees only `claim_ctx[:1600]` of the submission -- 2.4% of a 67k-character paper,
+        about half of it the extractor's paraphrase rather than the paper's sentences. Asked
+        for a verbatim submission quote from that, it quoted the claim back: with the claim
+        removed from its own verification corpus, 99 of 199 claim quotes on disk no longer
+        verify. The map is given the submission's own sections instead, checks both sides
+        against both documents, and decides the degree afterwards from what survived.
+
+        On the four prior papers with a stated gold standard the stored pipeline degree is
+        right for three of them -- it calls a medical GraphRAG METHOD a partial overlap of a
+        BENCHMARK contribution, in every run -- where the map is right for all four in the
+        majority of its runs.
+        """
+        pt = ct = 0
+
+        def struct(schema, prompt):
+            nonlocal pt, ct
+            try:
+                parsed, a, b = self._struct(schema, prompt)
+            except Exception as e:
+                tb._log("evidence_map", f"{pid}: call failed ({type(e).__name__})")
+                return None
+            pt += a; ct += b
+            return parsed
+
+        names = tb._sections_read.get("submission") or [
+            m.get("name") for m in (tb.section_menu("submission") or [])[:6] if m.get("name")]
+        sub_secs = (tb.read_sections("submission", names) or {}).get("sections") or []
+        submission_text = _fmt_sections_full(sub_secs)
+        paper_secs = (tb.read_sections(pid, tb._sections_read.get(pid) or []) or {}).get("sections") or []
+        # The deep dive picks the sections it needs to JUDGE the paper -- often Method and
+        # Experiments. A paper states what it CONTRIBUTES in its abstract ("We present the
+        # first open-source testbed for graph-based RAG methods"), so a map built only from
+        # the picked sections has nothing to quote for the one sentence that matters most.
+        paper_text = _fmt_sections_full(paper_secs)
+        abstract = (tb.pool.get(pid, {}) or {}).get("abstract") or ""
+        if abstract.strip():
+            paper_text = f"[Abstract]\n{abstract.strip()}\n\n{paper_text}"
+        sub_abstract = (tb._meta or {}).get("abstract") or ""
+        if sub_abstract.strip():
+            submission_text = f"[Abstract]\n{sub_abstract.strip()}\n\n{submission_text}"
+        if not (submission_text.strip() and paper_text.strip()):
+            return comp, pt, ct                      # nothing to map against; leave it alone
+
+        claim_str = self._claim_str(claim)
+        mapping = evidence_map.build_map(
+            struct, claim_str, submission_text, tb.pool.get(pid, {}).get("title", ""),
+            paper_text, tb._submission_text, tb._paper_source_text(pid),
+            self.min_quote_tokens, self.fuzzy_threshold)
+        kept = evidence_map.audit(struct, claim_str, tb.pool.get(pid, {}).get("title", ""),
+                                  mapping["pairs"])
+        verdict = evidence_map.conclude(struct, claim_str, {**mapping, "pairs": kept})
+
+        comp = dict(comp)
+        comp["map_diag"] = {
+            "submission_chars": len(submission_text), "paper_chars": len(paper_text),
+            "returned": mapping.get("returned", 0), "unverified": mapping.get("dropped", 0),
+            "audited_out": len(mapping["pairs"]) - len(kept), "kept": len(kept),
+            "call_failed": bool(mapping.get("failed")),
+        }
+        if mapping.get("failed"):
+            # Nothing was checked, so nothing may be concluded. Leaving the deep dive's own
+            # judgement in place is the honest outcome; overwriting it with `none` would
+            # report an absence of overlap that was never established.
+            tb._log("evidence_map", f"{pid}: map call failed -- keeping the deep dive's verdict")
+            return comp, pt, ct
+        comp["evidence_pairs"] = kept
+        comp["rejected_pairs"] = [q for q in mapping["pairs"] if q.get("audit_rejected")]
+        comp["overlap_degree"] = verdict["degree"]
+        # The narrative has to follow the same evidence as the degree. Leaving the deep-dive's
+        # prose in place next to a degree derived from the map is how a reviewer ends up
+        # reading "substantially overlaps" above a verdict of `none`.
+        if verdict.get("reasoning"):
+            comp["assessment"] = verdict["reasoning"]
+        if mapping.get("submission_delta"):
+            comp["submission_delta"] = mapping["submission_delta"]
+        comp["refutation_status"] = ("can_refute" if verdict["degree"] in ("substantial", "same")
+                                     else "cannot_refute")
+        tb._log("evidence_map", f"{pid}: {len(kept)} pairs "
+                                f"(+{mapping['dropped']} unverified, "
+                                f"-{len(comp['rejected_pairs'])} audit) -> {verdict['degree']}")
+        return comp, pt, ct
 
     def _deep_dive(self, tb: ClaimToolbox, claim: dict, pid: str, degree: str, claim_ctx: str):
         tb._log("deep_dive", f"{pid} ({degree})", progress=True)
@@ -583,6 +676,9 @@ class ClaimNoveltyAgent:
         parse_s = time.perf_counter() - _p0
         _c0 = time.perf_counter()
         comp, pt, ct = self._section_compare(tb, claim, pid, claim_ctx)
+        if _USE_EVIDENCE_MAP:
+            comp, a, b = self._map_evidence(tb, claim, pid, comp)
+            pt += a; ct += b
         compare_s = time.perf_counter() - _c0
         comp["fulltext_fetch_status"] = fts
         self._record(tb, pid, comp)

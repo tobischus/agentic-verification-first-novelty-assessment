@@ -202,7 +202,12 @@ def build_map(struct_call: Callable, claim_str: str, submission_text: str,
         claim=claim_str[:1500], submission=submission_text[:14000],
         title=title, paper=paper_text))
     if parsed is None:
-        return {"pairs": [], "submission_delta": "", "dropped": 0}
+        # `failed` separates "the call did not come back" from "the model found nothing".
+        # Both used to leave an empty map, and an empty map reads as `none` -- so an API
+        # error was indistinguishable from a paper that genuinely shares nothing, which is
+        # exactly the confusion a verification-first artifact must not contain.
+        return {"pairs": [], "submission_delta": "", "dropped": 0, "returned": 0,
+                "failed": True}
 
     pairs, dropped = [], 0
     for c in parsed.correspondences:
@@ -223,9 +228,10 @@ def build_map(struct_call: Callable, claim_str: str, submission_text: str,
             "rationale": rel,
             "strength": (c.strength or "").strip().lower(),
             "claim_quote_verified": True, "paper_quote_verified": True,
+            "exact": True,               # already trimmed to one sentence; do not re-expand
         })
     return {"pairs": pairs, "submission_delta": (parsed.submission_delta or "").strip(),
-            "dropped": dropped}
+            "dropped": dropped, "returned": len(parsed.correspondences), "failed": False}
 
 
 class Audited(BaseModel):
@@ -237,16 +243,21 @@ class Audited(BaseModel):
 
 AUDIT_PROMPT = """Each entry below pairs a sentence of a submission with a sentence of one prior paper, and asserts they deliver the same thing. Both quotes are already confirmed verbatim. Your job is the OTHER half of the check: whether the assertion holds.
 
-Reject an entry unless BOTH spans make the SAME KIND of statement about the SAME thing:
+Judge each entry BY ITS TWO SPANS. The question is whether the prior paper's span states something THAT PAPER ITSELF DELIVERS which is the same thing the submission's span says the submission delivers.
+
+A claimed contribution usually has several parts, and each entry is about ONE of them. An entry that covers only part of the claim is a correct entry -- that is what a map is for. Whether the claim as a whole survives is decided elsewhere, from the entries you keep, so NEVER reject an entry for being narrower than the claim. The claim is printed below only so you can tell which part an entry is about.
+
+Reject an entry only when its two spans fail one of these, and that thing must be a CONTRIBUTION:
 
 1. SHARED MACHINERY. Would this entry read the same with almost any other paper in this area substituted? Constructing a knowledge graph, retrieving passages, running a pipeline, prompting a model -- everything here does those. Common practice is not a correspondence.
 2. BUILDING vs USING. Contributing a benchmark, dataset, corpus or method is not the same as evaluating on one or applying one. "we validate on 9 benchmarks", "we employ 11 datasets", "we follow the standard approach" is a paper USING resources. This is about the ROLE the thing plays, not the word used: a paper whose own contribution IS a benchmark, testbed or evaluation framework DELIVERS that artifact, and does not fail this test merely because the shared contribution is an evaluation.
 3. ARTIFACT vs FINDING. Announcing a resource is not reporting a result about it, and having a pipeline stage is not evaluating that stage.
-4. DIFFERENT OBJECT. Both spans must be about the same thing, not two things that share vocabulary.
+4. DIFFERENT OBJECT. The two SPANS are about different things and merely share vocabulary. Compare span with span: an entry is not a different object because it fails to cover the rest of the claim.
+5. BOILERPLATE. Artifact-availability and code/data-release statements, repository links, funding, acknowledgements, dataset licences, reproducibility notes. Nearly every paper carries these and they say nothing about what a paper contributes. Two papers both publishing a GitHub link is not an overlap.
 
-Keep every entry that passes all four, and reject every entry that does not, naming the failed test in `dropped`. Rejecting all of them is a normal outcome: most prior work retrieved for a claim shares its field and not its contribution.
+Keep every entry that passes all five, and reject every entry that does not, naming the failed test in `dropped`. Rejecting all of them is a normal outcome: most prior work retrieved for a claim shares its field and not its contribution.
 
-## The claimed contribution
+## The claimed contribution (context only -- an entry may cover just one part of it)
 {claim}
 
 ## The prior paper: {title}
