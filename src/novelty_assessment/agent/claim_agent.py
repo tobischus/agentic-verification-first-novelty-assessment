@@ -572,7 +572,8 @@ class ClaimNoveltyAgent:
             what_is_shared=comp["what_is_shared"],
             submission_delta=comp["submission_delta"],
             evidence_pairs=comp["evidence_pairs"],
-            extra={k: comp[k] for k in ("map_diag", "rejected_pairs") if k in comp},
+            extra={k: comp[k] for k in ("map_diag", "rejected_pairs", "delta_evidence",
+                                        "delta_withdrawn", "follow_ups") if k in comp},
             paper_realization=comp.get("paper_realization"),
             assessment=comp.get("assessment", ""),
             fulltext_fetch_status=comp.get("fulltext_fetch_status"),
@@ -632,8 +633,35 @@ class ClaimNoveltyAgent:
             struct, claim_str, submission_text, tb.pool.get(pid, {}).get("title", ""),
             paper_text, tb._submission_text, tb._paper_source_text(pid),
             self.min_quote_tokens, self.fuzzy_threshold)
-        kept = evidence_map.audit(struct, claim_str, tb.pool.get(pid, {}).get("title", ""),
-                                  mapping["pairs"])
+        title = tb.pool.get(pid, {}).get("title", "")
+        kept = evidence_map.audit(struct, claim_str, title, mapping["pairs"])
+
+        # Retrieval over THIS paper's own full text, which is what makes the two passes below
+        # checks rather than opinions: the delta is a claim of absence and has to be looked
+        # for, and a follow-up question is only worth asking if the paper can answer it.
+        def look(query, k=4):
+            hits = tb.read_paper(pid, query=query, k=k) or {}
+            return hits.get("passages") or []
+
+        # A failed map means nothing was checked. Probing a delta or asking a follow-up on
+        # top of that would spend three more calls to elaborate an empty result.
+        empty = {"deltas": [], "withdrawn": [], "probes": 0, "failed": True}
+        delta, followups = (empty, []) if mapping.get("failed") else (
+            evidence_map.check_delta(
+                struct, look, claim_str, submission_text, title, kept,
+                tb._submission_text, tb._paper_source_text(pid),
+                self.min_quote_tokens, self.fuzzy_threshold),
+            None)
+        if followups is None:
+            followups = evidence_map.follow_up(
+                struct, look, claim_str, title, kept, delta["deltas"],
+                tb._paper_source_text(pid), self.min_quote_tokens, self.fuzzy_threshold)
+            # A follow-up that looked at one thing and found the paper does deliver it
+            # overrides the delta pass, which ruled on four entries at once. Both were
+            # reached from retrieved passages; only one of them asked about this.
+            held, retracted = evidence_map.apply_retractions(delta["deltas"], followups)
+            delta = {**delta, "deltas": held,
+                     "withdrawn": delta["withdrawn"] + retracted}
         verdict = evidence_map.conclude(struct, claim_str, {**mapping, "pairs": kept})
 
         comp = dict(comp)
@@ -642,6 +670,10 @@ class ClaimNoveltyAgent:
             "returned": mapping.get("returned", 0), "unverified": mapping.get("dropped", 0),
             "audited_out": len(mapping["pairs"]) - len(kept), "kept": len(kept),
             "call_failed": bool(mapping.get("failed")),
+            "delta_probes": delta.get("probes", 0), "delta_held": len(delta["deltas"]),
+            "delta_withdrawn": len(delta["withdrawn"]),
+            "questions": len(followups),
+            "questions_answered": sum(1 for q in followups if q.get("answered")),
         }
         if mapping.get("failed"):
             # Nothing was checked, so nothing may be concluded. Leaving the deep dive's own
@@ -657,8 +689,18 @@ class ClaimNoveltyAgent:
         # reading "substantially overlaps" above a verdict of `none`.
         if verdict.get("reasoning"):
             comp["assessment"] = verdict["reasoning"]
-        if mapping.get("submission_delta"):
+        # The delta the reviewer is shown is the one that was checked. The mapping's own
+        # free-prose delta is kept only when the check produced nothing to put in its place.
+        if delta["deltas"]:
+            comp["delta_evidence"] = delta["deltas"]
+            comp["submission_delta"] = " ".join(
+                f"{d['what']}: {d['note']}" for d in delta["deltas"])[:900]
+        elif mapping.get("submission_delta"):
             comp["submission_delta"] = mapping["submission_delta"]
+        if delta["withdrawn"]:
+            comp["delta_withdrawn"] = delta["withdrawn"]
+        if followups:
+            comp["follow_ups"] = followups
         comp["refutation_status"] = ("can_refute" if verdict["degree"] in ("substantial", "same")
                                      else "cannot_refute")
         tb._log("evidence_map", f"{pid}: {len(kept)} pairs "
