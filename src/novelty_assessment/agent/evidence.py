@@ -83,6 +83,42 @@ def verify_quote(
     return QuoteCheck(False, "not_found", score, "")
 
 
+def verify_contiguous(
+    quote: str,
+    source_text: str,
+    min_quote_tokens: int = DEFAULT_MIN_QUOTE_TOKENS,
+    fuzzy_threshold: float = DEFAULT_FUZZY_THRESHOLD,
+):
+    """Verify a quote, salvaging the longest real fragment when the model stitched one.
+
+    Models join distant parts of a paper with an ellipsis to show more in a single quote.
+    Every fragment is genuine; the concatenation appears in no document, so verification
+    fails and the span is demoted to "not confirmed verbatim" -- a warning that tells the
+    reviewer to distrust text that is in fact accurate. Across the artifacts on disk this
+    accounts for 56 of the 79 demoted segments, seven in ten.
+
+    So a failed quote containing an ellipsis is split, its fragments are checked
+    separately, and the longest one that holds is kept: an unbroken span the reviewer can
+    actually find. Returns (QuoteCheck, span) -- the span is the salvaged fragment when one
+    was found, otherwise the quote as given.
+
+    The prompts ask for a contiguous span in the first place; this is what happens when
+    that is not obeyed, and it never invents text -- a fragment is kept only if it verifies
+    against the source on its own.
+    """
+    q = (quote or "").strip()
+    chk = verify_quote(q, source_text, min_quote_tokens, fuzzy_threshold)
+    if chk.verified:
+        return chk, expand_to_sentence(q, source_text)
+    parts = [x.strip() for x in re.split(r"\s*(?:\.\s*){3,}\s*|\s*…\s*", q) if x.strip()]
+    if len(parts) > 1:
+        for frag in sorted(parts, key=len, reverse=True):
+            c2 = verify_quote(frag, source_text, min_quote_tokens, fuzzy_threshold)
+            if c2.verified:
+                return c2, expand_to_sentence(frag, source_text)
+    return chk, q
+
+
 def expand_to_sentence(quote: str, source_text: str, max_extra: int = 400) -> str:
     """Repair a truncated verbatim quote using the true source text.
 

@@ -401,10 +401,15 @@ class ClaimToolbox:
             if not content:
                 continue
             if kind == "quote":
-                chk = evidence.verify_quote(content, src, self.min_quote_tokens, self.fuzzy_threshold)
+                # A quote stitched from two places with an ellipsis fails as a whole while
+                # each of its parts is genuine; keeping the longest part that verifies shows
+                # the reviewer a span they can find, instead of a warning about text that is
+                # accurate. Nothing is invented -- a fragment survives only if it is located
+                # in the source on its own.
+                chk, span = evidence.verify_contiguous(
+                    content, src, self.min_quote_tokens, self.fuzzy_threshold)
                 if chk.verified:
-                    out.append({"kind": "quote", "verified": True,
-                                "content": evidence.expand_to_sentence(content, src)})
+                    out.append({"kind": "quote", "verified": True, "content": span})
                 else:
                     out.append({"kind": "text", "verified": False, "content": content})
             else:
@@ -488,6 +493,15 @@ class ClaimToolbox:
         paper_text = self._paper_source_text(paper_id)
         verified_pairs = []
         for ep in (evidence_pairs or []):
+            # Salvage a stitched span on either side before judging the pair, on the same
+            # rule as the realization segments above.
+            _, cq_span = evidence.verify_contiguous(
+                ep.get("claim_quote", ""), self._submission_text,
+                self.min_quote_tokens, self.fuzzy_threshold)
+            _, pq_span = evidence.verify_contiguous(
+                ep.get("paper_quote", ""), paper_text,
+                self.min_quote_tokens, self.fuzzy_threshold)
+            ep = {**ep, "claim_quote": cq_span, "paper_quote": pq_span}
             v = evidence.verify_pair(
                 ep.get("claim_quote", ""), ep.get("paper_quote", ""),
                 self._submission_text, paper_text,

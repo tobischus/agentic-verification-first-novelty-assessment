@@ -113,7 +113,7 @@ class _SectionPick(BaseModel):
 
 class _Segment(BaseModel):
     kind: str = Field(description='"text" for your own prose, "quote" for a VERBATIM span copied character-for-character from the source')
-    content: str = Field(description="the prose, or the verbatim quote (no [Section] tag, no quotation marks)")
+    content: str = Field(description="the prose, or ONE contiguous verbatim quote -- never spans joined by an ellipsis (no [Section] tag, no quotation marks)")
 
 
 class _Realization(BaseModel):
@@ -190,7 +190,7 @@ _COMPARE_PROMPT = """Assess whether a PRIOR-WORK paper challenges the NOVELTY of
 - cannot_refute: related but does NOT present the same contribution (put the key difference in submission_delta).
 - unclear: cannot tell from these passages.
 overlap_degree measures overlap of CONTRIBUTIONS (the claim's vs the paper's), NOT topical similarity: a paper merely in the same area / using the same techniques with a different kind of contribution is superficial at most; partial means the paper itself delivers part of the claimed contribution.
-Quotes: claim_quote = VERBATIM from the submission passages; paper_quote = COPIED CHARACTER-FOR-CHARACTER from the paper passages below (never paraphrase, never include a leading [Section] tag). Only include evidence_pairs you can copy verbatim.
+Quotes: claim_quote = VERBATIM from the submission passages; paper_quote = ONE CONTIGUOUS span COPIED CHARACTER-FOR-CHARACTER from the paper passages below (never paraphrase, never include a leading [Section] tag, and NEVER join separate parts of the text with "..." -- a stitched quote appears nowhere in the paper and cannot be checked; pick the single most telling span instead). Only include evidence_pairs you can copy verbatim.
 paper_quote must state what THE PAPER ITSELF does or contributes. NEVER quote text that describes OTHER cited work -- related-work summaries, or descriptions of adopted datasets/methods (patterns like "X [12] is a ... dataset", "we adopt/use the following datasets") describe the CITED paper's contribution, not this paper's, and are NOT evidence. For cannot_refute, include a pair only if it genuinely shows the shared part of the contributions; otherwise return no evidence_pairs.
 
 ## Claim
@@ -254,7 +254,7 @@ _PAPER_COMPARE = """Compare ONE prior-work paper against a specific claimed cont
 
 First, in `paper_realization`, explain what THE PAPER ITSELF does with respect to the claimed contribution, as `segments` in reading order:
 - kind="text": your own concise prose.
-- kind="quote": a VERBATIM span copied CHARACTER-FOR-CHARACTER from the section text below (no [Section] tag, no quotation marks). Quote the paper's OWN contribution -- NEVER quote descriptions of other cited work (related-work summaries, "X [12] is a ... dataset", "we adopt the following datasets"): that is a DIFFERENT paper's contribution, not this one's.
+- kind="quote": ONE CONTIGUOUS VERBATIM span copied CHARACTER-FOR-CHARACTER from the section text below (no [Section] tag, no quotation marks, and NEVER two passages joined by "..." -- a stitched span appears nowhere in the paper and fails the check; use a second quote segment instead). Quote the paper's OWN contribution -- NEVER quote descriptions of other cited work (related-work summaries, "X [12] is a ... dataset", "we adopt the following datasets"): that is a DIFFERENT paper's contribution, not this one's.
 If the paper does NOT address the claimed contribution, say so briefly in one text segment (no quotes needed).
 
 Then judge:
