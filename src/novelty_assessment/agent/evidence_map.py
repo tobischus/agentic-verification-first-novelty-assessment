@@ -96,6 +96,33 @@ def trim_display_span(span: str, max_sentences: int = 3, max_chars: int = 700) -
     return t or span
 
 
+def _clauses(sentence: str, min_words: int = 8) -> List[str]:
+    """Split a sentence at the conjunctions that join separate claims, and nowhere else.
+
+    A contribution is often stated once, as a sentence carrying every part of it: "features
+    a comprehensive dataset with tasks of increasing difficulty, covering fact retrieval,
+    complex reasoning, contextual summarize, and creative generation, and a systematic
+    evaluation across the entire pipeline". Quoting all of it against a paper that matches
+    one part shows the reviewer an overlap several times the real size, and it makes every
+    entry carry the SAME anchor -- four of seven pairs in the last run -- so the map stops
+    saying which part of the contribution each paper actually touches.
+
+    The split is only taken where what FOLLOWS is a clause in its own right. The ", and "
+    before a list's final item ("..., contextual summarize, and creative generation") joins
+    an item, not a claim, and cutting there would end the quote mid-list: verbatim, and
+    misleading about where the task list stops.
+    """
+    out, last = [], 0
+    for mt in re.finditer(r",\s+and\s+", sentence):
+        nxt = re.split(r",\s+and\s+", sentence[mt.end():])[0]
+        if (len(nxt.split()) >= min_words
+                and len(sentence[last:mt.start()].split()) >= min_words):
+            out.append(sentence[last:mt.start()].strip())
+            last = mt.end()
+    out.append(sentence[last:].strip())
+    return [x for x in out if x]
+
+
 def trim_to_sentence(span: str, rationale: str, claim: str, min_tokens: int) -> str:
     """Cut a multi-sentence span down to the sentence that carries the correspondence.
 
@@ -114,12 +141,16 @@ def trim_to_sentence(span: str, rationale: str, claim: str, min_tokens: int) -> 
     full span, because cutting below what can be verified would be worse than leaving it wide.
     """
     sents = _sentences(" ".join((span or "").split()))
-    if len(sents) < 2:
-        return span
     key = {w for w in re.findall(r"[a-z]{3,}", (rationale or "").lower()) if w not in _STOP}
     anchor = {w for w in re.findall(r"[a-z]{3,}", (claim or "").lower()) if w not in _STOP}
     if not key and not anchor:
         return span
+    # A span of one sentence still goes through clause selection below: the sentence that
+    # states a whole contribution in one breath is exactly the case this exists for, and it
+    # never has a second sentence to choose between.
+    if len(sents) < 2:
+        best = sents[0] if sents else span
+        return _pick_clause(best, key, min_tokens)
     best, best_score = None, -1.0
     for s in sents:
         if len(s.split()) < min_tokens:
@@ -128,7 +159,49 @@ def trim_to_sentence(span: str, rationale: str, claim: str, min_tokens: int) -> 
         score = (len(words & key) + len(words & anchor)) / (len(words) ** 0.5 or 1)
         if score > best_score:
             best, best_score = s, score
-    return best if best else span
+    if not best:
+        return span
+    # One sentence can still carry several parts of a contribution. Where it does, keep the
+    # part this correspondence is actually about -- scored against the RATIONALE alone. The
+    # claim is what picked the sentence; inside it every clause is on-claim by construction,
+    # and scoring the claim again drowns out the only signal that separates the clauses,
+    # sending every correspondence back to the same anchor.
+    return _pick_clause(best, key, min_tokens)
+
+
+def _drop_lead(clause: str) -> str:
+    """Drop a dangling conjunction a clause was cut after.
+
+    Splitting at ", and " leaves the next clause starting on "and", which reads as a
+    fragment and makes two quotes of the SAME clause look like two different anchors. The
+    result is still verbatim -- a shorter substring of the same span.
+    """
+    return re.sub(r"^(?:and|or|but|as well as)\s+", "", clause.strip(), flags=re.I)
+
+
+def _pick_clause(sentence: str, key: set, min_tokens: int) -> str:
+    """Of a sentence's separable clauses, the one this correspondence is about.
+
+    Scored against the RATIONALE alone. The claim is what picked the sentence; inside it
+    every clause is on-claim by construction, and scoring the claim again drowns out the
+    only signal that separates the clauses -- sending every correspondence back to the same
+    anchor, which is the failure this is here to fix.
+    """
+    cl = [_drop_lead(c) for c in _clauses(sentence)]
+    if len(cl) < 2 or not key:
+        return sentence
+    pick, ps = None, 0.0
+    for c in cl:
+        if len(c.split()) < min_tokens:
+            continue          # too short to stand as evidence on its own
+        w = {x for x in re.findall(r"[a-z]{3,}", c.lower()) if x not in _STOP}
+        sc = len(w & key) / (len(w) ** 0.5 or 1)
+        if sc > ps:
+            pick, ps = c, sc
+    # A clause is only worth cutting to when it actually answers to the rationale. With the
+    # short clauses skipped, the longest one would otherwise win by default and the quote
+    # would narrow to a part the correspondence is not about -- worse than not cutting.
+    return pick if pick else sentence
 
 
 # ------------------------------- schemas ----------------------------------- #

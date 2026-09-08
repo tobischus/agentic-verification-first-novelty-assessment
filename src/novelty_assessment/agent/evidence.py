@@ -102,6 +102,10 @@ def verify_contiguous(
     actually find. Returns (QuoteCheck, span) -- the span is the salvaged fragment when one
     was found, otherwise the quote as given.
 
+    The same thing happens WITHOUT an ellipsis -- sentences from different places run
+    together so the result reads as continuous -- and that case is salvaged too, by keeping
+    the longest unbroken run of sentences that verifies.
+
     The prompts ask for a contiguous span in the first place; this is what happens when
     that is not obeyed, and it never invents text -- a fragment is kept only if it verifies
     against the source on its own.
@@ -116,7 +120,40 @@ def verify_contiguous(
             c2 = verify_quote(frag, source_text, min_quote_tokens, fuzzy_threshold)
             if c2.verified:
                 return c2, expand_to_sentence(frag, source_text)
+
+    # The same stitch without the ellipsis: sentences copied from different places and run
+    # together, so the passage reads as continuous and appears nowhere. Each sentence is
+    # genuine on its own -- on the artifacts here every one of the demoted segments broke at
+    # a sentence boundary whose sentence verified alone -- so the longest UNBROKEN RUN of
+    # sentences that verifies is kept. Runs are tried longest first, which prefers the most
+    # context that is actually true over a short fragment.
+    run = _longest_verified_run(q, source_text, min_quote_tokens, fuzzy_threshold)
+    if run is not None:
+        return run
     return chk, q
+
+
+_SENT_SPLIT = re.compile(r"(?<=[.!?])\s+(?=[A-Z(•])")
+_MAX_SENTENCES = 12          # bounds the O(n^2) scan; longer quotes are pathological anyway
+
+
+def _longest_verified_run(quote, source_text, min_quote_tokens, fuzzy_threshold):
+    """The longest run of consecutive sentences of `quote` that verifies, or None.
+
+    Nothing is invented: a run is kept only when it is located in the source on its own,
+    exactly like the ellipsis fragments above. Returning None leaves the caller to demote
+    the span, which stays the right outcome for a quote with no true run in it.
+    """
+    sents = [x.strip() for x in _SENT_SPLIT.split(" ".join((quote or "").split())) if x.strip()]
+    if len(sents) < 2 or len(sents) > _MAX_SENTENCES:
+        return None
+    for size in range(len(sents) - 1, 0, -1):
+        for start in range(0, len(sents) - size + 1):
+            cand = " ".join(sents[start:start + size])
+            c = verify_quote(cand, source_text, min_quote_tokens, fuzzy_threshold)
+            if c.verified:
+                return c, expand_to_sentence(cand, source_text)
+    return None
 
 
 def expand_to_sentence(quote: str, source_text: str, max_extra: int = 400) -> str:
