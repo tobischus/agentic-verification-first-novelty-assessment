@@ -471,7 +471,11 @@ Write the probe in the words the PRIOR PAPER would use if it did have this. Sear
 
 A probe is a short phrase that would APPEAR IN that paper, three to twelve words -- "corpora of varying information density", "evaluation of graph construction quality". It goes to a passage retriever, not to a person: written as an instruction with alternatives and operators, the retriever matches on the instruction's own filler words and returns the wrong part of the paper, and the absence it then appears to show is an artifact of the query.
 
-Name only things that are part of the claimed contribution, that this paper plausibly lacks, and that a passage of that paper could settle. Not the submission's motivation, not the field's open problems, and not vague superiority ("more comprehensive", "more rigorous") -- something concrete enough to look up.
+Name a CAPABILITY the claim promises, never the identity of the material used to build it. "Corpora that vary information density" is a capability another paper could have; "NCCN guidelines and Project Gutenberg novels" is this submission's implementation of it, and no other paper has those by definition -- so the entry is true, worthless, and it inflates what the submission appears to hold. The same goes for the name of a model or tool used ("ontologies built with GPT-4.1"), for dataset names, and for anything another group would have done differently while delivering the same thing.
+
+The test: could a competing paper plausibly have this, and would the claim be weaker if it did? If not, it is not a delta.
+
+Name only things that are part of the claimed contribution, that this paper plausibly lacks, and that a passage of that paper could settle. Not the submission's motivation, not the field's open problems, and not vague superiority ("more comprehensive", "more rigorous").
 
 An empty list is a real answer: it says the correspondences already cover the claim.
 
@@ -541,6 +545,10 @@ def check_delta(struct_call: Callable, search: Callable, claim_str: str, submiss
     verified and kept: a paper that turns out to deliver what the submission thought was its
     own is the most important thing this comparison can find.
     """
+    if not pairs:
+        # Nothing corresponded, so everything is a delta and none of it is informative.
+        # A comparison that found no overlap already tells the reviewer what they need.
+        return {"deltas": [], "withdrawn": [], "probes": 0, "failed": False}
     listed = "\n".join(f"- {p['rationale']}" for p in (pairs or [])) or "(no correspondence found)"
     proposal = struct_call(DeltaProposal, DELTA_PROMPT.format(
         claim=claim_str[:1200], submission=submission_text[:12000],
@@ -617,24 +625,27 @@ class OpenQuestions(BaseModel):
                     "empty when nothing material is left open")
 
 
-FOLLOWUP_PROMPT = """A comparison between one prior paper and one claimed contribution has been made from the sections read so far. Name what it leaves unsettled.
+FOLLOWUP_PROMPT = """Below are the correspondences found between one prior paper and one claimed contribution. Each pairs a sentence of the submission with a sentence of that paper.
 
-The paper's full text is searchable, so a question is worth asking only if a passage of THAT paper would settle it, and only if the answer would change something: whether a correspondence holds, whether the submission still has a part of its contribution to itself, or how much of the claim the paper covers.
+For the correspondences that carry the most weight, ask what the pair itself does not settle. The paper's full text is searchable, so ask only what a passage of THAT paper could answer.
 
-Do not ask what the sections already answer, and do not ask what no paper could answer about itself ("is this really novel?", "is the evaluation fair?"). Each probe is a short phrase in the prior paper's own vocabulary that would appear in it -- it goes to a passage retriever, so an instruction with operators and alternatives retrieves on its own filler words instead of on the thing you are looking for.
+Every question must be ABOUT ONE OF THE PAIRS. Name it. Three shapes are worth asking:
 
-Ask nothing when the comparison is settled. Three questions is the maximum, and fewer good ones are better.
+- SCOPE. The pair shows this paper does the thing. Does it do it as broadly as the submission -- or only for one task, one dataset, one setting?
+- A STRONGER STATEMENT. The quote came from the sections that happened to be read. Does the paper say something ELSEWHERE that puts it closer to the claim than this quote does?
+- STATED LIMITS. Does the paper itself report this working only under conditions the submission does not share?
+
+Do NOT ask whether the paper has something (that has already been searched for separately, and asking again returns the same passages). Ask how far what it HAS actually goes.
+
+Ask nothing when the pairs settle it. Three is the maximum and fewer good ones are better.
 
 ## The claimed contribution
 {claim}
 
 ## The prior paper: {title}
 
-## What was found to correspond
-{pairs}
-
-## What the submission appears to still hold
-{deltas}"""
+## The correspondences
+{pairs}"""
 
 
 class Answer(BaseModel):
@@ -663,7 +674,7 @@ A question may turn out to settle one of the deltas listed below -- the things t
 
 ## The prior paper: {title}
 
-## Deltas currently credited to the submission
+## Already searched for and ruled on -- do not ask about these again
 {deltas}
 
 ## Questions and what the search returned
@@ -687,12 +698,15 @@ def follow_up(struct_call: Callable, search: Callable, claim_str: str, title: st
     unanswered, because a reviewer is better served by a named gap than by prose that covers
     it over.
     """
-    if not (pairs or deltas):
+    # No correspondence, nothing to deepen: the questions worth asking are all about how far
+    # a match goes, and there is no match. The delta pass has its own search for absence.
+    if not pairs:
         return []
-    p_txt = "\n".join(f"- {p['rationale']}" for p in (pairs or [])) or "(none)"
-    d_txt = "\n".join(f"- {d['what']}" for d in (deltas or [])) or "(none stated)"
+    # Numbered, because every question has to name the pair it is about.
+    rows = ["[%d] %s" % (i + 1, p["rationale"]) for i, p in enumerate(pairs)]
+    p_txt = chr(10).join(rows) or "(none)"
     asked = struct_call(OpenQuestions, FOLLOWUP_PROMPT.format(
-        claim=claim_str[:1200], title=title, pairs=p_txt[:1200], deltas=d_txt[:800]))
+        claim=claim_str[:1200], title=title, pairs=p_txt[:1600]))
     if asked is None or not (asked.questions or []):
         return []
 

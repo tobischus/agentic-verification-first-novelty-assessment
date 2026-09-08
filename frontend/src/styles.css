@@ -717,3 +717,35 @@ li.pcard.selected { outline: 2px solid #6366f1; outline-offset: 1px; }
   border: 1px dashed rgba(180,83,9,0.4); border-radius: 8px;
   background: rgba(180,83,9,0.05);
 }
+
+/* the delta: a claim of absence, shown with both halves that can actually be checked --
+   the submission's own sentence, and the closest the prior paper came when searched */
+.ev-delta { margin-top: 12px; }
+.ev-deltaitem {
+  margin: 8px 0; padding: 8px 10px 6px;
+  border: 1px solid rgba(47,158,99,0.30); border-radius: 8px;
+  background: rgba(47,158,99,0.05);
+}
+.ev-deltaitem.withdrawn { border-color: rgba(180,83,9,0.35); background: rgba(180,83,9,0.05); }
+.ev-deltawhat { font-weight: 600; font-size: 0.92rem; margin-bottom: 4px; }
+.ev-withdrawtag {
+  font-size: 0.66rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  color: #b45309; border: 1px solid rgba(180,83,9,0.4); border-radius: 4px;
+  padding: 1px 5px; margin-right: 6px;
+}
+/* the closest passage is NOT a quotation of the submission's claim -- it is what the
+   search returned, shown so the absence can be judged. Styled apart from verified quotes. */
+.ev-closest { display: block; margin: 6px 0 2px; padding: 6px 10px;
+  border-left: 3px dashed rgba(120,120,130,0.5); background: rgba(120,120,130,0.06);
+  border-radius: 0 6px 6px 0; }
+.ev-closestlab { display: block; font-size: 0.7rem; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--muted, #7a7a85); margin-bottom: 3px; }
+.ev-closesttext { font-size: 0.86rem; line-height: 1.5; color: var(--muted, #6a6a75); }
+
+/* follow-ups: what the comparison left open, and what looking it up settled */
+.ev-followups { margin-top: 12px; }
+.ev-fu { margin: 6px 0; padding: 7px 10px; border-radius: 8px;
+  border: 1px solid rgba(120,120,130,0.28); background: rgba(120,120,130,0.04); }
+.ev-fu.answered { border-color: rgba(47,111,208,0.32); background: rgba(80,140,255,0.05); }
+.ev-fuq { font-size: 0.9rem; font-weight: 600; margin-bottom: 3px; }
+.ev-fuopen { font-size: 0.84rem; line-height: 1.5; color: var(--muted, #6a6a75); }

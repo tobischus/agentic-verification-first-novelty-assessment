@@ -637,6 +637,9 @@ def _assemble_claim(entry, meta):
             "evidence": [{"claim_quote": p.get("claim_quote"), "paper_quote": p.get("paper_quote"),
                           "rationale": p.get("rationale"), "votes": p.get("audit_votes", "")}
                          for p in verified_pairs],
+            "delta_evidence": c.get("delta_evidence", []),
+            "delta_withdrawn": c.get("delta_withdrawn", []),
+            "follow_ups": c.get("follow_ups", []),
             "verified": len(verified_pairs) > 0,
         })
     return {
@@ -944,6 +947,13 @@ def review_summary(sid: str):
                               "votes": q.get("audit_votes", "")}
                              for q in (c.get("evidence_pairs") or [])
                              if q.get("claim_quote_verified") and q.get("paper_quote_verified")],
+                # What the submission still holds, each entry checked by SEARCHING this
+                # paper for it -- and the closest passage that search found, so the claim
+                # of absence can be checked rather than taken.
+                "delta_evidence": c.get("delta_evidence", []),
+                "delta_withdrawn": c.get("delta_withdrawn", []),
+                # What the comparison left open, and what looking it up settled.
+                "follow_ups": c.get("follow_ups", []),
                 "sections_used": c.get("sections_used", []),
                 "cited_by_submission": c.get("cited_by_submission", False),
             })

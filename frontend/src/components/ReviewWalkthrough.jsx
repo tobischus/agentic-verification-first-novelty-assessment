@@ -127,6 +127,103 @@ function EvidencePairs({ pairs, paperId, docKey, activeId, onPickSubmission, onP
   )
 }
 
+/** What the submission still holds, and what the search for it actually turned up.
+ *
+ *  A delta is a claim of ABSENCE, and absence cannot be quoted. So both checkable halves
+ *  are shown: the submission's own sentence, and the closest the prior paper came when its
+ *  full text was searched for the same thing. A reviewer who disagrees can see what the
+ *  claim was checked against rather than having to take it. A delta the search refuted is
+ *  shown too, as withdrawn -- a paper that turns out to deliver what the submission thought
+ *  was its own is the most useful thing the comparison can find.
+ */
+function DeltaEvidence({ held, withdrawn }) {
+  const h = held || []
+  const w = withdrawn || []
+  if (!h.length && !w.length) return null
+  return (
+    <div className="ev-delta">
+      <div className="ev-sublab">What the submission still has</div>
+      {h.map((d, i) => (
+        <div className="ev-deltaitem" key={'h' + i}>
+          <div className="ev-deltawhat">{d.what}</div>
+          {d.note && <div className="ev-pairwhy">{d.note}</div>}
+          {d.submission_quote && (
+            <blockquote className="rz-quote pair-sub">
+              <span className="rz-qmark" title="Verified verbatim in the submission">✓</span>
+              <span className="ev-pairside">Your paper</span>
+              <span className="rz-qtext">{d.submission_quote}</span>
+            </blockquote>
+          )}
+          {d.closest && (
+            <div className="ev-closest">
+              <span className="ev-closestlab">
+                Closest passage in that paper, searched for “{d.probe}”
+              </span>
+              <span className="ev-closesttext">{d.closest}</span>
+            </div>
+          )}
+        </div>
+      ))}
+      {w.map((d, i) => (
+        <div className="ev-deltaitem withdrawn" key={'w' + i}>
+          <div className="ev-deltawhat">
+            <span className="ev-withdrawtag">withdrawn</span> {d.what}
+          </div>
+          {d.note && <div className="ev-pairwhy">{d.note}</div>}
+          {d.paper_quote && d.paper_quote_verified && (
+            <blockquote className="rz-quote pair-pap">
+              <span className="rz-qmark" title="Verified verbatim in the prior paper">✓</span>
+              <span className="ev-pairside">This paper</span>
+              <span className="rz-qtext">{d.paper_quote}</span>
+            </blockquote>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** The questions this comparison raised, and what looking them up settled.
+ *
+ *  Unanswered ones are shown as well. A question the paper's own text did not settle is a
+ *  named gap, and seeing it is worth more to a reviewer than prose written over it.
+ */
+function FollowUps({ items }) {
+  const qs = items || []
+  if (!qs.length) return null
+  return (
+    <div className="ev-followups">
+      <div className="ev-sublab">
+        Questions this raised
+        <span className="ev-pairhint">
+          {' · '}{qs.filter((q) => q.answered).length} of {qs.length} answered by the paper
+        </span>
+      </div>
+      {qs.map((q, i) => (
+        <div className={'ev-fu' + (q.answered ? ' answered' : '')} key={i}>
+          <div className="ev-fuq">{q.question}</div>
+          {q.answered ? (
+            <>
+              <div className="ev-pairwhy">{q.answer}</div>
+              {q.quote && (
+                <blockquote className="rz-quote pair-pap">
+                  <span className="rz-qmark" title="Verified verbatim in the prior paper">✓</span>
+                  <span className="rz-qtext">{q.quote}</span>
+                </blockquote>
+              )}
+            </>
+          ) : (
+            <div className="ev-fuopen">
+              Searched for “{q.probe}” — not settled by what was found.
+              {q.answer ? ' ' + q.answer : ''}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 /** The verified quote segments of a realization, as highlights for the viewer. */
 function quotesOf(segments, docKey, color) {
   return (segments || [])
@@ -422,6 +519,8 @@ export default function ReviewWalkthrough({ submissionId, onFinish }) {
                 onPickSubmission={(id) => setReader({ paperId: null, focusId: id })}
                 onPickPaper={(id) => setReader({ paperId: v.paper_id, focusId: id })}
               />
+              <DeltaEvidence held={v.delta_evidence} withdrawn={v.delta_withdrawn} />
+              <FollowUps items={v.follow_ups} />
               {(v.assessment || v.what_is_shared || v.submission_delta) && (
                 <div className="ev-assess">
                   <div className="ev-sublab">Comparison with the submission</div>
