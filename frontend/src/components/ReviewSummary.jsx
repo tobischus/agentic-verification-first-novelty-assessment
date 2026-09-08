@@ -22,6 +22,10 @@ export default function ReviewSummary({ submissionId, active }) {
   const [err, setErr] = useState('')
   const [exportText, setExportText] = useState(null)   // null = hidden
   const [exportBusy, setExportBusy] = useState(false)
+  // Shown, not swallowed: when the export failed silently the button simply did
+  // nothing, which reads as a dead control rather than as an error.
+  const [exportErr, setExportErr] = useState('')
+  const [verdictBusy, setVerdictBusy] = useState(false)
 
   const load = useCallback(() => {
     api.reviewSummary(submissionId)
@@ -43,23 +47,40 @@ export default function ReviewSummary({ submissionId, active }) {
   // rather than the review, and what a reviewer -- or a judge comparing systems -- has to
   // be able to check is the claim-level evidence below. The pipeline still builds it
   // (Artifact B), so bringing it back is a matter of rendering it again.
+  //
+  // The step itself still has to be runnable: the SAME artifact carries the per-claim
+  // verdicts, which the summary badges and the exported comparison document both use.
+  // Dropping the control along with the prose left a review that could never state a
+  // verdict at all.
+  const computeVerdicts = async () => {
+    setVerdictBusy(true); setExportErr('')
+    try {
+      await api.generateConclusion(submissionId)
+      setExportText(null)          // the export changes with the verdicts; refetch on demand
+      load()
+    } catch (e) {
+      setExportErr(String(e))
+    } finally {
+      setVerdictBusy(false)
+    }
+  }
 
   // Fetches the plain-text export once and keeps it, so toggling it open and shut does
   // not hit the backend again -- the text is deterministic for a given run anyway.
   const toggleExport = async () => {
     if (exportText !== null) { setExportText(null); return }
-    setExportBusy(true); setGenErr('')
+    setExportBusy(true); setExportErr('')
     try {
       setExportText(await api.reviewExport(submissionId))
     } catch (e) {
-      setGenErr(String(e))
+      setExportErr(String(e))
     } finally {
       setExportBusy(false)
     }
   }
 
   const downloadExport = async () => {
-    setExportBusy(true); setGenErr('')
+    setExportBusy(true); setExportErr('')
     try {
       const text = exportText ?? await api.reviewExport(submissionId)
       setExportText(text)
@@ -70,7 +91,7 @@ export default function ReviewSummary({ submissionId, active }) {
       document.body.appendChild(a); a.click(); a.remove()
       URL.revokeObjectURL(url)
     } catch (e) {
-      setGenErr(String(e))
+      setExportErr(String(e))
     } finally {
       setExportBusy(false)
     }
@@ -83,6 +104,7 @@ export default function ReviewSummary({ submissionId, active }) {
   // What this review produced: pairs whose two halves were each checked against their
   // own document. The header used to report whether a synthesis had been written,
   // which said nothing about whether anything was found.
+  const missingVerdicts = claims.filter((c) => !c.verdict).length
   const nPairs = claims.reduce(
     (n, c) => n + (c.overlaps || []).reduce((m, o) => m + (o.evidence || []).length, 0), 0)
 
@@ -108,6 +130,18 @@ export default function ReviewSummary({ submissionId, active }) {
         <div className="muted">No claims have been reviewed yet. Open the <strong>Review</strong> tab and run the claim-level review first.</div>
       )}
 
+      {claims.length > 0 && missingVerdicts > 0 && (
+        <div className="sum-verdict-todo">
+          <span className="muted">
+            {missingVerdicts} of {claims.length} claim{claims.length === 1 ? '' : 's'} has no
+            verdict yet — the per-claim novelty conclusion, drawn from the evidence below.
+          </span>
+          <button className="link" disabled={verdictBusy} onClick={computeVerdicts}>
+            {verdictBusy ? 'Working…' : 'compute verdicts'}
+          </button>
+        </div>
+      )}
+
       {claims.length > 0 && (
         <div className="sum-export">
           <div className="sum-export-bar">
@@ -123,6 +157,7 @@ export default function ReviewSummary({ submissionId, active }) {
               </button>
             </span>
           </div>
+          {exportErr && <div className="error">{exportErr}</div>}
           {exportText !== null && <pre className="sum-export-text">{exportText}</pre>}
         </div>
       )}
