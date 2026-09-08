@@ -28,6 +28,7 @@ import numpy as np
 from rapidfuzz import fuzz
 
 from . import evidence
+from . import evidence_map
 from . import retrieve_more as rm
 from .passages import (
     PassageIndex,
@@ -414,7 +415,12 @@ class ClaimToolbox:
                 chk, span = evidence.verify_contiguous(
                     content, src, self.min_quote_tokens, self.fuzzy_threshold)
                 if chk.verified:
-                    out.append({"kind": "quote", "verified": True, "content": span})
+                    # Verified, then cut to what a reviewer will actually read: the model is
+                    # given no length ceiling and returns paragraphs that run through section
+                    # headings. Trimming happens at boundaries the text already has, so the
+                    # result is still verbatim and still locatable in the PDF.
+                    out.append({"kind": "quote", "verified": True,
+                                "content": evidence_map.trim_display_span(span)})
                 else:
                     out.append({"kind": "text", "verified": False, "content": content})
             else:

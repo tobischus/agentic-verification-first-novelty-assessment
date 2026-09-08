@@ -102,6 +102,20 @@ except Exception:
 # (api.py._snapshot_cache / run_agentic_claims -> snapshot_cache), not only after
 # retrieval/fetch_pdfs. This lets a re-upload of a fully-reviewed paper restore the
 # finished assessment instead of re-running the slow, paid per-claim agent.
+# Everything the review produces, and everything synthesised from it. Named separately
+# because a change to the review invalidates exactly these and nothing above them: the
+# GROBID parse, the claims and the retrieval stay valid, and they are the slow, paid part.
+# eval/reset_review.py deletes this set and only this set.
+_DOWNSTREAM = [
+    "{id}_artifact_a.json",                         # the per-claim agent evidence ledger
+    "{id}_artifact_b.json",
+    "{id}_judge.json",
+    "{id}_conclusion.json",
+    "{id}_agent_cost.json",
+    "{id}_report.md",
+    "{id}_assessment.txt",
+]
+
 _CACHEABLE = [
     # upstream (stages 1-4)
     "{id}.json",                                    # metadata + S2-enriched cited papers
@@ -119,14 +133,7 @@ _CACHEABLE = [
     "related_work_data/ranked_papers.json",
     "related_work_data/all_retrieved_papers.json",
     "related_work_data/metadata.json",
-    # downstream (agent results + everything derived from them)
-    "{id}_artifact_a.json",                         # the per-claim agent evidence ledger
-    "{id}_artifact_b.json",
-    "{id}_judge.json",
-    "{id}_conclusion.json",
-    "{id}_agent_cost.json",
-    "{id}_report.md",
-]
+] + _DOWNSTREAM
 
 # Directory trees cached as-is (files keyed by paper_id, NOT by submission id -> no rewrite).
 # Caching these lets a re-upload of the SAME PDF reuse the downloaded PDFs (no re-download)

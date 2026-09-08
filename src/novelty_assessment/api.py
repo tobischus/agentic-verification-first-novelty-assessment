@@ -630,8 +630,13 @@ def _assemble_claim(entry, meta):
             # (segments of prose + inline verified quotes) + the overlap assessment
             "paper_realization": c.get("paper_realization", []),
             "assessment": c.get("assessment", ""),
+            # The claim-evidence pairs: a sentence of the SUBMISSION beside the prior
+            # paper's own sentence saying the same thing, each side already checked
+            # against its own document. `votes` is how many of the audit's three
+            # checks kept the entry -- shown to the reviewer when it was not unanimous.
             "evidence": [{"claim_quote": p.get("claim_quote"), "paper_quote": p.get("paper_quote"),
-                          "rationale": p.get("rationale")} for p in verified_pairs],
+                          "rationale": p.get("rationale"), "votes": p.get("audit_votes", "")}
+                         for p in verified_pairs],
             "verified": len(verified_pairs) > 0,
         })
     return {

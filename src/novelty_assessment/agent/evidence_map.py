@@ -62,6 +62,40 @@ def _sentences(span: str) -> List[str]:
     return out or [span]
 
 
+# A section heading swallowed by a quote: "... to respond to user queries. 2.1 ## Medical
+# Graph Construction 2.1.1 ## Step1 ..." -- the numbering and the "##" come from the parsed
+# document structure, not from the paper's prose.
+_HEADING = re.compile(r"\s(?:\d+(?:\.\d+)*\s*)?##\s")
+
+
+def trim_display_span(span: str, max_sentences: int = 3, max_chars: int = 700) -> str:
+    """Cut a verified quote down to what a reviewer can actually read.
+
+    The model is asked for one contiguous verbatim span and is given no ceiling, so it
+    returns paragraphs: across the artifacts on disk the median realization quote grew to
+    535 characters and the longest reached 2109, running through section headings picked up
+    from the parsed structure. A quote that long is not evidence a reader checks, it is a
+    page of the paper reproduced.
+
+    Cutting happens at boundaries the text already has -- the heading that should never
+    have been inside a quote, then whole sentences -- so what remains is still verbatim and
+    still verifiable. Never returns empty: a single very long sentence is left alone rather
+    than cut mid-clause.
+    """
+    t = " ".join((span or "").split())
+    if not t:
+        return span
+    head = _HEADING.search(t)
+    if head and head.start() > 80:          # keep the heading out, but only if prose precedes it
+        t = t[:head.start()].strip()
+    sents = _sentences(t)
+    if len(sents) > max_sentences:
+        t = " ".join(sents[:max_sentences])
+    while len(t) > max_chars and len(_sentences(t)) > 1:
+        t = " ".join(_sentences(t)[:-1])
+    return t or span
+
+
 def trim_to_sentence(span: str, rationale: str, claim: str, min_tokens: int) -> str:
     """Cut a multi-sentence span down to the sentence that carries the correspondence.
 

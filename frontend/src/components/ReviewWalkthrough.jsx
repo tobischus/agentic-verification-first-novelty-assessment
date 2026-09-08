@@ -70,6 +70,63 @@ function Realization({ segments, docKey, onPick, activeId }) {
   )
 }
 
+/** A pair's quotes as highlights, for whichever side's document is on the right.
+ *  Ids mirror quotesOf's scheme so the viewer treats them the same way. */
+function pairQuotesOf(pairs, docKey, side, color) {
+  return (pairs || [])
+    .map((q, i) => ({ q, id: `${docKey}#p${i}` }))
+    .filter(({ q }) => q.claim_quote && q.paper_quote)
+    .map(({ q, id }) => ({ id, text: side === 'paper' ? q.paper_quote : q.claim_quote, color }))
+}
+
+/** A claim-evidence pair: one sentence of the submission beside the prior paper's own
+ *  sentence saying the same thing. Both sides were verified against their own document,
+ *  and both are clickable -- the point of a pair is that the reviewer can check each half
+ *  where it actually stands, so each side opens ITS document, not a shared one. */
+function EvidencePairs({ pairs, paperId, docKey, activeId, onPickSubmission, onPickPaper }) {
+  // The API sends only pairs whose BOTH sides verified, so presence is the check.
+  const ok = (pairs || []).filter((q) => q.claim_quote && q.paper_quote)
+  if (!ok.length) return null
+  return (
+    <div className="ev-pairs">
+      <div className="ev-sublab">
+        Where the two papers say the same thing
+        <span className="ev-pairhint"> · {ok.length} verified {ok.length === 1 ? 'pair' : 'pairs'}</span>
+      </div>
+      {ok.map((q, i) => {
+        const sid = `subpair:${paperId}#p${i}`
+        const pid = `${docKey}#p${i}`
+        return (
+          <div className="ev-pair" key={i}>
+            {q.rationale && <div className="ev-pairwhy">{q.rationale}</div>}
+            <blockquote
+              className={'rz-quote qjump pair-sub' + (activeId === sid ? ' active' : '')}
+              onClick={() => onPickSubmission(sid)}
+              title="Show this passage in your paper"
+            >
+              <span className="rz-qmark" title="Verified verbatim in the submission">✓</span>
+              <span className="ev-pairside">Your paper</span>
+              <span className="rz-qtext">{q.claim_quote}</span>
+            </blockquote>
+            <blockquote
+              className={'rz-quote qjump pair-pap' + (activeId === pid ? ' active' : '')}
+              onClick={() => onPickPaper(pid)}
+              title="Show this passage in the prior paper"
+            >
+              <span className="rz-qmark" title="Verified verbatim in the prior paper">✓</span>
+              <span className="ev-pairside">This paper</span>
+              <span className="rz-qtext">{q.paper_quote}</span>
+            </blockquote>
+            {q.votes && q.votes !== '3/3' && (
+              <div className="ev-pairvote">kept on {q.votes} of the audit's checks</div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 /** The verified quote segments of a realization, as highlights for the viewer. */
 function quotesOf(segments, docKey, color) {
   return (segments || [])
@@ -357,6 +414,14 @@ export default function ReviewWalkthrough({ submissionId, onFinish }) {
                   />
                 </div>
               )}
+              <EvidencePairs
+                pairs={v.evidence}
+                paperId={v.paper_id}
+                docKey={'pap:' + v.paper_id}
+                activeId={reader.focusId}
+                onPickSubmission={(id) => setReader({ paperId: null, focusId: id })}
+                onPickPaper={(id) => setReader({ paperId: v.paper_id, focusId: id })}
+              />
               {(v.assessment || v.what_is_shared || v.submission_delta) && (
                 <div className="ev-assess">
                   <div className="ev-sublab">Comparison with the submission</div>
@@ -412,13 +477,22 @@ export default function ReviewWalkthrough({ submissionId, onFinish }) {
   const readerDoc = reader.paperId
     ? verify.find((v) => v.paper_id === reader.paperId)
     : null
+  // Pair quotes are highlights too, and the submission carries the pair halves from EVERY
+  // paper: the reviewer's own document is where the overlaps land, so opening it should
+  // show all of them at once, each in the colour of the paper that matched it.
   const highlights = readerDoc
     ? quotesOf(readerDoc.paper_realization, 'pap:' + readerDoc.paper_id, paperColor[readerDoc.paper_id])
+        .concat(pairQuotesOf(readerDoc.evidence, 'pap:' + readerDoc.paper_id, 'paper',
+                             paperColor[readerDoc.paper_id]))
     : quotesOf(data && data.claim_realization, 'sub', colorFor(0))
+        .concat(verify.flatMap((v) => pairQuotesOf(
+          v.evidence, `subpair:${v.paper_id}`, 'submission', paperColor[v.paper_id])))
   const readerUrl = readerDoc
     ? api.paperPdfUrl(submissionId, readerDoc.paper_id)
     : api.pdfUrl(submissionId)
-  const papersWithQuotes = verify.filter((v) => (v.paper_realization || []).some((x) => x.kind === 'quote'))
+  const papersWithQuotes = verify.filter((v) =>
+    (v.paper_realization || []).some((x) => x.kind === 'quote') ||
+    (v.evidence || []).some((q) => q.paper_quote))
 
   const viewer = (
     <div className="pdfpane">

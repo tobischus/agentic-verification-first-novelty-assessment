@@ -679,3 +679,33 @@ li.pcard.selected { outline: 2px solid #6366f1; outline-offset: 1px; }
   display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
   color: #92400e; margin-bottom: 3px;
 }
+
+/* claim-evidence pairs: the submission's sentence beside the prior paper's own sentence.
+   The two halves are bracketed as ONE unit -- rendered as two separate quotes they read as
+   two unrelated findings, which is precisely the reading a pair exists to prevent. The
+   sides keep distinct accents so it stays obvious which document each half belongs to. */
+.ev-pairs { margin-top: 12px; }
+.ev-pairhint { font-weight: 500; text-transform: none; letter-spacing: 0; }
+.ev-pair {
+  margin: 8px 0; padding: 8px 10px 6px;
+  border: 1px solid rgba(80,140,255,0.28); border-radius: 8px;
+  background: rgba(80,140,255,0.04);
+}
+.ev-pairwhy {
+  font-size: 0.82rem; line-height: 1.5; color: var(--muted, #6a6a75);
+  margin-bottom: 6px;
+}
+.ev-pair .rz-quote { margin: 5px 0; font-size: 0.92rem; }
+.ev-pair .pair-sub { border-left-color: #2f6fd0; background: rgba(80,140,255,0.09); }
+.ev-pair .pair-sub .rz-qmark { color: #2f6fd0; }
+.ev-pair .pair-pap { border-left-color: #8a5cd0; background: rgba(138,92,208,0.09); }
+.ev-pair .pair-pap .rz-qmark { color: #8a5cd0; }
+.ev-pairside {
+  flex: 0 0 auto; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.04em;
+  text-transform: uppercase; font-style: normal; color: var(--muted, #7a7a85);
+  padding-top: 2px; min-width: 68px;
+}
+.ev-pairvote { font-size: 0.72rem; color: #b45309; margin-top: 2px; }
+.ev-pair .qjump { cursor: pointer; }
+.ev-pair .qjump:hover { filter: brightness(0.97); }
+.ev-pair .rz-quote.active { outline: 2px solid rgba(47,111,208,0.55); }
