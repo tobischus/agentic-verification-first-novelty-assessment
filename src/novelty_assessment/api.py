@@ -936,6 +936,14 @@ def review_summary(sid: str):
                 "submission_delta": c.get("submission_delta", ""),
                 "assessment": c.get("assessment", ""),
                 "paper_realization": c.get("paper_realization", []),
+                # The claim-evidence pairs, so the summary shows the review's actual result
+                # and not only prose about it. Pre-filtered to pairs verified on BOTH sides.
+                "evidence": [{"claim_quote": q.get("claim_quote"),
+                              "paper_quote": q.get("paper_quote"),
+                              "rationale": q.get("rationale"),
+                              "votes": q.get("audit_votes", "")}
+                             for q in (c.get("evidence_pairs") or [])
+                             if q.get("claim_quote_verified") and q.get("paper_quote_verified")],
                 "sections_used": c.get("sections_used", []),
                 "cited_by_submission": c.get("cited_by_submission", False),
             })

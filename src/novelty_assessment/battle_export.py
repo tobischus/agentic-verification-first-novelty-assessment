@@ -126,7 +126,12 @@ def _evidence_pairs(pairs, out: List[str]) -> None:
         if not (cq or pq):
             continue
         if shown == 0:
-            out += ["Evidence found for this claim", ""]
+            out += ["Where the two papers say the same thing", ""]
+        # The claim first, then the two spans that carry it. Printed after the quotes it read
+        # as a comment on them; printed before, it is the assertion the quotes are evidence
+        # for -- which is what a pair is.
+        if p.get("rationale"):
+            out += [p["rationale"].strip(), ""]
         shown += 1
         if cq:
             out.append("The submission states:")
@@ -138,8 +143,6 @@ def _evidence_pairs(pairs, out: List[str]) -> None:
             out.append(_quote(pq) if p.get("paper_quote_verified") else
                        f"(not confirmed verbatim) {pq}")
             out.append("")
-        if p.get("rationale"):
-            out += [p["rationale"].strip(), ""]
 
 
 def build(data_dir: str, submission_id: str, variant: str = "") -> str:
@@ -215,9 +218,11 @@ def build(data_dir: str, submission_id: str, variant: str = "") -> str:
         out.append("")
 
     # ------------------------------ review ----------------------------- #
+    # The synthesised overall assessment is deliberately left out. It is prose ABOUT the
+    # review rather than the review, and what a reader -- or a judge comparing systems --
+    # has to be able to check is the claim-level evidence: which sentence of the submission
+    # a prior paper already states, in both papers' own words.
     out += ["## Review", ""]
-    if b.get("overall_assessment"):
-        out += ["### Overall assessment", "", b["overall_assessment"].strip(), ""]
 
     n = 0
     for cid in order:
@@ -261,13 +266,12 @@ def build(data_dir: str, submission_id: str, variant: str = "") -> str:
             if pr:
                 out += ["How this paper realizes the claim", ""]
                 _segments(pr, out)
-            else:
-                # The linear baseline records its evidence as claim/paper quote PAIRS and
-                # writes no narrative -- paper_realization is an agent-only field. Rendering
-                # only the narrative made the baseline look as though it had produced no
-                # evidence at all, when it had produced verified pairs, which would have
-                # handed the agent an unearned advantage in the comparison.
-                _evidence_pairs(c.get("evidence_pairs") or [], out)
+            # Both, never one or the other. paper_realization is an agent-only field, so
+            # rendering only the narrative made the linear baseline look as though it had
+            # produced no evidence when it had produced verified pairs -- and rendering it
+            # INSTEAD of the pairs hid the agent's own claim-evidence map, which is the
+            # artifact this system exists to produce and the one a reader can check.
+            _evidence_pairs(c.get("evidence_pairs") or [], out)
             note = c.get("assessment") or c.get("brief_note") or ""
             if note:
                 out += ["Comparison with the submission", "", note.strip(), ""]

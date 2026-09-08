@@ -20,8 +20,6 @@ function fmtAuthors(a, year) {
 export default function ReviewSummary({ submissionId, active }) {
   const [data, setData] = useState(null)
   const [err, setErr] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [genErr, setGenErr] = useState('')
   const [exportText, setExportText] = useState(null)   // null = hidden
   const [exportBusy, setExportBusy] = useState(false)
 
@@ -41,19 +39,10 @@ export default function ReviewSummary({ submissionId, active }) {
   // refresh whenever the tab becomes active (e.g. right after finishing the review)
   useEffect(() => { if (active) load() }, [active, load])
 
-  // Builds Artifact B from Artifact A and runs the evidence check, then reloads so the
-  // whole page reflects one artifact rather than a mix of loaded and just-returned state.
-  const generate = async () => {
-    setBusy(true); setGenErr('')
-    try {
-      await api.generateConclusion(submissionId)
-      load()
-    } catch (e) {
-      setGenErr(String(e))
-    } finally {
-      setBusy(false)
-    }
-  }
+  // The synthesised overall assessment is not shown here. It is prose ABOUT the review
+  // rather than the review, and what a reviewer -- or a judge comparing systems -- has to
+  // be able to check is the claim-level evidence below. The pipeline still builds it
+  // (Artifact B), so bringing it back is a matter of rendering it again.
 
   // Fetches the plain-text export once and keeps it, so toggling it open and shut does
   // not hit the backend again -- the text is deterministic for a given run anyway.
@@ -91,10 +80,11 @@ export default function ReviewSummary({ submissionId, active }) {
   if (!data) return <div className="panel">Loading summary…</div>
 
   const claims = data.claims || []
-  const ready = !!data.assessment_ready
-  const judge = data.judge
-  const inconsistent = (judge?.deterministic_per_claim || []).filter((c) => !c.consistent).length
-  const unsupported = (judge?.prose_entailment?.unsupported_statements || []).length
+  // What this review produced: pairs whose two halves were each checked against their
+  // own document. The header used to report whether a synthesis had been written,
+  // which said nothing about whether anything was found.
+  const nPairs = claims.reduce(
+    (n, c) => n + (c.overlaps || []).reduce((m, o) => m + (o.evidence || []).length, 0), 0)
 
   return (
     <div className="panel review-summary">
@@ -104,14 +94,14 @@ export default function ReviewSummary({ submissionId, active }) {
           <div className="muted">
             {data.n_claims} claim{data.n_claims === 1 ? '' : 's'}
             {' · '}{data.n_overlap_papers} overlapping {data.n_overlap_papers === 1 ? 'paper' : 'papers'}
-            {ready ? ' · assessment generated' : ' · assessment not generated yet'}
+            {' · '}{nPairs} verified {nPairs === 1 ? 'pair' : 'pairs'}
           </div>
         </div>
       </div>
       <p className="muted rv-sub">
-        The complete output of this review. The assessment is synthesized strictly from the
-        claim-level evidence below — every statement about prior work traces back to a comparison
-        whose quotes were machine-verified on both sides.
+        The complete output of this review: for every claim, the prior work that overlaps it and
+        the sentences the two papers share — each side quoted from its own document and checked
+        against it automatically.
       </p>
 
       {claims.length === 0 && (
@@ -119,47 +109,10 @@ export default function ReviewSummary({ submissionId, active }) {
       )}
 
       {claims.length > 0 && (
-        <div className="sum-conclusion">
-          <div className="rv-h sm"><span className="rv-ic">🧭</span><h4>Overall assessment</h4></div>
-          {ready ? (
-            <>
-              <p className="conclusion-text">{data.overall_assessment}</p>
-              {judge && (
-                <div className="conclusion-foot">
-                  <span className="muted">
-                    {inconsistent === 0 && unsupported === 0
-                      ? '✓ Checked — every statement traces back to the evidence below'
-                      : [inconsistent > 0 && `⚠ ${inconsistent} claim${inconsistent === 1 ? '' : 's'} inconsistent with the evidence`,
-                         unsupported > 0 && `${unsupported} unsupported statement${unsupported === 1 ? '' : 's'}`]
-                          .filter(Boolean).join(' · ')}
-                  </span>
-                  <button className="link" disabled={busy} onClick={generate}>
-                    {busy ? 'Regenerating…' : '↻ regenerate'}
-                  </button>
-                </div>
-              )}
-            </>
-          ) : (
-            <>
-              <p className="muted rv-sub">
-                Not generated yet. This is the last step of the review and the output that gets
-                compared against other systems.
-              </p>
-              <button className="begin sm" disabled={busy} onClick={generate}>
-                {busy ? 'Writing the assessment…' : '✨ Generate assessment'}
-              </button>
-            </>
-          )}
-          {genErr && <div className="error">{genErr}</div>}
-        </div>
-      )}
-
-      {claims.length > 0 && (
         <div className="sum-export">
           <div className="sum-export-bar">
             <span className="muted">
               Text output used for the comparison against other systems
-              {!ready && ' — generate the assessment first for a complete document'}
             </span>
             <span className="sum-export-btns">
               <button className="link" disabled={exportBusy} onClick={toggleExport}>
@@ -213,6 +166,30 @@ export default function ReviewSummary({ submissionId, active }) {
                           {o.what_is_shared && <div className="ev-line"><span className="ev-lab">Shared:</span> {o.what_is_shared}</div>}
                           {o.submission_delta && <div className="ev-line"><span className="ev-lab">Submission adds:</span> {o.submission_delta}</div>}
                         </>}
+                    {(o.evidence || []).length > 0 && (
+                      <div className="ev-pairs">
+                        <div className="ev-sublab">
+                          Where the two papers say the same thing
+                          <span className="ev-pairhint"> · {o.evidence.length} verified
+                            {o.evidence.length === 1 ? ' pair' : ' pairs'}</span>
+                        </div>
+                        {o.evidence.map((q, i) => (
+                          <div className="ev-pair" key={i}>
+                            {q.rationale && <div className="ev-pairwhy">{q.rationale}</div>}
+                            <blockquote className="rz-quote pair-sub">
+                              <span className="rz-qmark" title="Verified verbatim in the submission">✓</span>
+                              <span className="ev-pairside">Your paper</span>
+                              <span className="rz-qtext">{q.claim_quote}</span>
+                            </blockquote>
+                            <blockquote className="rz-quote pair-pap">
+                              <span className="rz-qmark" title="Verified verbatim in the prior paper">✓</span>
+                              <span className="ev-pairside">This paper</span>
+                              <span className="rz-qtext">{q.paper_quote}</span>
+                            </blockquote>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
