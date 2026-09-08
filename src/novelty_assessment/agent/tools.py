@@ -93,10 +93,15 @@ class ClaimToolbox:
         ft = self._load_json(self.sub_dir / f"{submission_id}_fulltext.json") or {}
         sub_sections = ft.get("sections", [])
         self._submission_index = PassageIndex(chunks_from_sections(sub_sections, "submission"), embedder)
-        # what a claim_quote is verified against: body + abstract + the claim itself
+        # What a claim_quote is verified against: the submission's own body and abstract
+        # -- and nothing else. The claim text used to be appended here, which made the
+        # check circular: a model could quote the claim back and the verifier confirmed it
+        # against itself. Across the artifacts on disk that accounts for 94 of 141
+        # "verified" claim quotes, two in three, and none of them proves anything about
+        # the paper. A claim side that cannot be found in the submission is not evidence
+        # and has to fail.
         self._submission_text = "\n\n".join(
-            [s.get("text", "") for s in sub_sections]
-            + [self._meta.get("abstract", ""), claim.get("claim_text", ""), claim.get("description", "")]
+            [s.get("text", "") for s in sub_sections] + [self._meta.get("abstract", "")]
         )
 
         # --- related-work pool (with provenance) + claim similarity ---
