@@ -45,12 +45,16 @@ _DEPTH_RANK = {
     "fulltext_unavailable": 1,
     "targeted_sections": 2,
     "fulltext_available_targeted_read": 2,
+    # the whole paper went into the prompt -- no section selection stood between the
+    # model and the text (see claim_agent._prior_fulltext)
+    "fulltext_complete": 3,
 }
 _SUFFICIENT_DEPTHS = {
     "abstract_intro",
     "fulltext_unavailable",
     "targeted_sections",
     "fulltext_available_targeted_read",
+    "fulltext_complete",
 }
 
 
@@ -375,13 +379,18 @@ class ClaimToolbox:
         """Section titles + short previews + sizes, so the agent can choose which to read."""
         return self._index_for(paper_id).section_previews()
 
-    def read_sections(self, paper_id: str, names: List[str], max_total: int = 40000) -> dict:
-        """Load the FULL text of the chosen sections (no small cap) into context. This is
-        the section-based deep read: the agent picks sections by what they are about."""
+    def read_sections(self, paper_id: str, names: List[str], max_total: int = 40000,
+                      depth: str = "targeted_sections") -> dict:
+        """Load the FULL text of the chosen sections (no small cap) into context.
+
+        `depth` is what this read is worth on the ladder. It defaults to the section-based
+        deep read; the deep dive passes "fulltext_complete" when it asked for every section
+        because it is putting the whole paper in the prompt, which is a different claim
+        about how well the paper was examined."""
         idx = self._index_for(paper_id)
         got = idx.get_sections(names, max_total=max_total)
         if paper_id != "submission":
-            self._bump_depth(paper_id, "targeted_sections" if got else "abstract_intro")
+            self._bump_depth(paper_id, depth if got else "abstract_intro")
         # remember the actual section titles loaded (document order, de-duped) so the
         # review can report exactly which sections backed each comparison
         lst = self._sections_read.setdefault(paper_id, [])
@@ -391,6 +400,24 @@ class ClaimToolbox:
                 lst.append(nm)
         self._log("read_sections", f"{paper_id}: {len(got)} sections ({sum(len(s['text']) for s in got)} chars)")
         return {"paper_id": paper_id, "sections": got}
+
+    def note_full_read(self, paper_id: str, names: List[str]) -> None:
+        """Record that a paper's WHOLE text backed a comparison, without re-reading it.
+
+        The deep dive hands the model `_paper_source_text` directly -- the parsed document
+        as one string, which is also the verification corpus -- so it never goes through
+        read_sections, and the two things read_sections keeps on the side would otherwise
+        never be written: the depth this paper was examined at, and which sections backed
+        the comparison. Both are read by the review and by eval/evidence_gate.
+        """
+        if paper_id == "submission":
+            return
+        self._bump_depth(paper_id, "fulltext_complete")
+        with self._lock:
+            lst = self._sections_read.setdefault(paper_id, [])
+            for nm in names or []:
+                if nm and nm not in lst:
+                    lst.append(nm)
 
     def verify_segments(self, segments: List[dict], source: str) -> List[dict]:
         """Verify a realization's quote segments against the true source text.
@@ -570,8 +597,11 @@ class ClaimToolbox:
             "source": p["source"],
             "content_source": "full text" if self._has_fulltext(paper_id) else "abstract + introduction",
             "depth": depth,
-            # the exact section titles read in full for this comparison (empty for
-            # abstract-only triage) -- shown in the review instead of a "full text" badge
+            # the section titles that backed this comparison (empty for abstract-only
+            # triage). Since the deep dive feeds whole papers this is normally EVERY
+            # section of the paper, not a selection -- so its length no longer says how
+            # much of the paper was read; `context_policy` does. Feeding it back to
+            # read_sections stays correct under either meaning, which is all its readers do.
             "sections_used": list(self._sections_read.get(paper_id, [])),
             "relevance_reason": relevance_reason,
             "refutation_status": status,

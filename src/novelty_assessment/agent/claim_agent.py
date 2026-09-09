@@ -278,8 +278,11 @@ Then judge:
 ## What the submission does for this claim
 {realization}
 
+## The submission, in full
+{submission}
+
 ## Prior paper: {title}
-## Its section text (full)
+## Its full text
 {sections}"""
 
 
@@ -501,22 +504,36 @@ class ClaimNoveltyAgent:
     # ------------------------------ phase 2 ------------------------------ #
 
     def _section_compare(self, tb: ClaimToolbox, claim: dict, pid: str, claim_ctx: str):
-        """Section-based deep dive: the model picks the prior paper's relevant sections,
-        reads them in full, and returns a realization (narrative + verified quotes) + the
-        overlap judgment."""
+        """Deep dive on the prior paper's WHOLE text: realization + the overlap judgment.
+
+        The model used to choose sections from a menu and read those -- 13 to 21% of a paper
+        across the three deep dives measured. Choosing costs a call, and it misses: on "RAG
+        vs. GraphRAG" the selection left out the sentence in which that paper states what it
+        contributes ("we present a comprehensive benchmark study comparing RAG and GraphRAG
+        on established text-based tasks"), and the comparison came back `none` on one run of
+        three -- no overlap found with a paper whose entire subject is the claim.
+
+        Reading everything costs 2.4x per claim and 24% more wall time -- the same number of
+        calls, each with more in it -- and over three runs each it never returned `none` for
+        either real competitor, where the picking version did once, and it held the same
+        verdict for two of three papers against one of three. On this project's scale the
+        difference is about a euro across the whole evaluation.
+        """
         pt = ct = 0
-        pick_prompt = (_PAPER_SECTION_PICK
-                       .replace("{claim}", self._claim_str(claim)[:1200])
-                       .replace("{realization}", claim_ctx[:1600])
-                       .replace("{title}", tb.pool[pid]["title"]))
-        secs, a, b = self._pick_sections(tb, pid, pick_prompt); pt += a; ct += b
-        if not secs:  # no full text -> compare on the abstract passages instead
+        paper_text = tb._paper_source_text(pid)
+        if not paper_text.strip():   # no full text -> compare on the abstract passages
             hits = tb.read_paper(pid, query=self._claim_str(claim))
-            secs = [{"name": "Abstract", "text": _fmt_passages(
-                hits.get("passages") or ([{"text": hits.get("abstract", "")}] if hits.get("abstract") else []))}]
+            paper_text = _fmt_passages(
+                hits.get("passages") or ([{"text": hits.get("abstract", "")}]
+                                         if hits.get("abstract") else []))
         parsed, a, b = self._struct(_SectionComparison, _fill(
             _PAPER_COMPARE, claim=self._claim_str(claim)[:1200], realization=claim_ctx[:1600],
-            title=tb.pool[pid]["title"], sections=_fmt_sections_full(secs))); pt += a; ct += b
+            submission=tb._submission_text, title=tb.pool[pid]["title"],
+            sections=paper_text)); pt += a; ct += b
+        # Recorded so the UI's "sections read" box stays truthful now that the answer is
+        # "all of them" rather than a selection.
+        tb._sections_read.setdefault(pid, [])
+        tb._sections_read[pid] = ["(full text)"]
         return self._to_comp(parsed), pt, ct
 
     @staticmethod
@@ -572,8 +589,7 @@ class ClaimNoveltyAgent:
             what_is_shared=comp["what_is_shared"],
             submission_delta=comp["submission_delta"],
             evidence_pairs=comp["evidence_pairs"],
-            extra={k: comp[k] for k in ("map_diag", "rejected_pairs", "delta_evidence",
-                                        "delta_withdrawn", "follow_ups") if k in comp},
+            extra={k: comp[k] for k in ("map_diag", "rejected_pairs") if k in comp},
             paper_realization=comp.get("paper_realization"),
             assessment=comp.get("assessment", ""),
             fulltext_fetch_status=comp.get("fulltext_fetch_status"),
@@ -609,22 +625,14 @@ class ClaimNoveltyAgent:
             pt += a; ct += b
             return parsed
 
-        names = tb._sections_read.get("submission") or [
-            m.get("name") for m in (tb.section_menu("submission") or [])[:6] if m.get("name")]
-        sub_secs = (tb.read_sections("submission", names) or {}).get("sections") or []
-        submission_text = _fmt_sections_full(sub_secs)
-        paper_secs = (tb.read_sections(pid, tb._sections_read.get(pid) or []) or {}).get("sections") or []
-        # The deep dive picks the sections it needs to JUDGE the paper -- often Method and
-        # Experiments. A paper states what it CONTRIBUTES in its abstract ("We present the
-        # first open-source testbed for graph-based RAG methods"), so a map built only from
-        # the picked sections has nothing to quote for the one sentence that matters most.
-        paper_text = _fmt_sections_full(paper_secs)
-        abstract = (tb.pool.get(pid, {}) or {}).get("abstract") or ""
-        if abstract.strip():
-            paper_text = f"[Abstract]\n{abstract.strip()}\n\n{paper_text}"
-        sub_abstract = (tb._meta or {}).get("abstract") or ""
-        if sub_abstract.strip():
-            submission_text = f"[Abstract]\n{sub_abstract.strip()}\n\n{submission_text}"
+        # Both documents whole. The map used to see the same section selection the deep
+        # dive had made, so a correspondence could only be found in the 13-21% of a paper
+        # that selection covered -- and two of the seven pairs the full-text version finds
+        # come from outside it, including one carrying that paper's own contribution
+        # statement. Verification already ran against the whole document, so what changes
+        # here is only what the model may look at, not what counts as verified.
+        submission_text = tb._submission_text
+        paper_text = tb._paper_source_text(pid)
         if not (submission_text.strip() and paper_text.strip()):
             return comp, pt, ct                      # nothing to map against; leave it alone
 
@@ -633,35 +641,8 @@ class ClaimNoveltyAgent:
             struct, claim_str, submission_text, tb.pool.get(pid, {}).get("title", ""),
             paper_text, tb._submission_text, tb._paper_source_text(pid),
             self.min_quote_tokens, self.fuzzy_threshold)
-        title = tb.pool.get(pid, {}).get("title", "")
-        kept = evidence_map.audit(struct, claim_str, title, mapping["pairs"])
-
-        # Retrieval over THIS paper's own full text, which is what makes the two passes below
-        # checks rather than opinions: the delta is a claim of absence and has to be looked
-        # for, and a follow-up question is only worth asking if the paper can answer it.
-        def look(query, k=4):
-            hits = tb.read_paper(pid, query=query, k=k) or {}
-            return hits.get("passages") or []
-
-        # A failed map means nothing was checked. Probing a delta or asking a follow-up on
-        # top of that would spend three more calls to elaborate an empty result.
-        empty = {"deltas": [], "withdrawn": [], "probes": 0, "failed": True}
-        delta, followups = (empty, []) if mapping.get("failed") else (
-            evidence_map.check_delta(
-                struct, look, claim_str, submission_text, title, kept,
-                tb._submission_text, tb._paper_source_text(pid),
-                self.min_quote_tokens, self.fuzzy_threshold),
-            None)
-        if followups is None:
-            followups = evidence_map.follow_up(
-                struct, look, claim_str, title, kept, delta["deltas"],
-                tb._paper_source_text(pid), self.min_quote_tokens, self.fuzzy_threshold)
-            # A follow-up that looked at one thing and found the paper does deliver it
-            # overrides the delta pass, which ruled on four entries at once. Both were
-            # reached from retrieved passages; only one of them asked about this.
-            held, retracted = evidence_map.apply_retractions(delta["deltas"], followups)
-            delta = {**delta, "deltas": held,
-                     "withdrawn": delta["withdrawn"] + retracted}
+        kept = evidence_map.audit(struct, claim_str, tb.pool.get(pid, {}).get("title", ""),
+                                  mapping["pairs"])
         verdict = evidence_map.conclude(struct, claim_str, {**mapping, "pairs": kept})
 
         comp = dict(comp)
@@ -670,10 +651,6 @@ class ClaimNoveltyAgent:
             "returned": mapping.get("returned", 0), "unverified": mapping.get("dropped", 0),
             "audited_out": len(mapping["pairs"]) - len(kept), "kept": len(kept),
             "call_failed": bool(mapping.get("failed")),
-            "delta_probes": delta.get("probes", 0), "delta_held": len(delta["deltas"]),
-            "delta_withdrawn": len(delta["withdrawn"]),
-            "questions": len(followups),
-            "questions_answered": sum(1 for q in followups if q.get("answered")),
         }
         if mapping.get("failed"):
             # Nothing was checked, so nothing may be concluded. Leaving the deep dive's own
@@ -689,18 +666,8 @@ class ClaimNoveltyAgent:
         # reading "substantially overlaps" above a verdict of `none`.
         if verdict.get("reasoning"):
             comp["assessment"] = verdict["reasoning"]
-        # The delta the reviewer is shown is the one that was checked. The mapping's own
-        # free-prose delta is kept only when the check produced nothing to put in its place.
-        if delta["deltas"]:
-            comp["delta_evidence"] = delta["deltas"]
-            comp["submission_delta"] = " ".join(
-                f"{d['what']}: {d['note']}" for d in delta["deltas"])[:900]
-        elif mapping.get("submission_delta"):
+        if mapping.get("submission_delta"):
             comp["submission_delta"] = mapping["submission_delta"]
-        if delta["withdrawn"]:
-            comp["delta_withdrawn"] = delta["withdrawn"]
-        if followups:
-            comp["follow_ups"] = followups
         comp["refutation_status"] = ("can_refute" if verdict["degree"] in ("substantial", "same")
                                      else "cannot_refute")
         tb._log("evidence_map", f"{pid}: {len(kept)} pairs "
