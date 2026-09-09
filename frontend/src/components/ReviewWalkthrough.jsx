@@ -117,9 +117,6 @@ function EvidencePairs({ pairs, paperId, docKey, activeId, onPickSubmission, onP
               <span className="ev-pairside">This paper</span>
               <span className="rz-qtext">{q.paper_quote}</span>
             </blockquote>
-            {q.votes && q.votes !== '3/3' && (
-              <div className="ev-pairvote">kept on {q.votes} of the audit's checks</div>
-            )}
           </div>
         )
       })}
@@ -127,14 +124,16 @@ function EvidencePairs({ pairs, paperId, docKey, activeId, onPickSubmission, onP
   )
 }
 
-/** What the submission still holds, and what the search for it actually turned up.
+/** What the submission still holds against this paper, and what the check took back.
  *
- *  A delta is a claim of ABSENCE, and absence cannot be quoted. So both checkable halves
- *  are shown: the submission's own sentence, and the closest the prior paper came when its
- *  full text was searched for the same thing. A reviewer who disagrees can see what the
- *  claim was checked against rather than having to take it. A delta the search refuted is
- *  shown too, as withdrawn -- a paper that turns out to deliver what the submission thought
- *  was its own is the most useful thing the comparison can find.
+ *  A delta is a claim of ABSENCE, and absence cannot be quoted. So both halves that can be
+ *  are shown: the submission's own sentence stating the thing, and the nearest passage the
+ *  prior paper actually has -- the one a reviewer would be shown if they asked "are you
+ *  sure it does not do that?". Both are verified verbatim against their own document.
+ *
+ *  A delta the nearest passage refuted is shown too, as withdrawn. A paper that turns out
+ *  to deliver what the submission thought was its own is the most useful thing this
+ *  comparison can find, and hiding it would leave the panel tidier than the evidence.
  */
 function DeltaEvidence({ held, withdrawn }) {
   const h = held || []
@@ -147,21 +146,25 @@ function DeltaEvidence({ held, withdrawn }) {
         <div className="ev-deltaitem" key={'h' + i}>
           <div className="ev-deltawhat">{d.what}</div>
           {d.note && <div className="ev-pairwhy">{d.note}</div>}
-          {d.submission_quote && (
+          {d.claim_quote && (
             <blockquote className="rz-quote pair-sub">
               <span className="rz-qmark" title="Verified verbatim in the submission">✓</span>
               <span className="ev-pairside">Your paper</span>
-              <span className="rz-qtext">{d.submission_quote}</span>
+              <span className="rz-qtext">{d.claim_quote}</span>
             </blockquote>
           )}
-          {d.closest && (
+          {d.paper_nearest_verified && d.paper_nearest_quote ? (
+            <div className="ev-closest">
+              <span className="ev-closestlab">The nearest this paper comes</span>
+              <span className="ev-closesttext">{d.paper_nearest_quote}</span>
+            </div>
+          ) : d.nothing_of_the_kind ? (
             <div className="ev-closest">
               <span className="ev-closestlab">
-                Closest passage in that paper, searched for “{d.probe}”
+                The paper holds nothing of the kind to point at.
               </span>
-              <span className="ev-closesttext">{d.closest}</span>
             </div>
-          )}
+          ) : null}
         </div>
       ))}
       {w.map((d, i) => (
@@ -170,11 +173,11 @@ function DeltaEvidence({ held, withdrawn }) {
             <span className="ev-withdrawtag">withdrawn</span> {d.what}
           </div>
           {d.note && <div className="ev-pairwhy">{d.note}</div>}
-          {d.paper_quote && d.paper_quote_verified && (
+          {d.paper_nearest_quote && d.paper_nearest_verified && (
             <blockquote className="rz-quote pair-pap">
               <span className="rz-qmark" title="Verified verbatim in the prior paper">✓</span>
               <span className="ev-pairside">This paper</span>
-              <span className="rz-qtext">{d.paper_quote}</span>
+              <span className="rz-qtext">{d.paper_nearest_quote}</span>
             </blockquote>
           )}
         </div>
@@ -183,43 +186,27 @@ function DeltaEvidence({ held, withdrawn }) {
   )
 }
 
-/** The questions this comparison raised, and what looking them up settled.
+/** How far this comparison got, and what it could not settle.
  *
- *  Unanswered ones are shown as well. A question the paper's own text did not settle is a
- *  named gap, and seeing it is worth more to a reviewer than prose written over it.
+ *  `confidence` and the open points come from a gate in code, not from the model: a
+ *  comparison whose questions were answered reads differently from one that ran out of
+ *  rounds, and until now the artifact could not tell them apart.
  */
-function FollowUps({ items }) {
-  const qs = items || []
-  if (!qs.length) return null
+function Deepening({ d }) {
+  if (!d || !d.rounds) return null
+  const open = d.open || []
   return (
-    <div className="ev-followups">
-      <div className="ev-sublab">
-        Questions this raised
-        <span className="ev-pairhint">
-          {' · '}{qs.filter((q) => q.answered).length} of {qs.length} answered by the paper
-        </span>
-      </div>
-      {qs.map((q, i) => (
-        <div className={'ev-fu' + (q.answered ? ' answered' : '')} key={i}>
-          <div className="ev-fuq">{q.question}</div>
-          {q.answered ? (
-            <>
-              <div className="ev-pairwhy">{q.answer}</div>
-              {q.quote && (
-                <blockquote className="rz-quote pair-pap">
-                  <span className="rz-qmark" title="Verified verbatim in the prior paper">✓</span>
-                  <span className="rz-qtext">{q.quote}</span>
-                </blockquote>
-              )}
-            </>
-          ) : (
-            <div className="ev-fuopen">
-              Searched for “{q.probe}” — not settled by what was found.
-              {q.answer ? ' ' + q.answer : ''}
-            </div>
-          )}
-        </div>
-      ))}
+    <div className={'ev-deepen conf-' + (d.confidence || 'low')}>
+      <span className="ev-deepenlab">
+        {d.rounds} deepening round{d.rounds === 1 ? '' : 's'} · {d.confidence} confidence
+      </span>
+      {open.length > 0 && (
+        <ul className="ev-openlist">
+          {open.map((o, i) => (
+            <li key={i}>{o}</li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }
@@ -519,8 +506,8 @@ export default function ReviewWalkthrough({ submissionId, onFinish }) {
                 onPickSubmission={(id) => setReader({ paperId: null, focusId: id })}
                 onPickPaper={(id) => setReader({ paperId: v.paper_id, focusId: id })}
               />
-              <DeltaEvidence held={v.delta_evidence} withdrawn={v.delta_withdrawn} />
-              <FollowUps items={v.follow_ups} />
+              <DeltaEvidence held={v.delta_items} withdrawn={v.delta_withdrawn} />
+              <Deepening d={v.deepening} />
               {(v.assessment || v.what_is_shared || v.submission_delta) && (
                 <div className="ev-assess">
                   <div className="ev-sublab">Comparison with the submission</div>
@@ -547,7 +534,7 @@ export default function ReviewWalkthrough({ submissionId, onFinish }) {
         <p className="muted rv-sub">
           Claim-vs-paper comparison for each relevant paper. For overlapping papers, the narrative explains how the paper realizes the claim, with quotes copied verbatim from the paper and machine-verified (✓).
         </p>
-        <div className="sections-legend"><span className="sb-ic">🗂️</span> The blue box under a paper lists the sections that were read in full and used for the comparison.</div>
+        <div className="sections-legend"><span className="sb-ic">🗂️</span> Each deep dive reads the prior paper's complete text alongside the submission's and used for the comparison.</div>
         {verify.length === 0 && <div className="muted">No comparisons were recorded for this claim.</div>}
         {evOverlap.length > 0 && (
           <>

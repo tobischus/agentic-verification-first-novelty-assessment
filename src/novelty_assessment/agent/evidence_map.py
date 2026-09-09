@@ -360,89 +360,15 @@ def build_map(struct_call: Callable, claim_str: str, submission_text: str,
             "dropped": dropped, "returned": len(parsed.correspondences), "failed": False}
 
 
-class Audited(BaseModel):
-    keep: List[int] = Field(
-        description="1-based numbers of the entries that survive, in order. Empty if none do.")
-    dropped: str = Field(default="", description="one clause per rejected entry: its number "
-                                                 "and which test it failed")
-
-
-AUDIT_PROMPT = """Each entry below pairs a sentence of a submission with a sentence of one prior paper, and asserts they deliver the same thing. Both quotes are already confirmed verbatim. Your job is the OTHER half of the check: whether the assertion holds.
-
-Judge each entry BY ITS TWO SPANS. The question is whether the prior paper's span states something THAT PAPER ITSELF DELIVERS which is the same thing the submission's span says the submission delivers.
-
-A claimed contribution usually has several parts, and each entry is about ONE of them. An entry that covers only part of the claim is a correct entry -- that is what a map is for. Whether the claim as a whole survives is decided elsewhere, from the entries you keep, so NEVER reject an entry for being narrower than the claim. The claim is printed below only so you can tell which part an entry is about.
-
-Reject an entry only when its two spans fail one of these, and that thing must be a CONTRIBUTION:
-
-1. SHARED MACHINERY. Would this entry read the same with almost any other paper in this area substituted? Constructing a knowledge graph, retrieving passages, running a pipeline, prompting a model -- everything here does those. Common practice is not a correspondence.
-2. BUILDING vs USING. Contributing a benchmark, dataset, corpus or method is not the same as evaluating on one or applying one. "we validate on 9 benchmarks", "we employ 11 datasets", "we follow the standard approach" is a paper USING resources. This is about the ROLE the thing plays, not the word used: a paper whose own contribution IS a benchmark, testbed or evaluation framework DELIVERS that artifact, and does not fail this test merely because the shared contribution is an evaluation.
-3. ARTIFACT vs FINDING. Announcing a resource is not reporting a result about it, and having a pipeline stage is not evaluating that stage.
-4. DIFFERENT OBJECT. The two SPANS are about different things and merely share vocabulary. Compare span with span: an entry is not a different object because it fails to cover the rest of the claim.
-5. BOILERPLATE. Artifact-availability and code/data-release statements, repository links, funding, acknowledgements, dataset licences, reproducibility notes. Nearly every paper carries these and they say nothing about what a paper contributes. Two papers both publishing a GitHub link is not an overlap.
-
-Keep every entry that passes all five, and reject every entry that does not, naming the failed test in `dropped`. Rejecting all of them is a normal outcome: most prior work retrieved for a claim shares its field and not its contribution.
-
-## The claimed contribution (context only -- an entry may cover just one part of it)
-{claim}
-
-## The prior paper: {title}
-
-## Entries
-{pairs}"""
-
-
-def audit(struct_call: Callable, claim_str: str, title: str, pairs: List[dict],
-          votes: int = 3) -> List[dict]:
-    """Re-check each verified pair for what kind of statement its two spans make.
-
-    Verification proves the two quotes exist. It cannot prove they are about the same kind of
-    thing, and that is where this comparison actually fails: a paper that CONSTRUCTS a
-    knowledge graph read as matching a submission that EVALUATES graph construction, a paper
-    VALIDATED ON benchmarks read as matching one that CONTRIBUTES a benchmark.
-
-    Those tests were first written into the mapping prompt and applied inconsistently -- the
-    same paper came back `none` in one run and `substantial` in the next, on the strength of
-    exactly the machinery pairs the prompt had ruled out. Asked separately, with the quotes
-    fixed and nothing to find, the judgement is made once per paper against four named tests
-    rather than in passing while composing thirty other things.
-
-    Asked once, it is still a coin toss on the entries that matter. Over six repetitions of an
-    identical run the two papers that share only the field were rejected every time, while the
-    two genuine competitors were each lost once -- a paper is carried by one to three pairs, so
-    a single flipped entry drops it from `substantial` to `none` and hides the prior work the
-    reviewer most needs. Three votes per pair, majority keeps: it costs three short calls per
-    paper and it is the same remedy the judge in the evaluation harness already uses.
-    """
-    if not pairs:
-        return pairs
-    sep = "\n\n"
-    listed = sep.join(
-        f"[{i + 1}] claimed correspondence: {p['rationale']}\n"
-        f"    SUBMISSION: \u201c{' '.join(p['claim_quote'].split())[:320]}\u201d\n"
-        f"    THIS PAPER: \u201c{' '.join(p['paper_quote'].split())[:320]}\u201d"
-        for i, p in enumerate(pairs))
-    prompt = AUDIT_PROMPT.format(claim=claim_str[:1200], title=title, pairs=listed)
-    tally, cast, why = {i: 0 for i in range(1, len(pairs) + 1)}, 0, []
-    for _ in range(max(1, votes)):
-        got = struct_call(Audited, prompt)
-        if got is None:                  # a failed call abstains; it does not veto
-            continue
-        cast += 1
-        for i in (got.keep or []):
-            if i in tally:
-                tally[i] += 1
-        if got.dropped:
-            why.append(got.dropped.strip())
-    if not cast:                         # every vote failed: pass them through unfiltered
-        return pairs
-    need = cast // 2 + 1
-    for i, p in enumerate(pairs, 1):
-        p["audit_votes"] = f"{tally[i]}/{cast}"
-        p["audit_rejected"] = tally[i] < need
-        if p["audit_rejected"] and why:
-            p["audit_reason"] = why[0][:300]
-    return [p for i, p in enumerate(pairs, 1) if tally[i] >= need]
+def _list_pairs(pairs: List[dict], start: int = 1) -> str:
+    return "\n\n".join(
+        "[{}] ({}) {}\n"
+        "    SUBMISSION: \u201c{}\u201d\n"
+        "    THIS PAPER: \u201c{}\u201d".format(
+            i, p.get("strength", "?"), p.get("rationale", ""),
+            " ".join(p["claim_quote"].split())[:400],
+            " ".join(p["paper_quote"].split())[:400])
+        for i, p in enumerate(pairs, start))
 
 
 def conclude(struct_call: Callable, claim_str: str, mapping: dict) -> dict:
@@ -452,18 +378,22 @@ def conclude(struct_call: Callable, claim_str: str, mapping: dict) -> dict:
     as the quotes -- before either has been checked -- and the quotes then exist to support a
     conclusion already drawn. Here the conclusion is drawn from evidence that has already
     survived verification, which is what "verification-first" has to mean at this level.
+
+    Every verified pair reaches this step. A second model pass used to sit in between,
+    re-checking each pair for whether its two spans compare the same KIND of statement --
+    the rules the mapping prompt already states. Measured against a stated gold standard
+    over three runs of two claims it cost three calls a paper and scored 17 of 21 where
+    dropping it scored 20 of 21, and it was worst on the papers it was built for: a medical
+    GraphRAG method came out `none` in all three runs without it and in one of three with
+    it. It is gone; git history has it.
     """
     pairs = mapping.get("pairs") or []
     if not pairs:
         return {"degree": "none", "reasoning": "No correspondence between this paper and the "
                                                "claimed contribution could be evidenced."}
-    listed = "\n\n".join(
-        f"[{i + 1}] ({p['strength']}) {p['rationale']}\n"
-        f"    SUBMISSION: “{' '.join(p['claim_quote'].split())[:400]}”\n"
-        f"    THIS PAPER: “{' '.join(p['paper_quote'].split())[:400]}”"
-        for i, p in enumerate(pairs))
     parsed = struct_call(Conclusion, CONCLUDE_PROMPT.format(
-        claim=claim_str[:1200], pairs=listed,
+        claim=claim_str[:1200],
+        pairs=_list_pairs(pairs),
         delta=(mapping.get("submission_delta") or "(not stated)")[:800]))
     if parsed is None:
         return {"degree": "partial", "reasoning": ""}

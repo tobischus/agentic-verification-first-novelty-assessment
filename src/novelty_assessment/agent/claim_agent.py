@@ -589,7 +589,7 @@ class ClaimNoveltyAgent:
             what_is_shared=comp["what_is_shared"],
             submission_delta=comp["submission_delta"],
             evidence_pairs=comp["evidence_pairs"],
-            extra={k: comp[k] for k in ("map_diag", "rejected_pairs") if k in comp},
+            extra={k: comp[k] for k in ("map_diag",) if k in comp},
             paper_realization=comp.get("paper_realization"),
             assessment=comp.get("assessment", ""),
             fulltext_fetch_status=comp.get("fulltext_fetch_status"),
@@ -641,15 +641,14 @@ class ClaimNoveltyAgent:
             struct, claim_str, submission_text, tb.pool.get(pid, {}).get("title", ""),
             paper_text, tb._submission_text, tb._paper_source_text(pid),
             self.min_quote_tokens, self.fuzzy_threshold)
-        kept = evidence_map.audit(struct, claim_str, tb.pool.get(pid, {}).get("title", ""),
-                                  mapping["pairs"])
-        verdict = evidence_map.conclude(struct, claim_str, {**mapping, "pairs": kept})
+        kept = mapping["pairs"]
+        verdict = evidence_map.conclude(struct, claim_str, mapping)
 
         comp = dict(comp)
         comp["map_diag"] = {
             "submission_chars": len(submission_text), "paper_chars": len(paper_text),
             "returned": mapping.get("returned", 0), "unverified": mapping.get("dropped", 0),
-            "audited_out": len(mapping["pairs"]) - len(kept), "kept": len(kept),
+            "kept": len(kept),
             "call_failed": bool(mapping.get("failed")),
         }
         if mapping.get("failed"):
@@ -659,7 +658,6 @@ class ClaimNoveltyAgent:
             tb._log("evidence_map", f"{pid}: map call failed -- keeping the deep dive's verdict")
             return comp, pt, ct
         comp["evidence_pairs"] = kept
-        comp["rejected_pairs"] = [q for q in mapping["pairs"] if q.get("audit_rejected")]
         comp["overlap_degree"] = verdict["degree"]
         # The narrative has to follow the same evidence as the degree. Leaving the deep-dive's
         # prose in place next to a degree derived from the map is how a reviewer ends up
@@ -671,8 +669,7 @@ class ClaimNoveltyAgent:
         comp["refutation_status"] = ("can_refute" if verdict["degree"] in ("substantial", "same")
                                      else "cannot_refute")
         tb._log("evidence_map", f"{pid}: {len(kept)} pairs "
-                                f"(+{mapping['dropped']} unverified, "
-                                f"-{len(comp['rejected_pairs'])} audit) -> {verdict['degree']}")
+                                f"(+{mapping['dropped']} unverified) -> {verdict['degree']}")
         return comp, pt, ct
 
     def _deep_dive(self, tb: ClaimToolbox, claim: dict, pid: str, degree: str, claim_ctx: str):

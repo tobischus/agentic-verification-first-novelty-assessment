@@ -145,55 +145,6 @@ def _evidence_pairs(pairs, out: List[str]) -> None:
             out.append("")
 
 
-def _delta(c: dict, out: List[str]) -> None:
-    """What the submission still holds, with what the search for it turned up.
-
-    A delta is a claim of absence, so what is printed is the pair of things that can be
-    checked: the submission's own sentence, and the closest the prior paper came when its
-    full text was searched for the same thing. A reader who disagrees can see exactly what
-    the claim was checked against.
-    """
-    held = c.get("delta_evidence") or []
-    gone = c.get("delta_withdrawn") or []
-    if not (held or gone):
-        return
-    if held:
-        out += ["What the submission still has", ""]
-        for d in held:
-            out += [f"{d.get('what', '')} — {d.get('note', '')}".strip(" -"), ""]
-            if d.get("submission_quote"):
-                out += ["The submission states:", _quote(d["submission_quote"]), ""]
-            if d.get("closest"):
-                out += ["Closest passage found in the prior work when searched for "
-                        f"“{d.get('probe', '')}”:",
-                        "> " + " ".join(d["closest"].split())[:400], ""]
-    for d in gone:
-        out += ["Withdrawn: the prior work does deliver this", "",
-                f"{d.get('what', '')} — {d.get('note', '')}".strip(" -"), ""]
-        if d.get("paper_quote") and d.get("paper_quote_verified"):
-            out += ["The prior work states:", _quote(d["paper_quote"]), ""]
-
-
-def _follow_ups(qs: List[dict], out: List[str]) -> None:
-    """The questions the comparison left open, and what looking them up settled.
-
-    Unanswered ones are printed too. A question the paper's own text did not settle is a
-    named gap, and a reviewer is better served by seeing it than by prose written over it.
-    """
-    if not qs:
-        return
-    out += ["Questions this comparison raised, and what the paper answered", ""]
-    for q in qs:
-        out += [f"{q.get('question', '')}", ""]
-        if q.get("answered"):
-            out += [q.get("answer", "").strip(), ""]
-            if q.get("quote"):
-                out += ["The prior work states:", _quote(q["quote"]), ""]
-        else:
-            out += [f"Searched for “{q.get('probe', '')}”; not settled by the "
-                    f"passages found. {q.get('answer', '').strip()}", ""]
-
-
 def build(data_dir: str, submission_id: str, variant: str = "") -> str:
     sub = Path(data_dir) / submission_id
     tail = f"_{variant}" if variant else ""
@@ -321,8 +272,6 @@ def build(data_dir: str, submission_id: str, variant: str = "") -> str:
             # INSTEAD of the pairs hid the agent's own claim-evidence map, which is the
             # artifact this system exists to produce and the one a reader can check.
             _evidence_pairs(c.get("evidence_pairs") or [], out)
-            _delta(c, out)
-            _follow_ups(c.get("follow_ups") or [], out)
             note = c.get("assessment") or c.get("brief_note") or ""
             if note:
                 out += ["Comparison with the submission", "", note.strip(), ""]

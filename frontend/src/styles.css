@@ -719,7 +719,7 @@ li.pcard.selected { outline: 2px solid #6366f1; outline-offset: 1px; }
 }
 
 /* the delta: a claim of absence, shown with both halves that can actually be checked --
-   the submission's own sentence, and the closest the prior paper came when searched */
+   the submission's own sentence, and the nearest thing the prior paper has */
 .ev-delta { margin-top: 12px; }
 .ev-deltaitem {
   margin: 8px 0; padding: 8px 10px 6px;
@@ -733,8 +733,8 @@ li.pcard.selected { outline: 2px solid #6366f1; outline-offset: 1px; }
   color: #b45309; border: 1px solid rgba(180,83,9,0.4); border-radius: 4px;
   padding: 1px 5px; margin-right: 6px;
 }
-/* the closest passage is NOT a quotation of the submission's claim -- it is what the
-   search returned, shown so the absence can be judged. Styled apart from verified quotes. */
+/* the nearest passage is the counter-evidence the absence was ruled against, not a
+   quotation supporting the claim -- styled apart from the verified pairs for that reason */
 .ev-closest { display: block; margin: 6px 0 2px; padding: 6px 10px;
   border-left: 3px dashed rgba(120,120,130,0.5); background: rgba(120,120,130,0.06);
   border-radius: 0 6px 6px 0; }
@@ -742,10 +742,21 @@ li.pcard.selected { outline: 2px solid #6366f1; outline-offset: 1px; }
   letter-spacing: 0.04em; color: var(--muted, #7a7a85); margin-bottom: 3px; }
 .ev-closesttext { font-size: 0.86rem; line-height: 1.5; color: var(--muted, #6a6a75); }
 
-/* follow-ups: what the comparison left open, and what looking it up settled */
-.ev-followups { margin-top: 12px; }
-.ev-fu { margin: 6px 0; padding: 7px 10px; border-radius: 8px;
+/* how far a pair's two sides actually agree: the shared thing is above it, this is the
+   distance between the two versions of it */
+.ev-diff { margin: 4px 0 8px 2px; font-size: 0.86rem; line-height: 1.5;
+  color: var(--muted, #6a6a75); }
+.ev-difflab { display: block; font-size: 0.7rem; text-transform: uppercase;
+  letter-spacing: 0.04em; color: #b45309; margin-bottom: 2px; }
+
+/* how far the comparison got. The colour is the confidence the gate in code arrived at --
+   a comparison that ran out of rounds must not look like one whose questions were answered. */
+.ev-deepen { margin-top: 10px; padding: 6px 10px; border-radius: 8px;
   border: 1px solid rgba(120,120,130,0.28); background: rgba(120,120,130,0.04); }
-.ev-fu.answered { border-color: rgba(47,111,208,0.32); background: rgba(80,140,255,0.05); }
-.ev-fuq { font-size: 0.9rem; font-weight: 600; margin-bottom: 3px; }
-.ev-fuopen { font-size: 0.84rem; line-height: 1.5; color: var(--muted, #6a6a75); }
+.ev-deepen.conf-high { border-color: rgba(47,158,99,0.35); background: rgba(47,158,99,0.05); }
+.ev-deepen.conf-medium { border-color: rgba(180,83,9,0.30); background: rgba(180,83,9,0.04); }
+.ev-deepen.conf-low { border-color: rgba(190,60,60,0.32); background: rgba(190,60,60,0.05); }
+.ev-deepenlab { display: block; font-size: 0.7rem; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--muted, #7a7a85); }
+.ev-openlist { margin: 4px 0 0; padding-left: 18px; font-size: 0.84rem; line-height: 1.5;
+  color: var(--muted, #6a6a75); }

@@ -102,18 +102,15 @@ def run(data_dir: str, sid: str, claim_id: str, model: str, limit: int) -> dict:
             struct, claim_str, submission_text, c.get("title", ""), paper_text,
             tb._submission_text, tb._paper_source_text(pid),
             ag.min_quote_tokens, ag.fuzzy_threshold)
-        kept = em.audit(struct, claim_str, c.get("title", ""), mapping["pairs"])
+        kept = mapping["pairs"]
         # The rejected pairs stay in the artifact. A filter whose decisions are invisible
         # cannot be checked, and these are exactly the ones worth reading: they are what
         # separates a correspondence from two sentences that share a vocabulary.
-        mapping["rejected"] = [p for p in mapping["pairs"] if p.get("audit_rejected")]
-        mapping["audited_out"] = len(mapping["rejected"])
         mapping["pairs"] = kept
         verdict = em.conclude(struct, claim_str, mapping)
         results.append({**mapping, **verdict, "paper_id": pid, "title": c.get("title", ""),
                         "run_degree": (c.get("overlap_degree") or "").lower()})
         print(f"  {len(mapping['pairs'])} pairs (+{mapping['dropped']} dropped)  "
-              f"-{mapping['audited_out']} audit  "
               f"run={results[-1]['run_degree']:12} map={verdict['degree']:12} "
               f"{c.get('title', '')[:38]}")
 
@@ -137,7 +134,7 @@ def _render(r: dict) -> None:
     print(f"\n{len(ch)} of {len(ranked)} examined papers challenge this claim.\n")
 
     for p in ranked:
-        if p["degree"] in ("none", "superficial") and not p["pairs"] and not p.get("rejected"):
+        if p["degree"] in ("none", "superficial") and not p["pairs"]:
             continue
         head = "CHALLENGE" if p["degree"] in CHALLENGE else p["degree"]
         print("-" * W)
@@ -148,22 +145,11 @@ def _render(r: dict) -> None:
             print(f"\n  ({i}) {q['strength']} — {q['rationale'][:110]}")
             print(_w('YOUR PAPER: "' + " ".join(q["claim_quote"].split())[:170] + '…"', "      "))
             print(_w('THIS PAPER: "' + " ".join(q["paper_quote"].split())[:170] + '…"', "      "))
-        # A candidate the audit threw out is still a verified pair of quotes; it failed only
-        # the test of being the same KIND of statement. Printing it with that reason is what
-        # keeps a wrong rejection visible: the paper the audit dismissed is on the page, with
-        # the sentences that made it a candidate, instead of silently absent.
-        for q in (p.get("rejected") or [])[:2]:
-            print()
-            print(f"  [dismissed {q.get('audit_votes', '')}] "
-                  f"{(q.get('audit_reason') or q['rationale'])[:104]}")
-            print(_w('YOUR PAPER: "' + " ".join(q["claim_quote"].split())[:150] + '"', "      "))
-            print(_w('THIS PAPER: "' + " ".join(q["paper_quote"].split())[:150] + '"', "      "))
         if p.get("submission_delta"):
             print(); print(_w("STILL YOURS: " + p["submission_delta"][:340]))
         print()
 
-    quiet = [p for p in ranked if p["degree"] in ("none", "superficial")
-             and not p["pairs"] and not p.get("rejected")]
+    quiet = [p for p in ranked if p["degree"] in ("none", "superficial") and not p["pairs"]]
     if quiet:
         print("-" * W)
         print("Examined, no correspondence could be evidenced:")
