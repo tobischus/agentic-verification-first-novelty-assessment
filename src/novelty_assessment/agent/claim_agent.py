@@ -169,14 +169,38 @@ class conclude_comparison(BaseModel):
 # but 1 of those 1270 intact; a 30-abstract batch is then ~19k tokens.
 _TRIAGE_ABSTRACT_CHARS = 2500
 
-_TRIAGE_PROMPT = """Triage prior-work papers against ONE claimed contribution using ONLY their abstracts, to decide which need a deeper full-text comparison.
+# The abstract screen decides what is ever read, and nothing it rejects can be recovered
+# later. It used to be asked for a VERDICT -- "is this the same kind of contribution?" --
+# and every rejection on record has the same shape: "method paper, not a benchmark, so no
+# deeper analysis needed". The old wording asked for exactly that, defining `superficial`
+# as "a DIFFERENT KIND of contribution" and tying "no deeper analysis" to it.
+#
+# But a paper's headline is not what decides whether its full text bears on a claim. Across
+# the runs on disk that cost the screen the two strongest competitors for one claim -- both
+# labelled substantial by a reviewer, both dismissed 13 times as "analysis, not a benchmark"
+# -- and every partial-overlap paper besides.
+#
+# Asked instead as a SCREEN, against the claim broken into its parts, recall of the papers a
+# reviewer marks substantial or partial went from 73% to 90% over three runs of two claims,
+# while 75% of the irrelevant ones stayed out (86% before) and the pool read grew from 47%
+# to 57%. Two loosenings that scored higher recall were rejected: both let 97% of the pool
+# through, which is not a better screen but no screen at all.
+_TRIAGE_PROMPT = """Screen prior-work papers against ONE claimed contribution, using ONLY their abstracts, to decide which ones must be read in full.
 
-overlap_degree measures whether the paper PRESENTS (part of) the SAME CONTRIBUTION as the claim -- NOT whether it is on the same topic or similar to the submission overall. Topical similarity alone is NEVER more than superficial.
-- none: nothing of the claimed contribution.
-- superficial: same broad topic/field/techniques, but a DIFFERENT KIND of contribution (e.g. the claim proposes a benchmark and the paper proposes a method, a survey, or an application) -> no deeper analysis needed.
-- partial: the paper ITSELF delivers part of the claimed contribution (e.g. the claim proposes a benchmark and the paper ALSO introduces a benchmark/evaluation suite for a closely related task or scope) -> needs a closer look.
-- substantial / same: the abstract suggests it presents much or all of the SAME contribution -> needs a close look.
-Be conservative with substantial/same. Give what_is_shared (what the paper does that the claim also claims, if any) and submission_delta (what the claim adds beyond it). For none/superficial, brief_note must state WHY the paper's contribution does not overlap the claimed one and why no deeper analysis is needed (e.g. "method paper, proposes no benchmark").
+This is a SCREEN, not a verdict. The full-text comparison decides overlap; it reads both papers whole and sees everything you do not. Your question is narrower: would reading this paper change what we can say about the claim?
+
+Break the claim into what it actually promises -- the artifacts it builds, the properties it asserts, the questions it answers -- and ask, per paper, whether its full text plausibly holds any ONE of those things.
+
+An abstract reports a headline. A method paper can contain the evaluation, the task structure, or the findings a claim is about, and the abstract will not mention them. So judge what the paper plausibly CONTAINS, never what kind of paper it is.
+
+- Let it through (`partial` or higher) when you can point at a specific part of the claim and say: this paper's full text plausibly speaks to that.
+- Keep it out (`superficial` or `none`) when no part of the claim survives that question -- the paper works on a different problem, on different objects, or its connection is the shared field alone.
+
+Both mistakes cost something and they are not symmetric: a paper kept out is never read again, while one let through costs a single comparison. Where the abstract genuinely leaves it open, let it through -- but "open" means you can say which part of the claim is at stake, not that you are simply unsure.
+
+overlap_degree, on the abstract alone: none | superficial | partial | substantial | same. partial and above are read in full; be conservative with substantial/same.
+
+Give what_is_shared (which part of the claim this paper might speak to), submission_delta (what the claim adds beyond it), and for none/superficial a brief_note naming the part of the claim you tested it against and why it fails.
 
 ## Claim
 {claim}
@@ -625,13 +649,29 @@ class ClaimNoveltyAgent:
             pt += a; ct += b
             return parsed
 
-        # Both documents whole. The map used to see the same section selection the deep
-        # dive had made, so a correspondence could only be found in the 13-21% of a paper
-        # that selection covered -- and two of the seven pairs the full-text version finds
-        # come from outside it, including one carrying that paper's own contribution
-        # statement. Verification already ran against the whole document, so what changes
-        # here is only what the model may look at, not what counts as verified.
-        submission_text = tb._submission_text
+        # The prior paper whole, the submission only where this claim lives.
+        #
+        # Whole for the paper, because a correspondence can sit anywhere in it: reading only
+        # the sections the deep dive picked covers 13-21% of a paper, and two of the seven
+        # pairs the full-text version found lie outside that -- including the sentence in
+        # which "RAG vs. GraphRAG" states its own contribution.
+        #
+        # Claim-local for the submission, because the whole of it buys nothing. Measured
+        # over three runs of two claims against a stated gold standard, whole-submission
+        # scored 19 of 21 and claim-local 20 of 21 -- the same within this sample -- while
+        # costing a third more. The submission is also the duplicated half: identical for
+        # every paper of a claim, and sent once per paper.
+        #
+        # Verification runs against the whole of both documents either way, so this changes
+        # the search space and the bill, never what counts as verified.
+        names = tb._sections_read.get("submission") or [
+            m.get("name") for m in (tb.section_menu("submission") or [])[:6] if m.get("name")]
+        sub_secs = (tb.read_sections("submission", names) or {}).get("sections") or []
+        # No fallback here on purpose: `comp` carries the PRIOR paper's realization, not the
+        # submission's, so reaching for it would silently pass an empty string. If the
+        # submission's own sections cannot be read, the guard below leaves the comparison
+        # alone rather than mapping against nothing.
+        submission_text = _fmt_sections_full(sub_secs)
         paper_text = tb._paper_source_text(pid)
         if not (submission_text.strip() and paper_text.strip()):
             return comp, pt, ct                      # nothing to map against; leave it alone
