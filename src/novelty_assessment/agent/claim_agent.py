@@ -233,6 +233,21 @@ Give refutation_status, overlap_degree (none/superficial/partial/substantial/sam
 # Off by one env var so the pipeline can be run both ways for a like-for-like
 # comparison, not because the old path is a fallback worth keeping.
 _USE_EVIDENCE_MAP = os.getenv("NOVELTY_EVIDENCE_MAP", "1").strip().lower() not in ("0", "false", "no")
+# Let the model choose which sections of a prior paper it reads, instead of putting the
+# whole paper in.
+#
+# The previous attempt at choosing lost a real competitor, so this was measured before it
+# was turned on: three runs per claim on graphrag_when_to_use, against the reviewer's gold
+# labels, whole-paper runs beside it. Choosing scored 13/14/11 of 15 where whole-paper
+# scored 10/14/13, and 6/7/6 of 7 where whole-paper scored 5/5/5 -- every choosing run
+# ahead of every whole-paper run on that claim -- for 53% and 18% fewer tokens. The paper
+# the earlier attempt lost ("RAG vs. GraphRAG") came back `substantial` in all three runs.
+# Set to 0 to put whole papers in again.
+_AGENTIC_SECTIONS = os.getenv("NOVELTY_AGENTIC_SECTIONS", "1").strip().lower() not in ("0", "false", "no")
+# Ceiling on the chosen context. Generous on purpose: the saving should come from the
+# model reading less, not from a cap silently truncating it, or the comparison between
+# full text and selection would be measuring the cap.
+_READ_CAP = 40000
 
 _DEEP_SYSTEM = """You are doing a CLOSE comparison of ONE prior paper against a claimed contribution to decide whether it challenges the claim's novelty. You are given some of the paper's full-text passages. If you need other parts of the paper, call read_more(query) (at most a couple of times). When ready, call conclude_comparison with refutation_status, overlap_degree, what_is_shared, submission_delta, and verbatim evidence_pairs (paper_quote copied CHARACTER-FOR-CHARACTER from passages you saw, without any leading [Section] tag; claim_quote verbatim from the submission passages). paper_quote must state what THE PAPER ITSELF does or contributes -- never quote descriptions of OTHER cited work (related-work summaries, "X [12] is a ... dataset", "we adopt the following datasets"): that is the cited paper's contribution, not this paper's. overlap_degree measures overlap of CONTRIBUTIONS (claim vs paper), not topical similarity: same area + different kind of contribution = superficial at most. Be efficient."""
 
@@ -308,6 +323,29 @@ Then judge:
 ## Prior paper: {title}
 ## Its full text
 {sections}"""
+
+
+_PAPER_READ_MORE = """You have opened part of a prior-work paper in order to judge whether it presents the same kind of contribution as a specific claimed one. Below is what you have read, and the titles of the sections you have not opened.
+
+Decide whether what you have read is enough to say what THIS PAPER ITSELF contributes, and how that stands to the claim.
+
+- If it is enough, return an empty list.
+- If something you would need to see is plainly in a section you have not opened, return those titles.
+
+Name only sections you would actually use: each one is then read in full. Do not re-list a section you have already read.
+
+## Claim
+{claim}
+
+## What the submission does for this claim
+{realization}
+
+## Prior paper: {title}
+## What you have read so far
+{read}
+
+## Sections not yet opened (title :: preview :: size)
+{unread}"""
 
 
 def _fill(template: str, **kw) -> str:
@@ -527,7 +565,70 @@ class ClaimNoveltyAgent:
 
     # ------------------------------ phase 2 ------------------------------ #
 
-    def _section_compare(self, tb: ClaimToolbox, claim: dict, pid: str, claim_ctx: str):
+    def _read_paper_agentic(self, tb: ClaimToolbox, claim: dict, pid: str, claim_ctx: str):
+        """The sections the model asks for -- returned as MODEL CONTEXT, nothing else.
+
+        Returns (selected_context, names_read, pt, ct).
+
+        What this is NOT: it is not the paper. `tb._paper_source_text(pid)` stays the whole
+        parsed document and remains the corpus every quote is checked against, so a shorter
+        context changes WHERE the model looks and never what counts as verified. Confusing
+        the two would let a quote pass because the only text it was compared against was the
+        text it came from.
+
+        Two rounds, because one irreversible pick is what failed before: the model chooses
+        from the menu, reads those sections in full, then sees what it has and may name more.
+        Whether it asks is its decision -- no code gate forces a second look.
+        """
+        menu = tb.section_menu(pid)
+        if not menu:
+            return "", [], 0, 0
+        pt = ct = 0
+        claim_s = self._claim_str(claim)[:1200]
+        title = (tb.pool.get(pid, {}) or {}).get("title", "")
+
+        parsed, a, b = self._struct(_SectionPick, _fill(
+            _PAPER_SECTION_PICK, claim=claim_s, realization=claim_ctx[:1600],
+            title=title, sections=_fmt_sections_menu(menu)))
+        pt += a; ct += b
+        names = [s for s in (getattr(parsed, "sections", None) or []) if s] if parsed else []
+        if not names:  # nothing usable came back -> the biggest sections, as elsewhere
+            names = [m["name"] for m in sorted(menu, key=lambda m: -m.get("chars", 0))[:4]]
+
+        got = tb.read_sections(pid, names, max_total=_READ_CAP).get("sections", []) or []
+        if not got:
+            # Titles that match no section leave nothing to read, and an empty context
+            # silently falls back to the whole paper further down -- the selection would
+            # be switched off without anything saying so. Read the biggest sections instead.
+            names = [m["name"] for m in sorted(menu, key=lambda m: -m.get("chars", 0))[:4]]
+            got = tb.read_sections(pid, names, max_total=_READ_CAP).get("sections", []) or []
+            tb._log("read_paper", f"{pid}: no section matched the model's titles "
+                                  f"-> read the {len(got)} biggest")
+        read = [s["name"] for s in got]
+        used = sum(len(s.get("text", "")) for s in got)
+
+        unread = [m for m in menu if m["name"] not in set(read)]
+        if unread and used < _READ_CAP:
+            parsed2, a, b = self._struct(_SectionPick, _fill(
+                _PAPER_READ_MORE, claim=claim_s, realization=claim_ctx[:1600], title=title,
+                read=_fmt_sections_full(got, max_total=_READ_CAP),
+                unread=_fmt_sections_menu(unread)))
+            pt += a; ct += b
+            more = [s for s in (getattr(parsed2, "sections", None) or [])
+                    if s and s not in read] if parsed2 else []
+            if more:
+                extra = tb.read_sections(
+                    pid, more, max_total=max(0, _READ_CAP - used)).get("sections", []) or []
+                for s in extra:
+                    if s["name"] not in read:
+                        got.append(s); read.append(s["name"])
+
+        tb._log("read_paper", f"{pid}: {len(read)} of {len(menu)} sections, "
+                              f"{sum(len(s.get('text','')) for s in got):,} chars")
+        return _fmt_sections_full(got, max_total=_READ_CAP), read, pt, ct
+
+    def _section_compare(self, tb: ClaimToolbox, claim: dict, pid: str, claim_ctx: str,
+                         paper_context: str = ""):
         """Deep dive on the prior paper's WHOLE text: realization + the overlap judgment.
 
         The model used to choose sections from a menu and read those -- 13 to 21% of a paper
@@ -544,7 +645,11 @@ class ClaimNoveltyAgent:
         difference is about a euro across the whole evaluation.
         """
         pt = ct = 0
-        paper_text = tb._paper_source_text(pid)
+        # `paper_context` is what the model gets to read. Empty means nobody chose, so the
+        # whole document goes in -- the source text is the context in that case, but they
+        # are still two different things and only one of them is ever the corpus for a
+        # verification.
+        paper_text = paper_context or tb._paper_source_text(pid)
         if not paper_text.strip():   # no full text -> compare on the abstract passages
             hits = tb.read_paper(pid, query=self._claim_str(claim))
             paper_text = _fmt_passages(
@@ -554,10 +659,11 @@ class ClaimNoveltyAgent:
             _PAPER_COMPARE, claim=self._claim_str(claim)[:1200], realization=claim_ctx[:1600],
             submission=tb._submission_text, title=tb.pool[pid]["title"],
             sections=paper_text)); pt += a; ct += b
-        # Recorded so the UI's "sections read" box stays truthful now that the answer is
-        # "all of them" rather than a selection.
-        tb._sections_read.setdefault(pid, [])
-        tb._sections_read[pid] = ["(full text)"]
+        # What the UI's "sections read" box reports. With a selection the names are already
+        # recorded by read_sections; without one the honest answer is that everything went in.
+        if not paper_context:
+            tb._sections_read.setdefault(pid, [])
+            tb._sections_read[pid] = ["(full text)"]
         return self._to_comp(parsed), pt, ct
 
     @staticmethod
@@ -621,7 +727,8 @@ class ClaimNoveltyAgent:
         )
 
 
-    def _map_evidence(self, tb: "ClaimToolbox", claim: dict, pid: str, comp: dict):
+    def _map_evidence(self, tb: "ClaimToolbox", claim: dict, pid: str, comp: dict,
+                      paper_context: str = ""):
         """Replace the comparison's own quotes and degree with a verified claim-evidence map.
 
         The deep-dive call decides the degree and produces the quotes in one breath, and it
@@ -672,11 +779,16 @@ class ClaimNoveltyAgent:
         # submission's own sections cannot be read, the guard below leaves the comparison
         # alone rather than mapping against nothing.
         submission_text = _fmt_sections_full(sub_secs)
-        paper_text = tb._paper_source_text(pid)
+        # SEARCH SPACE -- what the model reads to propose pairs. May be a selection.
+        paper_text = paper_context or tb._paper_source_text(pid)
         if not (submission_text.strip() and paper_text.strip()):
             return comp, pt, ct                      # nothing to map against; leave it alone
 
         claim_str = self._claim_str(claim)
+        # The last two arguments are the VERIFICATION CORPORA and are always the whole
+        # documents -- never `paper_text`, however it was narrowed. A pair survives only
+        # if both spans are found in the full submission and the full paper, so narrowing
+        # the search space can lose a pair but can never manufacture one.
         mapping = evidence_map.build_map(
             struct, claim_str, submission_text, tb.pool.get(pid, {}).get("title", ""),
             paper_text, tb._submission_text, tb._paper_source_text(pid),
@@ -721,9 +833,17 @@ class ClaimNoveltyAgent:
         fts = tb.ensure_fulltext(pid)
         parse_s = time.perf_counter() - _p0
         _c0 = time.perf_counter()
-        comp, pt, ct = self._section_compare(tb, claim, pid, claim_ctx)
+        # Chosen ONCE and used by both calls. Reading it twice was the old shape: the
+        # whole paper went into the comparison and then into the map again.
+        pt = ct = 0
+        paper_context = ""
+        if _AGENTIC_SECTIONS:
+            paper_context, _names, a, b = self._read_paper_agentic(tb, claim, pid, claim_ctx)
+            pt += a; ct += b
+        comp, a, b = self._section_compare(tb, claim, pid, claim_ctx, paper_context)
+        pt += a; ct += b
         if _USE_EVIDENCE_MAP:
-            comp, a, b = self._map_evidence(tb, claim, pid, comp)
+            comp, a, b = self._map_evidence(tb, claim, pid, comp, paper_context)
             pt += a; ct += b
         compare_s = time.perf_counter() - _c0
         comp["fulltext_fetch_status"] = fts
