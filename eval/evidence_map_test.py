@@ -47,7 +47,8 @@ def _norm(t):
     return re.sub(r"[^a-z0-9]+", "", (t or "").lower())
 
 
-def run(data_dir: str, sid: str, claim_id: str, model: str, limit: int) -> dict:
+def run(data_dir: str, sid: str, claim_id: str, model: str, limit: int,
+        context: str = "picked") -> dict:
     from agent import evidence_map as em
     from agent.claim_agent import ClaimNoveltyAgent, _fmt_sections_full, _segments_to_text
     from agent.tools import ClaimToolbox
@@ -84,6 +85,10 @@ def run(data_dir: str, sid: str, claim_id: str, model: str, limit: int) -> dict:
     sub_secs = (tb.read_sections("submission", sub_names) or {}).get("sections") or []
     submission_text = _fmt_sections_full(sub_secs) or _segments_to_text(
         entry.get("claim_realization") or [])
+    # What the model may look at. Verification always runs against the whole document either
+    # way, so this changes the search space and the bill, never what counts as verified.
+    if context == "full":
+        submission_text = tb._submission_text
 
     papers = [c for c in entry.get("comparisons", []) if c.get("sections_used")]
     if limit:
@@ -94,8 +99,11 @@ def run(data_dir: str, sid: str, claim_id: str, model: str, limit: int) -> dict:
     for c in papers:
         pid = c["paper_id"]
         tb.ensure_fulltext(pid)
-        secs = (tb.read_sections(pid, c["sections_used"]) or {}).get("sections") or []
-        paper_text = _fmt_sections_full(secs)
+        if context in ("full", "paperfull"):
+            paper_text = tb._paper_source_text(pid)
+        else:
+            secs = (tb.read_sections(pid, c["sections_used"]) or {}).get("sections") or []
+            paper_text = _fmt_sections_full(secs)
         if not paper_text.strip():
             continue
         mapping = em.build_map(
@@ -109,13 +117,14 @@ def run(data_dir: str, sid: str, claim_id: str, model: str, limit: int) -> dict:
         mapping["pairs"] = kept
         verdict = em.conclude(struct, claim_str, mapping)
         results.append({**mapping, **verdict, "paper_id": pid, "title": c.get("title", ""),
+                        "sub_chars": len(submission_text), "paper_chars": len(paper_text),
                         "run_degree": (c.get("overlap_degree") or "").lower()})
         print(f"  {len(mapping['pairs'])} pairs (+{mapping['dropped']} dropped)  "
               f"run={results[-1]['run_degree']:12} map={verdict['degree']:12} "
               f"{c.get('title', '')[:38]}")
 
     from agent.claim_agent import _usd
-    out = {"claim_id": claim_id, "claim": claim, "papers": results, "spend": spend,
+    out = {"claim_id": claim_id, "claim": claim, "context": context, "papers": results, "spend": spend,
            "usd": _usd(model, spend["pt"], spend["ct"]),
            "seconds": round(time.perf_counter() - t0, 1)}
     _render(out)
@@ -191,10 +200,16 @@ def main():
     ap.add_argument("--claim", required=True)
     ap.add_argument("--model", default=os.getenv("NOVELTY_AGENT_MODEL", "gpt-5-mini"))
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--context", choices=("picked", "full", "paperfull"), default="picked",
+                    help="picked: the sections the deep dive chose. full: both documents "
+                         "whole. paperfull: the prior paper whole, the submission only "
+                         "where this claim lives -- the submission is the duplicated half, "
+                         "sent once per paper and identical every time.")
     ap.add_argument("--out", default="")
     args = ap.parse_args()
     os.chdir(REPO)
-    res = run(args.data_dir, args.submission, args.claim, args.model, args.limit)
+    res = run(args.data_dir, args.submission, args.claim, args.model, args.limit,
+              context=args.context)
     out = args.out or f"eval/out/evmap_{args.submission}_{args.claim}.json"
     Path(out).parent.mkdir(parents=True, exist_ok=True)
     Path(out).write_text(json.dumps(res, ensure_ascii=False, indent=2, default=str),
