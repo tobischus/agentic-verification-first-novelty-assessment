@@ -113,36 +113,104 @@ def _segments(segs, out: List[str]) -> None:
         out.append("")
 
 
-def _evidence_pairs(pairs, out: List[str]) -> None:
-    """Render claim/paper quote pairs, the evidence shape the non-agentic builder emits.
+def _pair_groups(pairs: List[dict]) -> List[tuple]:
+    """Group pairs that share the same (normalised) submission span, in first-seen order.
 
-    Each pair puts a span of the submission beside a span of the prior work. Only spans the
-    checker confirmed on that side are shown as quotations; an unconfirmed one is labelled,
-    on the same rule as everywhere else in this document.
+    One correspondence usually names several prior-work spans against the same sentence of
+    the submission -- listing that sentence once per pair repeats it as many times as the
+    paper was quoted. Mirrors ReviewWalkthrough.jsx's groupBySubmissionQuote so the exported
+    text and the reviewer UI group evidence the same way.
     """
-    shown = 0
+    groups: List[tuple] = []
+    index: dict = {}
     for p in pairs:
-        cq, pq = (p.get("claim_quote") or "").strip(), (p.get("paper_quote") or "").strip()
-        if not (cq or pq):
-            continue
-        if shown == 0:
-            out += ["Where the two papers say the same thing", ""]
-        # The claim first, then the two spans that carry it. Printed after the quotes it read
-        # as a comment on them; printed before, it is the assertion the quotes are evidence
-        # for -- which is what a pair is.
-        if p.get("rationale"):
-            out += [p["rationale"].strip(), ""]
-        shown += 1
-        if cq:
-            out.append("The submission states:")
-            out.append(_quote(cq) if p.get("claim_quote_verified") else
-                       f"(not confirmed verbatim) {cq}")
+        key = " ".join((p.get("claim_quote") or "").split())
+        if key not in index:
+            index[key] = len(groups)
+            groups.append((key, []))
+        groups[index[key]][1].append(p)
+    return groups
+
+
+def _render_pair_groups(pairs: List[dict], out: List[str]) -> None:
+    for claim_quote, group in _pair_groups(pairs):
+        first = group[0]
+        if claim_quote:
+            out.append("Submission contribution span")
+            out.append(_quote(claim_quote) if first.get("claim_quote_verified") else
+                       f"(not confirmed verbatim) {claim_quote}")
             out.append("")
-        if pq:
-            out.append("The prior work states:")
-            out.append(_quote(pq) if p.get("paper_quote_verified") else
-                       f"(not confirmed verbatim) {pq}")
-            out.append("")
+        for p in group:
+            # Printed after the paper's span it read as a comment on it; printed before, it
+            # is the assertion the quote is evidence for -- which is what a pair is.
+            if p.get("rationale"):
+                out += [p["rationale"].strip(), ""]
+            pq = (p.get("paper_quote") or "").strip()
+            if pq:
+                out.append("The prior work states:")
+                out.append(_quote(pq) if p.get("paper_quote_verified") else
+                           f"(not confirmed verbatim) {pq}")
+                out.append("")
+
+
+def _evidence_pairs(c: dict, out: List[str], claim_stop_reason: str = "") -> None:
+    """Render the grounded claim/paper quote pairs for one comparison.
+
+    Where an evidence check ran (the agentic pipeline's map -> check_evidence gate), its
+    verdict decides what the reader is shown: for `material`, only the pairs the check
+    actually named as supporting appear in the main section, and every other grounded
+    candidate moves under a separate, clearly-labelled header -- so a reader cannot mistake
+    a merely-topical correspondence for one the system is standing behind. Comparisons from
+    the older, non-agentic builder carry no evidence_check at all; those fall back to
+    showing every grounded pair as before.
+    """
+    pairs = c.get("evidence_pairs") or []
+    ok = [p for p in pairs
+          if (p.get("claim_quote") or "").strip() or (p.get("paper_quote") or "").strip()]
+    if not ok:
+        return
+
+    out += ["Grounded evidence for the assessed overlap", ""]
+
+    check = c.get("evidence_check") or {}
+    status = (check.get("status") or "").strip().lower()
+    supporting = {i for i in (check.get("supporting_pair_indices") or [])}
+
+    if status:
+        out.append(f"Evidence check: {status}")
+        if status == "material":
+            out.append(f"{len(supporting)} of {len(ok)} grounded candidates support the overlap")
+        out.append("")
+        if check.get("reasoning"):
+            out += [check["reasoning"].strip(), ""]
+
+    if status == "material" and supporting:
+        # 1-based, matching what check_evidence was given: the order of `ok` exactly as
+        # sent to the evidence-check prompt (see api.py's own enumerate(pairs, 1)).
+        main = [p for i, p in enumerate(ok, 1) if i in supporting]
+        additional = [p for i, p in enumerate(ok, 1) if i not in supporting]
+    else:
+        main, additional = ok, []
+
+    _render_pair_groups(main, out)
+
+    if additional:
+        out += ["Additional grounded candidate correspondences not used as material "
+               "support", ""]
+        _render_pair_groups(additional, out)
+
+    # `insufficient` is the evidence check unable to settle the question; `c["insufficient"]`
+    # is the paper loop's own read/re-entry budget running out with a deficit still standing
+    # -- both leave the assessment resting on less than the pipeline normally requires, and
+    # a reader comparing systems is entitled to see that rather than a confident-looking
+    # verdict that quietly cost less scrutiny than the others.
+    if status == "insufficient" or c.get("insufficient"):
+        out.append("evidence_sufficient=False")
+        if c.get("unresolved_deficit"):
+            out.append(f"unresolved_deficit: {c['unresolved_deficit'].strip()}")
+        elif claim_stop_reason:
+            out.append(f"stop_reason: {claim_stop_reason}")
+        out.append("")
 
 
 def build(data_dir: str, submission_id: str, variant: str = "") -> str:
@@ -271,7 +339,7 @@ def build(data_dir: str, submission_id: str, variant: str = "") -> str:
             # produced no evidence when it had produced verified pairs -- and rendering it
             # INSTEAD of the pairs hid the agent's own claim-evidence map, which is the
             # artifact this system exists to produce and the one a reader can check.
-            _evidence_pairs(c.get("evidence_pairs") or [], out)
+            _evidence_pairs(c, out, claim_stop_reason=e.get("stop_reason", ""))
             note = c.get("assessment") or c.get("brief_note") or ""
             if note:
                 out += ["Comparison with the submission", "", note.strip(), ""]
