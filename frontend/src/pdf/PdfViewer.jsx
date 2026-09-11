@@ -256,23 +256,45 @@ function PdfPage({ doc, index, meta, scale, highlights, pageRefs }) {
   const w = meta.viewportAt1.width * scale
   const h = meta.viewportAt1.height * scale
 
+  // Several evidence pairs can reuse the exact same submission sentence (one paper's
+  // "shared" span quoted against five different correspondences, say) -- each is still
+  // its own highlight entry, at IDENTICAL rects, so their multiply-blended colours stack
+  // and a much-reused quote goes nearly black and unreadable. Same rect on this page ==
+  // the same on-page span, so one box is drawn per span rather than one per highlight;
+  // ids of everything that landed there are kept so a click on any of them still resolves
+  // (locateQuotes keeps every original entry -- this collapses only the drawing).
+  const boxes = useMemo(() => {
+    const byRect = new Map()
+    for (const hl of highlights) {
+      for (const r of hl.rects) {
+        const key = [r.top, r.left, r.width, r.height].map((v) => v.toFixed(1)).join(',')
+        let box = byRect.get(key)
+        if (!box) {
+          box = { rect: r, color: hl.color, ids: [], labels: [] }
+          byRect.set(key, box)
+        }
+        box.ids.push(hl.id)
+        if (hl.label) box.labels.push(hl.label)
+      }
+    }
+    return [...byRect.values()]
+  }, [highlights])
+
   return (
     <div className="pdfpage" ref={setRefs} style={{ width: w, height: h }}>
       <canvas ref={canvasRef} />
-      {highlights.map((hl) =>
-        hl.rects.map((r, k) => (
-          <div
-            key={hl.id + '-' + k}
-            className="pdfhl"
-            title={hl.label || undefined}
-            style={{
-              left: r.left * scale, top: r.top * scale,
-              width: r.width * scale, height: r.height * scale,
-              background: hl.color || HIGHLIGHT_COLORS[0],
-            }}
-          />
-        )),
-      )}
+      {boxes.map((box, k) => (
+        <div
+          key={box.ids[0] + '-' + k}
+          className="pdfhl"
+          title={box.labels.length ? box.labels.join(' · ') : undefined}
+          style={{
+            left: box.rect.left * scale, top: box.rect.top * scale,
+            width: box.rect.width * scale, height: box.rect.height * scale,
+            background: box.color || HIGHLIGHT_COLORS[0],
+          }}
+        />
+      ))}
     </div>
   )
 }

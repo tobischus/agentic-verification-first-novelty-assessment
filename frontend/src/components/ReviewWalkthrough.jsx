@@ -94,10 +94,16 @@ function Realization({ segments, docKey, onPick, activeId }) {
 }
 
 /** A pair's quotes as highlights, for whichever side's document is on the right.
- *  Ids mirror quotesOf's scheme so the viewer treats them the same way. */
+ *
+ *  Ids must equal what EvidencePairs' click targets build (`${docKey}#pair${pair_index}`),
+ *  because the two are matched by exact string equality in PdfViewer -- this used to key
+ *  off the pair's position in the array (`#p${i}`) instead of its stable `pair_index`, so
+ *  the two ends never agreed once anything (grouping, a dropped unverified pair) made a
+ *  pair's array position differ from its backend index. That silently broke every jump.
+ */
 function pairQuotesOf(pairs, docKey, side, color) {
   return (pairs || [])
-    .map((q, i) => ({ q, id: `${docKey}#p${i}` }))
+    .map((q, i) => ({ q, id: `${docKey}#pair${q.pair_index ?? i}` }))
     .filter(({ q }) => q.claim_quote && q.paper_quote)
     .map(({ q, id }) => ({
       id,
@@ -159,7 +165,11 @@ function EvidencePairs({
 
   const renderGroups = (items, prefix) =>
     groupBySubmissionQuote(items).map(([claimQuote, group], gi) => {
-      const subId = `subpair:${paperId}#${prefix}${gi}`;
+      // Must equal the id pairQuotesOf built for this same pair (`${docKey}#pair${pair_index}`,
+      // via `subpair:${paperId}` as that docKey) -- a group-position id (`#${prefix}${gi}`)
+      // never matched anything in the highlights array and silently broke the jump.
+      // The group's first pair stands for the whole group: they share this submission span.
+      const subId = `subpair:${paperId}#pair${group[0].pair_index}`;
 
       return (
         <div className="ev-pair-group" key={`${prefix}-${gi}`}>
