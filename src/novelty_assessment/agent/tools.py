@@ -380,7 +380,7 @@ class ClaimToolbox:
         return self._index_for(paper_id).section_previews()
 
     def read_sections(self, paper_id: str, names: List[str], max_total: int = 40000,
-                      depth: str = "targeted_sections") -> dict:
+                      depth: str = "targeted_sections", exact: bool = False) -> dict:
         """Load the FULL text of the chosen sections (no small cap) into context.
 
         `depth` is what this read is worth on the ladder. It defaults to the section-based
@@ -388,7 +388,7 @@ class ClaimToolbox:
         because it is putting the whole paper in the prompt, which is a different claim
         about how well the paper was examined."""
         idx = self._index_for(paper_id)
-        got = idx.get_sections(names, max_total=max_total)
+        got = idx.get_sections(names, max_total=max_total, exact=exact)
         if paper_id != "submission":
             self._bump_depth(paper_id, depth if got else "abstract_intro")
         # remember the actual section titles loaded (document order, de-duped) so the

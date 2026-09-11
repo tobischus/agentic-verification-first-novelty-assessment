@@ -69,6 +69,23 @@ _TAIL_NOISE = re.compile(r"(?:\s*(?:\d+\s*)?##[^.]*|\s+\d{1,4}(?:\s*##.*)?)\s*\.
 _HEADING = re.compile(r"\s(?:\d+(?:\.\d+)*\s*)?##\s")
 
 
+def _strip_structure(span: str) -> str:
+    """Drop parser structure a quote ran into: a section heading, a page number, a year.
+
+    Both ends. A heading in the MIDDLE ("... transducer. 1 ## Introduction Many modern ...")
+    is the worse case: it starts with a digit, so the sentence splitter does not see a
+    boundary there and the entire following section rides along inside what is shown as one
+    sentence of evidence.
+    """
+    t = " ".join((span or "").split())
+    if not t:
+        return t
+    head = _HEADING.search(t)
+    if head and head.start() > 80:      # only when prose precedes it
+        t = t[:head.start()].strip()
+    return _TAIL_NOISE.sub("", t).strip()
+
+
 def trim_display_span(span: str, max_sentences: int = 3, max_chars: int = 700) -> str:
     """Cut a verified quote down to what a reviewer can actually read.
 
@@ -83,12 +100,9 @@ def trim_display_span(span: str, max_sentences: int = 3, max_chars: int = 700) -
     still verifiable. Never returns empty: a single very long sentence is left alone rather
     than cut mid-clause.
     """
-    t = " ".join((span or "").split())
+    t = _strip_structure(span)
     if not t:
         return span
-    head = _HEADING.search(t)
-    if head and head.start() > 80:          # keep the heading out, but only if prose precedes it
-        t = t[:head.start()].strip()
     # The same structure debris at the END of a span: a page number, a running head, a year
     # picked up where the parser ran one block into the next -- "...facilitate future
     # studies. 11 ## 2025." A quote is not wrong because of it, but it reads as though the
@@ -147,7 +161,12 @@ def trim_to_sentence(span: str, rationale: str, claim: str, min_tokens: int,
     anchored claim 1's map on claim 2's contribution. Ties and short results fall back to the
     full span, because cutting below what can be verified would be worse than leaving it wide.
     """
-    sents = _sentences(" ".join((span or "").split()))
+    # Structure debris first. A heading the parser ran into the text ("... transducer.
+    # 1 ## Introduction Many modern NLP systems ...") is not a sentence boundary to the
+    # splitter -- it starts with a digit -- so the whole block survived as ONE sentence and
+    # the pair carried a paragraph of the next section with it. The cleanup existed, but
+    # only on the display path; pair spans never saw it.
+    sents = _sentences(_strip_structure(span))
     key = {w for w in re.findall(r"[a-z]{3,}", (rationale or "").lower()) if w not in _STOP}
     anchor = {w for w in re.findall(r"[a-z]{3,}", (claim or "").lower()) if w not in _STOP}
     if not key and not anchor:
@@ -227,84 +246,140 @@ def _pick_clause(sentence: str, key: set, min_tokens: int, counterpart: str = ""
 
 class Correspondence(BaseModel):
     submission_quote: str = Field(
-        description="ONE CONTIGUOUS verbatim span in which the SUBMISSION states something "
-                    "IT CONTRIBUTES that this paper also delivers -- the shortest span that "
-                    "states it, never its motivation, "
-                    "its critique of existing work, or background. Copied character for "
-                    "character, at least 10 words, never joined by an ellipsis.")
-    paper_quote: str = Field(
-        description="ONE CONTIGUOUS verbatim span of the PRIOR PAPER showing that it does "
-                    "that. Copied character for character, at least 10 words, never joined "
-                    "by an ellipsis. Must state what THIS paper does -- never what it says "
-                    "about work it cites.")
-    relation: str = Field(
-        description="ONE sentence: what both spans deliver. Name the thing, not the topic.")
-    strength: str = Field(
-        description="same  (the paper delivers this outright)  |  "
-                    "weaker  (a narrower version, a special case, or only part of it)")
+        description=(
+            "One contiguous verbatim span where the submission states "
+            "a substantive component it contributes."
+        )
+    )
 
+    paper_quote: str = Field(
+        description=(
+            "One contiguous verbatim span where the prior paper itself "
+            "contributes the corresponding component."
+        )
+    )
+
+    relation: str = Field(
+        description=(
+            "One concise sentence naming the substantive component "
+            "instantiated by both spans."
+        )
+    )
+
+    strength: str = Field(
+        description=(
+            "same | weaker. `same` means this component is directly delivered; "
+            "`weaker` means the prior paper delivers a narrower or partial version."
+        )
+    )
 
 class EvidenceMap(BaseModel):
     correspondences: List[Correspondence] = Field(
         default_factory=list,
-        description="EVERY place where a sentence of the submission and a sentence of this "
-                    "paper say the same thing -- a complete list, empty if there are none")
-    submission_delta: str = Field(
-        description="what the submission's contribution still holds that this paper does not")
+        description=(
+            "All substantive component-level correspondences for which both "
+            "the submission and this prior paper state something they themselves contribute."
+        ),
+    )
 
+MAP_PROMPT = """Identify every substantive component-level correspondence between ONE claimed contribution and ONE prior paper.
 
-MAP_PROMPT = """Put ONE prior paper beside ONE claimed contribution and find every place where they say the same thing.
+Your task is evidence extraction, not an overall novelty judgment.
 
-You are building a map a reviewer can check: each entry pairs a sentence of the submission with a sentence of the prior paper. Both must be quoted verbatim from the texts below -- they are checked automatically against the two documents afterwards, and an entry whose quotes cannot be located is dropped.
+A correspondence exists when:
+1. the submission states a substantive component of its claimed contribution;
+2. the prior paper itself contributes something that instantiates the same substantive component; and
+3. both statements can be supported by verbatim spans from the provided texts.
 
-What counts as a correspondence: both papers deliver the SAME THING AS THEIR CONTRIBUTION -- the same construction, the same artifact, the same property, the same finding.
+Judge the matched component, not whether the two papers make the same overall contribution. A prior paper may differ in its overall purpose, framing, scope, or design and still contribute a substantive component of the claim.
 
-Two things that look like correspondences and are not:
+Do not report a correspondence when the relationship is only:
+- shared topic, terminology, background, motivation, or common technical machinery;
+- use, application, evaluation, or discussion of something that the other paper contributes;
+- a statement about work cited by the paper rather than the paper's own contribution;
+- semantic relatedness without both spans supporting the same substantive claimed component.
 
-- SHARED MACHINERY. Both build a knowledge graph, both retrieve passages, both evaluate a pipeline, both call a model. Everything in this field does those. Ask: would this entry read the same if I swapped in almost any other paper from the area? Then it says nothing and does not belong in the map.
-- MISMATCHED KIND. One side announces an artifact, the other reports a finding; one side evaluates a pipeline stage, the other merely has that stage. Those are different contributions even when they share vocabulary. Both spans must be the same kind of statement about the same thing.
-- BUILDING vs USING. A paper that EVALUATES ITSELF ON benchmarks, corpora or datasets has not contributed one. "validated on 9 benchmarks", "we employ 11 datasets", "we test on three corpora" is a paper using resources, and it is no correspondence to a submission whose contribution is to BUILD such a resource. The same holds for methods: applying one is not proposing it.
+For every supported correspondence:
+- quote the submission side verbatim;
+- quote the prior-paper side verbatim;
+- state briefly which substantive component the two spans correspond on;
+- mark the relation as `same` when the prior paper directly delivers that component, or `weaker` when it delivers a narrower or partial version.
 
-Report every correspondence you can support, and none you cannot. Most prior papers retrieved for a claim share its field and not its contribution: an empty list is a normal and useful answer, and a list that could be written about any paper in the area describes the field rather than the overlap.
+Report all supported correspondences and no unsupported ones. An empty list is a valid result.
 
-Quote rules, both sides:
-- ONE CONTIGUOUS span, copied character for character, at least 10 words, inside ONE sentence.
-- NEVER join separate parts with "..." -- a stitched span appears nowhere and cannot be checked. If one span does not cover the point, pick the single most telling one, or make it two entries.
-- AS TIGHT AS THE CORRESPONDENCE. Quote the SHORTEST contiguous span that states the matched point, and stop there. A contribution is often stated as one long sentence listing several components; pairing that whole sentence with a paper that delivers one of them shows the reviewer an overlap three times the size of the real one. Quote the component.
-- Each span must state what ITS OWN paper DOES. The paper span must never quote what that paper says about work it cites; the submission span must never quote the submission's motivation, its complaint about existing benchmarks, or its background -- those describe the problem, and a prior paper agreeing with your problem statement does not touch your contribution.
+Quote constraints:
+- each quote must be ONE contiguous verbatim span;
+- each quote must contain at least 10 words;
+- each quote must lie within one sentence;
+- never join separate spans;
+- use the shortest span that still expresses the correspondence;
+- each span must state what its own paper contributes, not merely what it discusses.
 
-## The claimed contribution
+Do not assign an overall overlap degree in this step.
+
+## Claimed contribution
 {claim}
 
-## The submission's own text (quote the submission side from here)
+## Submission text
 {submission}
 
-## The prior paper: {title}
+## Prior paper: {title}
 {paper}"""
 
 
-CONCLUDE_PROMPT = """Decide what ONE prior paper does to the novelty of ONE claimed contribution.
+CONCLUDE_PROMPT = """Determine what ONE prior paper does to the novelty of ONE claimed contribution.
 
-Below is the verified evidence: every pair where a sentence of the submission and a sentence of that paper were found to say the same thing, each side confirmed against its own document. Nothing else is available to you, and nothing else may enter your reasoning.
+You may use:
+1. the claimed contribution;
+2. the prior semantic comparison proposal; and
+3. the verified component-level correspondences.
 
-  same          this paper by itself delivers the claimed contribution
-  substantial   it delivers most of it; what is left is a refinement
-  partial       it delivers a real part, and the claim clearly adds beyond it
-  superficial   same area, different contribution
-  none          nothing of the claimed contribution
+The comparison proposal is a semantic assessment based on the paper text.
+It is not verified evidence and may be wrong.
 
-An empty evidence map means `superficial` or `none` -- never more, whatever the paper's title suggests.
+The correspondences are verified evidence:
+- both quoted spans have been verified against the source documents;
+- the prior-paper span has passed ownership checking.
 
-Weigh what the correspondences leave standing, not how many there are: one pair on the heart of the contribution outweighs four on its periphery. Say in `reasoning` which part is taken and which is not, in two or three sentences, and name the pairs you relied on.
+Use the comparison proposal to understand the role and context of the matched components.
+Use the verified correspondences to determine what overlap is actually supported.
 
-## The claimed contribution
+Do not simply copy the comparison degree.
+Do not infer substantive overlap from a correspondence merely because it is verified.
+
+If the verified evidence supports a different degree from the comparison proposal,
+state explicitly why the semantic assessment should be revised.
+
+Determine the overall degree:
+
+same
+    The prior paper by itself delivers essentially the claimed contribution.
+
+substantial
+    The prior paper delivers most of the substantive contribution; what remains is mainly
+    a refinement or narrower distinction.
+
+partial
+    The prior paper delivers a substantive part of the contribution, while important
+    claimed components remain.
+
+superficial
+    Verified relationships exist, but they do not amount to substantive contribution overlap.
+
+none
+    No substantive component of the claimed contribution is supported as overlap.
+
+Judge the role and importance of the matched components, not the number of correspondences.
+
+## Claimed contribution
 {claim}
+
+## Prior semantic comparison
+{comparison}
 
 ## Verified correspondences
 {pairs}
-
-## What the submission still holds, according to the comparison
-{delta}"""
+"""
 
 
 class Conclusion(BaseModel):
@@ -313,6 +388,152 @@ class Conclusion(BaseModel):
 
 
 # ------------------------------ operations --------------------------------- #
+
+# --------------------------------------------------------------------------- #
+# Ownership: does the paper's span say what THAT paper contributes?
+#
+# Verification proves that a span stands in a document. It cannot prove who it
+# belongs to, and those are different questions. A survey that cites the
+# submission carries the submission's own sentence verbatim; both sides then
+# verify, and the pair reads as the strongest kind of evidence while showing
+# nothing but a citation. That is what happened to "A Survey of Graph
+# Retrieval-Augmented Generation": the agent's own narrative said the paper
+# "lists GraphRAG-Bench among many benchmarks as a referenced item rather than
+# presenting [it] as the paper's original contribution", and the pair was kept
+# and the degree set to `substantial` regardless.
+#
+# Two checks, because neither covers the other:
+#
+#   identity   free and exact. Two independent papers do not write the same ten
+#              words. Where the paper's span IS the submission's span, the paper
+#              is quoting it, and no reading of the sentence changes that.
+#   attribution one batched model call for the pairs that survive. A reference
+#              is usually paraphrased, not copied: "X et al. propose a benchmark
+#              of multi-hop queries" verifies, differs from the submission's
+#              wording, and still belongs to X.
+# --------------------------------------------------------------------------- #
+
+_OWN_IDENTITY = 0.92        # normalised similarity above which a span is a quotation
+
+
+class _OwnItem(BaseModel):
+    index: int = Field(description="the pair's number, as given")
+    own_contribution: bool = Field(
+        description="true only if the span states what THIS paper does or delivers")
+    why: str = Field(default="", description="one clause")
+
+
+class _Ownership(BaseModel):
+    verdicts: List[_OwnItem] = Field(default_factory=list)
+
+
+OWNERSHIP_PROMPT = """Below are spans taken from ONE paper, each with the text around it. For each, decide whether the span states what THIS PAPER ITSELF does or delivers.
+
+It does NOT, if the span:
+
+- describes work the paper cites -- another system, dataset, benchmark or finding, however it is worded, and whether or not a citation marker survives in the excerpt
+- reports a resource the paper merely USES or evaluates on, rather than one it built
+- states background, a problem, or a position the field holds
+- appears in a related-work summary, a table of other systems, or a list of prior approaches
+
+It does, if the span states this paper's own construction, artifact, method, property or finding -- what a reader would attribute to these authors.
+
+The surrounding text is what decides it: a sentence naming an artifact can be the paper announcing its own, or the paper describing someone else's, and only the context tells them apart.
+
+## Paper: {title}
+
+{spans}"""
+
+
+def _norm_span(t: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", (t or "").lower()).strip()
+
+
+def _identical(a: str, b: str) -> bool:
+    """Is the paper's span the submission's span? Then it is a quotation of it."""
+    na, nb = _norm_span(a), _norm_span(b)
+    if not na or not nb:
+        return False
+    if na in nb or nb in na:
+        return True
+    try:
+        from rapidfuzz import fuzz
+        return fuzz.token_sort_ratio(na, nb) / 100.0 >= _OWN_IDENTITY
+    except Exception:
+        import difflib
+        return difflib.SequenceMatcher(None, na, nb).ratio() >= _OWN_IDENTITY
+
+
+def _context_of(span: str, document: str, window: int = 320) -> str:
+    """The span with the text around it, so attribution can be read off the page."""
+    doc = document or ""
+    n = _norm_span(span)[:60]
+    if not n:
+        return span
+    flat = _norm_span(doc)
+    i = flat.find(n)
+    if i < 0:
+        return span
+    # map back approximately: the normalised text is close enough in length to index by ratio
+    j = int(i / max(len(flat), 1) * len(doc))
+    lo, hi = max(0, j - window), min(len(doc), j + len(span) + window)
+    return "..." + " ".join(doc[lo:hi].split()) + "..."
+
+
+def check_ownership(struct_call: Callable, pairs: List[dict], title: str,
+                    verify_paper: str) -> List[dict]:
+    """Mark each pair with why it was kept or dropped. Returns the surviving pairs.
+
+    Dropping happens here rather than in `conclude`, because a pair that shows a
+    citation is not weaker evidence to be weighed -- it is not evidence of an
+    overlap at all, and leaving it in the map would put it in front of a reviewer
+    as though it were.
+    """
+    if not pairs:
+        return pairs
+    kept, need = [], []
+    for p in pairs:
+        if _identical(p.get("paper_quote", ""), p.get("claim_quote", "")):
+            p["ownership"] = "quotes_the_submission"
+            continue                      # dropped: the paper is citing the submission
+        need.append(p)
+    if not need:
+        return kept
+
+    spans = "\n\n".join(
+        f"[{i + 1}] SPAN: {p.get('paper_quote', '')}\n"
+        f"    CONTEXT: {_context_of(p.get('paper_quote', ''), verify_paper)}"
+        for i, p in enumerate(need))
+    parsed = struct_call(_Ownership, OWNERSHIP_PROMPT.format(title=title, spans=spans))
+    if parsed is None:
+        # The call did not come back. Keeping the pairs is the honest failure: this gate
+        # removes evidence, and a gate that removes on silence would turn an API error
+        # into a finding of no overlap.
+        for p in need:
+            p["ownership"] = "unchecked"
+        return need
+    verdict = {v.index: v for v in (parsed.verdicts or [])}
+
+    for i, p in enumerate(need, start=1):
+        v = verdict.get(i)
+
+        # Missing verdict = not verified, not positive ownership.
+        if v is None:
+            p["ownership"] = "unchecked"
+            kept.append(p)
+            continue
+
+        if not v.own_contribution:
+            p["ownership"] = (
+                f"describes_cited_work: {(v.why or '').strip()[:160]}"
+            )
+            continue
+
+        p["ownership"] = "own_contribution"
+        kept.append(p)
+
+    return kept
+
 
 def build_map(struct_call: Callable, claim_str: str, submission_text: str,
               title: str, paper_text: str, verify_submission: str, verify_paper: str,
@@ -332,8 +553,14 @@ def build_map(struct_call: Callable, claim_str: str, submission_text: str,
         # Both used to leave an empty map, and an empty map reads as `none` -- so an API
         # error was indistinguishable from a paper that genuinely shares nothing, which is
         # exactly the confusion a verification-first artifact must not contain.
-        return {"pairs": [], "submission_delta": "", "dropped": 0, "returned": 0,
-                "failed": True}
+        return {
+            "pairs": [],
+            "dropped": 0,
+            "returned": 0,
+            "not_owned": 0,
+            "ownership_unchecked": 0,
+            "failed": True,
+        }
 
     pairs, dropped = [], 0
     for c in parsed.correspondences:
@@ -356,8 +583,41 @@ def build_map(struct_call: Callable, claim_str: str, submission_text: str,
             "claim_quote_verified": True, "paper_quote_verified": True,
             "exact": True,               # already trimmed to one sentence; do not re-expand
         })
-    return {"pairs": pairs, "submission_delta": (parsed.submission_delta or "").strip(),
-            "dropped": dropped, "returned": len(parsed.correspondences), "failed": False}
+    # Verified, but not yet shown to belong to this paper. Counted separately from
+    # `dropped`: a span that cannot be found and a span that belongs to someone else
+    # fail for different reasons, and a diagnosis that merges them hides which.
+    verified = len(pairs)
+
+    ownership_result = check_ownership(
+        struct_call,
+        pairs,
+        title,
+        verify_paper,
+    )
+
+    unchecked = [
+        p for p in ownership_result
+        if p.get("ownership") == "unchecked"
+    ]
+
+    owned = [
+        p for p in ownership_result
+        if p.get("ownership") == "own_contribution"
+    ]
+
+    # Pairs that disappeared from check_ownership were either cited work,
+    # quotes of the submission, or otherwise rejected as not this paper's contribution.
+    not_owned = verified - len(ownership_result)
+
+    return {
+        # IMPORTANT: only ownership-verified pairs enter the evidence map.
+        "pairs": owned,
+        "dropped": dropped,
+        "returned": len(parsed.correspondences),
+        "not_owned": not_owned,
+        "ownership_unchecked": len(unchecked),
+        "failed": False,
+    }
 
 
 def _list_pairs(pairs: List[dict], start: int = 1) -> str:
@@ -371,33 +631,153 @@ def _list_pairs(pairs: List[dict], start: int = 1) -> str:
         for i, p in enumerate(pairs, start))
 
 
-def conclude(struct_call: Callable, claim_str: str, mapping: dict) -> dict:
-    """The novelty judgement for one paper, from the verified map and nothing else.
+def _fmt_comparison(comparison: dict) -> str:
+    """Render the raw compare's own narrative for CONCLUDE_PROMPT's `{comparison}` slot.
 
-    Deliberately a second call. Asked together, the model states a degree in the same breath
-    as the quotes -- before either has been checked -- and the quotes then exist to support a
-    conclusion already drawn. Here the conclusion is drawn from evidence that has already
-    survived verification, which is what "verification-first" has to mean at this level.
+    Added when the prompt grew a section asking the model to weigh the map's verified
+    pairs against what the FIRST, unverified pass already said the paper was about --
+    context conclude() did not have before, since it only ever saw `mapping`."""
+    if not comparison:
+        return "(not available)"
+    lines = [f"Proposed degree: {comparison.get('overlap_degree', '')}"]
+    if comparison.get("what_is_shared"):
+        lines.append(f"What is shared: {comparison['what_is_shared']}")
+    if comparison.get("submission_delta"):
+        lines.append(f"Submission delta: {comparison['submission_delta']}")
+    if comparison.get("assessment"):
+        lines.append(f"Assessment: {comparison['assessment']}")
+    return chr(10).join(lines)
 
-    Every verified pair reaches this step. A second model pass used to sit in between,
-    re-checking each pair for whether its two spans compare the same KIND of statement --
-    the rules the mapping prompt already states. Measured against a stated gold standard
-    over three runs of two claims it cost three calls a paper and scored 17 of 21 where
-    dropping it scored 20 of 21, and it was worst on the papers it was built for: a medical
-    GraphRAG method came out `none` in all three runs without it and in one of three with
-    it. It is gone; git history has it.
+
+
+
+
+class EvidenceCheck(BaseModel):
+    status: str = Field(
+        description="material | nonmaterial | insufficient"
+    )
+    supporting_pair_indices: List[int] = Field(
+        default_factory=list,
+        description=(
+            "1-based indices of grounded pairs that genuinely support MATERIAL "
+            "contribution overlap. Must contain at least one index when status=material; "
+            "normally empty for nonmaterial or insufficient."
+        ),
+    )
+    reasoning: str = Field(default="")
+
+
+EVIDENCE_CHECK_PROMPT = """Check whether the grounded evidence supports substantive
+contribution overlap.
+
+You are an evidence checker, not the final novelty grader.
+Do not assign or revise an overall overlap degree.
+
+You may use:
+1. the claimed contribution;
+2. the prior semantic comparison; and
+3. the grounded correspondence pairs.
+
+The comparison owns the overall semantic degree.
+
+The quoted spans have already passed source-grounding and ownership checks.
+However, the semantic relation proposed for a pair is not automatically correct.
+Judge what the two quoted spans themselves establish.
+
+A pair supports material overlap only when both spans express the same substantive
+contribution in the same semantic role. Constructing, using, evaluating, applying,
+or discussing a component are not interchangeable contribution relations.
+
+Return:
+
+material
+    At least one grounded pair genuinely supports substantive contribution overlap.
+
+nonmaterial
+    The grounded pairs establish only topical, supporting, mechanistic, contextual,
+    or otherwise non-substantive relationships.
+
+insufficient
+    The available grounded evidence is absent, ambiguous, semantically mismatched,
+    or insufficient to determine whether substantive overlap is evidenced.
+
+Do not require the pairs to reproduce every part of the claim.
+Missing pairs are not evidence that unmatched parts are absent from the prior paper.
+
+When `status` is `material`, return the 1-based indices of every grounded pair
+that genuinely supports that material-overlap finding in `supporting_pair_indices`.
+At least one such index is required for `material`.
+
+For `nonmaterial` or `insufficient`, return an empty `supporting_pair_indices` list.
+
+## Claim
+{claim}
+
+## Semantic comparison
+{comparison}
+
+## Grounded pairs
+{pairs}
+"""    
+
+def check_evidence(
+    struct_call: Callable,
+    claim_str: str,
+    mapping: dict,
+    comparison: Optional[dict] = None,
+) -> dict:
+    """Check whether the grounded owned pairs support material overlap.
+
+    This does NOT assign the novelty degree. The semantic comparison owns that.
     """
+
     pairs = mapping.get("pairs") or []
+
+    # No grounded + ownership-verified evidence available.
     if not pairs:
-        return {"degree": "none", "reasoning": "No correspondence between this paper and the "
-                                               "claimed contribution could be evidenced."}
-    parsed = struct_call(Conclusion, CONCLUDE_PROMPT.format(
-        claim=claim_str[:1200],
-        pairs=_list_pairs(pairs),
-        delta=(mapping.get("submission_delta") or "(not stated)")[:800]))
+        return {
+            "status": "insufficient",
+            "supporting_pair_indices": [],
+            "reasoning": (
+                "No grounded ownership-verified correspondence is available "
+                "to establish substantive contribution overlap."
+            ),
+        }
+
+    parsed = struct_call(
+        EvidenceCheck,
+        EVIDENCE_CHECK_PROMPT.format(
+            claim=claim_str[:1200],
+            comparison=_fmt_comparison(comparison or {}),
+            pairs=_list_pairs(pairs),
+        ),
+    )
+
+    # A failed model call is epistemic uncertainty, never a semantic label.
     if parsed is None:
-        return {"degree": "partial", "reasoning": ""}
-    degree = (parsed.degree or "").strip().lower()
-    if degree not in ("same", "substantial", "partial", "superficial", "none"):
-        degree = "partial"
-    return {"degree": degree, "reasoning": (parsed.reasoning or "").strip()}
+        return {
+            "status": "insufficient",
+            "supporting_pair_indices": [],
+            "reasoning": "The evidence check did not complete.",
+        }
+
+    status = (parsed.status or "").strip().lower()
+
+    if status not in ("material", "nonmaterial", "insufficient"):
+        status = "insufficient"
+
+    valid_indices = sorted({
+        i
+        for i in (parsed.supporting_pair_indices or [])
+        if isinstance(i, int) and 1 <= i <= len(pairs)
+    })
+
+    # "material" has to identify at least one pair that actually supports it.
+    if status == "material" and not valid_indices:
+        status = "insufficient"
+
+    return {
+        "status": status,
+        "supporting_pair_indices": valid_indices,
+        "reasoning": (parsed.reasoning or "").strip(),
+    }

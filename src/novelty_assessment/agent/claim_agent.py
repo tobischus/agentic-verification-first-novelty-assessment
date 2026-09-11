@@ -20,6 +20,7 @@ few deep comparisons. Output is the same artifact_a-compatible entry as before.
 """
 import json
 import os
+import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Optional
@@ -110,6 +111,62 @@ class _EvidencePairIn(BaseModel):
 class _SectionPick(BaseModel):
     """The sections whose FULL text should be loaded (chosen by what each is about)."""
     sections: List[str] = Field(description="exact section titles to read in full, most relevant first")
+    why: str = Field(default="", description="what these sections are expected to show, in one sentence")
+
+
+class _ReadMore(BaseModel):
+    """After a first read: go deeper, or say the paper has no bearing on the claim.
+
+    The second option only exists where nothing screened the pool beforehand. It is what
+    keeps looking at every paper affordable -- a paper that turns out to be about
+    something else ends here, having been read rather than dismissed from its abstract."""
+    bears_on_claim: bool = Field(
+        default=True,
+        description="false only if what you have read shows this paper does not speak to "
+                    "the claimed contribution at all")
+    sections: List[str] = Field(
+        default_factory=list,
+        description="if it does bear on the claim: further section titles you need in "
+                    "full, empty if you have enough")
+    degree: str = Field(
+        default="superficial",
+        description="if it does NOT bear on the claim: superficial (same area, different "
+                    "contribution) or none (nothing of the claimed contribution)")
+    why: str = Field(default="", description="one or two sentences: what you read, and what it showed")
+
+
+class _PaperAction(BaseModel):
+    """One adaptive reading action proposed by the per-paper agent."""
+
+    tool: str = Field(
+        description="read_more | propose_dismissal | propose_compare"
+    )
+    sections: List[str] = Field(
+        default_factory=list,
+        description="for read_more: the [S#] handles of unread sections to open, exactly "
+                    "as the menu prints them (e.g. S4). A title is accepted only if it "
+                    "matches the menu exactly."
+    )
+    suspected_deficit: str = Field(
+        default="",
+        description="the specific unresolved question or refinement objective, if any"
+    )
+    why: str = Field(
+        default="",
+        description="one or two sentences explaining why this is the best next action"
+    )
+
+
+class _GateVerdict(BaseModel):
+    """A gate's answer: does what has been read carry the decision that was proposed?"""
+    sufficient: bool = Field(description="true if what was read supports the proposal")
+    missing: str = Field(
+        default="",
+        description="if not: the ONE thing that would settle it, named concretely enough "
+                    "that a section can be chosen for it")
+    where: List[str] = Field(
+        default_factory=list,
+        description="if not: section titles from the unread list likely to contain it")
 
 
 class _Segment(BaseModel):
@@ -123,17 +180,33 @@ class _Realization(BaseModel):
 
 
 class _SectionComparison(BaseModel):
-    # narrative of how THIS paper realizes (or does not) the claimed contribution, with
-    # verbatim quote segments from the paper woven in
-    paper_realization: List[_Segment] = Field(default_factory=list)
-    overlap_degree: str = Field(description="none | superficial | partial | substantial | same (overlap of CONTRIBUTIONS, not topic)")
-    refutation_status: str = Field(description="can_refute | cannot_refute | unclear")
-    what_is_shared: str = Field(default="", description="what the paper does that the claim also claims (if any)")
-    submission_delta: str = Field(default="", description="what the submission adds beyond this paper")
-    assessment: str = Field(default="", description="the comparison with the submission and the overlap judgment (2-4 sentences)")
-    evidence_pairs: List[_EvidencePairIn] = Field(
-        default_factory=list,
-        description="ONLY if the paper presents the SAME contribution (can_refute): verbatim claim<->paper pairs")
+    """Semantic comparison only. Evidence is produced and verified later."""
+
+    paper_realization: List[_Segment] = Field(
+        default_factory=list
+    )
+
+    overlap_degree: str = Field(
+        description=(
+            "none | superficial | partial | substantial | same "
+            "(overlap of CONTRIBUTIONS, not topic)"
+        )
+    )
+
+    what_is_shared: str = Field(
+        default="",
+        description="what this paper itself contributes that the submission also claims",
+    )
+
+    submission_delta: str = Field(
+        default="",
+        description="what substantive contribution remains in the submission beyond this paper",
+    )
+
+    assessment: str = Field(
+        default="",
+        description="the semantic comparison and overlap judgment in 2-4 sentences",
+    )
 
 
 class _Comparison(BaseModel):
@@ -247,8 +320,41 @@ _AGENTIC_SECTIONS = os.getenv("NOVELTY_AGENTIC_SECTIONS", "1").strip().lower() n
 # Ceiling on the chosen context. Generous on purpose: the saving should come from the
 # model reading less, not from a cap silently truncating it, or the comparison between
 # full text and selection would be measuring the cap.
-_READ_CAP = 40000
-
+_READ_CAP = 50000          # chars of a paper the model may be shown, per paper
+_FALSIFY_SECTIONS = 2      # unread sections a proposed dismissal must survive
+# Look at every retrieved paper instead of screening the pool from abstracts first.
+#
+# The screen is the pipeline's dominant error: measured over three runs of one claim it
+# opened 15, 12 and 10 papers of the same 20, and 10 of the 20 were opened in some runs
+# and not others -- the run-to-run spread of the whole system comes from there, not from
+# the comparison. Without it every paper is read, and depth is earned rather than granted
+# in advance: the paper itself is opened at its section level, and one that turns out to
+# have no bearing on the claim ends there, before the expensive comparison.
+#
+# This is affordable precisely because dropping the screen also drops the only sequential
+# dependency: with no "which paper next" left to decide, every paper is independent again
+# and the existing thread pool runs them side by side.
+_NO_TRIAGE = os.getenv("NOVELTY_NO_TRIAGE", "0").strip().lower() not in ("0", "false", "no")
+# The floor a dismissal has to stand on. Not a judgement about how much is enough to
+# understand a paper -- it is the line below which "this paper has no bearing" is not a
+# reading but a glance.
+_DISMISS_MIN_SECTIONS = 3
+_DISMISS_MIN_CHARS = 8000
+# The per-paper loop of point 2: agent policy, a semantic gate on each proposal, and a
+# deterministic gate on the evidence that can send the whole thing back to reading.
+# Off by default: it costs more calls per paper than the single pick, and what that buys
+# has to be measured before it becomes what the pipeline does.
+_PAPER_LOOP = os.getenv("NOVELTY_PAPER_LOOP", "0").strip().lower() not in ("0", "false", "no")
+_LOOP_MAX_TURNS = 4        # reading turns within one examination
+_LOOP_MAX_COMPARES = 2     # times the evidence gate may send it back to read
+_FIRST_READ_N = 3          # sections of the mandatory first read -- exactly this many
+_DEGREE_RANK = {
+    "none": 0,
+    "superficial": 1,
+    "partial": 2,
+    "substantial": 3,
+    "same": 4,
+}
 _DEEP_SYSTEM = """You are doing a CLOSE comparison of ONE prior paper against a claimed contribution to decide whether it challenges the claim's novelty. You are given some of the paper's full-text passages. If you need other parts of the paper, call read_more(query) (at most a couple of times). When ready, call conclude_comparison with refutation_status, overlap_degree, what_is_shared, submission_delta, and verbatim evidence_pairs (paper_quote copied CHARACTER-FOR-CHARACTER from passages you saw, without any leading [Section] tag; claim_quote verbatim from the submission passages). paper_quote must state what THE PAPER ITSELF does or contributes -- never quote descriptions of OTHER cited work (related-work summaries, "X [12] is a ... dataset", "we adopt the following datasets"): that is the cited paper's contribution, not this paper's. overlap_degree measures overlap of CONTRIBUTIONS (claim vs paper), not topical similarity: same area + different kind of contribution = superficial at most. Be efficient."""
 
 # --- section-based understanding (V3) ---
@@ -302,27 +408,51 @@ First, in `paper_realization`, explain what THE PAPER ITSELF does with respect t
 If the paper does NOT address the claimed contribution, say so briefly in one text segment (no quotes needed).
 
 Then judge:
-- overlap_degree: overlap of CONTRIBUTIONS (claim vs THIS paper), not topical similarity.
-  * none / superficial = same area but a DIFFERENT KIND of contribution.
-  * partial = the paper itself delivers PART of the claimed contribution.
-  * substantial = the SAME KIND of contribution covering much of the same goal, but with a materially different specific design, scope, or data -- so the submission still has a real delta.
-  * same = essentially the IDENTICAL contribution/artifact with the same defining design (near-duplication); reserve this for when the submission adds little of substance beyond it.
-  Be strict about `same`: if the submission has any clear distinguishing design (e.g. purpose-built datasets/corpora, a different framing or scope), it is at most `substantial`, NOT `same`.
-- refutation_status: can_refute only if the paper substantially presents the SAME contribution (overlap_degree substantial or same) (then also give evidence_pairs: verbatim claim_quote from the submission text + verbatim paper_quote of the paper's own contribution). Otherwise cannot_refute.
-- what_is_shared / submission_delta / assessment (assessment = the comparison with the submission and your overlap judgment, 2-4 sentences).
+- overlap_degree: overlap of CONTRIBUTIONS, not topical similarity.
 
+  * none =
+    The prior paper does not itself deliver any meaningful part of the
+    claimed contribution.
+
+  * superficial =
+    A real relationship exists, but it concerns topic, supporting machinery,
+    evaluation context, or another relationship that does not itself constitute
+    substantive contribution overlap.
+
+  * partial =
+    The prior paper itself delivers a meaningful substantive part of the claimed
+    contribution, but the submission still retains a distinct central contribution.
+    After subtracting what the prior paper already delivers, important novelty remains.
+
+  * substantial =
+    The prior paper already delivers the central contribution, or most of what makes
+    the claimed contribution substantive. After subtracting that overlap, what remains
+    is mainly a different design, scope, data choice, realization, or extension rather
+    than a distinct central contribution.
+
+  * same =
+    The prior paper already delivers essentially the claimed contribution itself.
+    The submission adds little substantive novelty beyond it.
+
+Decide in this order:
+1. What does THIS prior paper itself contribute?
+2. What substantive contribution is genuinely shared?
+3. What substantive contribution remains in the submission?
+4. Assign the degree from the definitions above.
+
+Do not determine the degree from the number of shared details.
 ## Claim
 {claim}
 
-## What the submission does for this claim
+## What the submission itself does for this claim
 {realization}
 
-## The submission, in full
-{submission}
+## Prior paper
+{title}
 
-## Prior paper: {title}
-## Its full text
-{sections}"""
+## Sections read from this paper
+{sections}
+"""
 
 
 _PAPER_READ_MORE = """You have opened part of a prior-work paper in order to judge whether it presents the same kind of contribution as a specific claimed one. Below is what you have read, and the titles of the sections you have not opened.
@@ -348,6 +478,175 @@ Name only sections you would actually use: each one is then read in full. Do not
 {unread}"""
 
 
+_PAPER_READ_MORE_OR_DROP = """You have opened part of a prior-work paper in order to judge whether it presents the same kind of contribution as a specific claimed one. Nothing has screened this paper beforehand: it was retrieved for this claim, and what you have read is all that is known about it.
+
+Decide one of two things.
+
+**It has no bearing on the claim.** Set `bears_on_claim` to false, and say in `degree` whether it is `superficial` (same area, a different contribution) or `none` (nothing of the claimed contribution at all). Choose this when what you have read shows the paper is about something else -- not merely that this particular section was unhelpful. Being retrieved for the claim means it shares the vocabulary; that is not a bearing.
+
+**It does bear on the claim.** Leave `bears_on_claim` true. In `sections`, name any further sections you need in full to say what THIS PAPER contributes and how that stands to the claim -- or leave it empty if what you have read is enough. Name only sections you would actually use: each is read in full.
+
+Say in `why`, in one or two sentences, what you read and what it showed. That sentence is what a reviewer sees for a paper that ends here, so it has to state what the paper does, not merely that it differs.
+
+## Claim
+{claim}
+
+## What the submission does for this claim
+{realization}
+
+## Prior paper: {title}
+## What you have read so far
+{read}
+
+## Sections not yet opened (title :: preview :: size)
+{unread}"""
+
+
+_PAPER_ACTION = """You are adaptively examining ONE prior-work paper against ONE claimed contribution.
+
+Choose exactly ONE next action:
+
+- `read_more`: read additional sections when they could resolve an important uncertainty
+  or materially sharpen a plausible overlap.
+- `propose_dismissal`: use when you understand THIS PAPER's own contribution and the
+  evidence supports that it does not plausibly instantiate any substantive component
+  of the claimed contribution.
+- `propose_compare`: use when the paper's own contribution and its relation to the claim
+  are clear enough for a meaningful comparison.
+
+Use reading effort selectively.
+
+If overlap appears weak and the paper's own contribution is already clear, do not keep
+reading merely to prove absence.
+
+If substantive overlap appears plausible, use `read_more` when additional sections could
+make the comparison materially more precise.
+
+Do not require exhaustive certainty before `propose_compare`.
+
+Judge only what THIS PAPER itself contributes. Topical similarity and descriptions of
+other cited work are not contribution overlap.
+
+When using `read_more`, select only unread sections that serve a specific unresolved
+question or refinement objective, and state that objective in `suspected_deficit`.
+
+Name sections by their [S#] handle, copied exactly from the list below. A handle that is
+not on that list opens nothing.
+
+{mandate}
+
+{deficits}
+
+## Claim
+{claim}
+
+## What the submission itself does to realize this claim
+{realization}
+
+## Prior paper
+{title}
+
+## Full text of sections already read
+{read}
+
+## Sections not yet opened (handle :: title :: preview :: size)
+{unread}
+"""
+
+_FALSIFY_DISMISSAL = """A reading agent proposes to set one prior-work paper aside as having no bearing on a claimed contribution. Before that can stand, the proposal has to survive a look at what would contradict it.
+
+Name the {n} sections, from the UNREAD list below, most likely to contain something that would REFUTE the dismissal -- a contribution of this paper that does bear on the claim after all.
+
+Look for where a paper states what it delivers and what it was measured on: what it built, the artifact or resource it releases, what its evaluation covers. Do not pick sections that would merely confirm the dismissal, and do not pick by size.
+
+## Claim
+{claim}
+
+## Prior paper: {title}
+## The reason given for dismissing it
+{why}
+
+## What has been read
+{read}
+
+## Sections not yet opened (handle :: title :: preview :: size)
+{unread}
+
+Return `sections`: the [S#] handles to open, copied exactly from the list above.
+Return `why`: in one sentence, what each of those sections could contain that would refute the dismissal."""
+
+
+_DISMISS_GATE = """A reading agent proposes to end its examination of one prior-work paper, on the grounds that the paper has no bearing on a claimed contribution. Below is everything it read, and its reason.
+
+Decide whether what was READ carries that conclusion.
+
+It does, if the sections show what the paper is about and that subject is a different contribution.
+
+It does not, if the paper's own contribution is nowhere in what was read -- a method section without the claim it supports, an evaluation without the artifact being evaluated, background only. A paper cannot be shown to lack something by reading pages that would not contain it either way.
+
+If it does not, name in `missing` the ONE thing that would settle it, concretely enough that a section can be chosen for it, and list likely sections in `where`.
+
+## Claim
+{claim}
+
+## Prior paper: {title}
+## Proposed reason for dismissing it
+{why}
+
+## What was read
+{read}
+
+## Sections not opened (title :: preview :: size)
+{unread}"""
+
+_EVIDENCE_REENTRY_MANDATE = """
+An earlier evidence check found an unresolved evidence deficit.
+
+Before another comparison can be proposed, inspect additional evidence that could
+resolve that specific deficit.
+
+Use `read_more` on this turn and select only unread sections that are relevant to
+the outstanding deficit.
+
+`propose_compare` and `propose_dismissal` are not available on this turn.
+"""
+
+# The claim is deliberately NOT in this prompt. Given one, the gate asks the prior paper
+# to contain the submission's artifact -- it refused a comparison against the strongest
+# competitor on the grounds that "an explicit presentation of GraphRAG-Bench" was missing,
+# which is the submission's own benchmark and could not be in that paper at any length.
+# Twice refused, the agent proposed dismissal instead, and a real overlap was lost.
+#
+# The question this gate asks does not need the claim: whether these pages state what THIS
+# paper contributes is a property of the pages. Removing the claim removes the failure
+# rather than discouraging it.
+_READ_GATE = """A reading agent proposes to move on to a comparison, having read part of one paper. Below is everything it read.
+
+Decide whether what was READ states what THIS PAPER ITSELF contributes -- what it builds, proposes, measures or finds, in enough detail that someone could set it beside another paper's contribution.
+
+It does, if the sections say what the paper delivers, however far that is from any particular topic. A paper whose contribution is plainly stated is ready to be compared, whatever the comparison then concludes.
+
+It does not, if the pages show only that the paper works in some area: a related-work summary, an experimental setup without the thing being evaluated, a discussion referring to a method described elsewhere in the paper, an introduction that motivates without stating.
+
+Judge the pages, not the paper's importance, and not what it ought to contain. If it does not, name in `missing` the ONE thing that would settle it -- something this paper would state about ITSELF -- and list likely sections in `where`.
+
+## Paper: {title}
+## What was read
+{read}
+
+## Sections not opened (title :: preview :: size)
+{unread}"""
+
+
+_FIRST_READ_MANDATE = """
+This is the first turn.
+
+Use `read_more` and select exactly 3 unread sections with the highest expected information
+value for identifying THIS PAPER's own contribution and its relation to the claim.
+
+`propose_compare` and `propose_dismissal` are not available yet.
+"""
+
 def _fill(template: str, **kw) -> str:
     """Sequential {key}->value substitution that tolerates literal braces in the values
     (section text may contain { } from math/code) -- str.format would choke on those."""
@@ -357,10 +656,65 @@ def _fill(template: str, **kw) -> str:
     return out
 
 
-def _fmt_sections_menu(menu: List[dict]) -> str:
+def _section_ids(menu: List[dict]) -> dict:
+    """{section name: stable handle} for one paper's menu, in menu order."""
+    return {m["name"]: f"S{i + 1}" for i, m in enumerate(menu)}
+
+
+def _resolve_sections(requested, menu: List[dict], ids: dict):
+    """Split what the agent named into sections that exist and tokens that do not.
+
+    Returns (names, unresolved). A token resolves by handle first, then by exact title,
+    then by unique suffix -- the last because the outline path makes titles long, and a
+    model that drops the parent ("3.4 Unified Experimental Settings" for "3 Evaluation
+    Framework > 3.4 Unified Experimental Settings") is naming a real section without
+    ambiguity. Anything still unmatched is RETURNED, never silently dropped: the caller
+    has to be able to tell a request it could not understand from a paper with nothing
+    left to read, because those two call for opposite actions.
+    """
+    by_id = {v.casefold(): k for k, v in ids.items()}
+    by_title = {" ".join(m["name"].split()).casefold(): m["name"] for m in menu}
+    names, unresolved = [], []
+    for raw in (requested or []):
+        tok = str(raw or "").strip().strip("[]").strip()
+        if not tok:
+            continue
+        key = " ".join(tok.split()).casefold()
+        # The menu prints "[S7] title", and the model echoes the whole line about as often
+        # as the bare handle. A leading handle decides on its own -- the title after it is
+        # the same section by construction, and reading it as part of the token made the
+        # token match nothing at all.
+        lead = re.match(r"^\[?\s*(s\d+)\s*\]?(?:\s|$)", key)
+        hit = by_id.get(lead.group(1)) if lead else None
+        hit = hit or by_id.get(key) or by_title.get(key)
+        if hit is None:
+            tail = [n for t, n in by_title.items()
+                    if t.endswith("> " + key) or t.endswith(key)]
+            hit = tail[0] if len(tail) == 1 else None
+        if hit is None:
+            unresolved.append(tok)
+        elif hit not in names:
+            names.append(hit)
+    return names, unresolved
+
+
+def _fmt_sections_menu(menu: List[dict], ids: Optional[dict] = None) -> str:
+    """The section menu the agent picks from.
+
+    With `ids`, every line leads with a stable handle -- [S7] -- and the agent is asked for
+    handles rather than titles. Titles were the only channel before, matched exactly against
+    the outline path, and a model that wrote "3.4 Evaluation Settings" where the menu said
+    "3 Evaluation Framework > 3.4 Unified Experimental Settings" resolved to nothing: four
+    sections requested, zero loaded, and the controller read that as "no unread sections
+    remain" and moved to the comparison with three sections open."""
+    if ids is None:
+        return "\n".join(
+            f"- {m['name']} :: {m.get('preview','')[:160]} :: ~{m.get('chars',0)} chars"
+            for m in menu) or "(no sections)"
     return "\n".join(
-        f"- {m['name']} :: {m.get('preview','')[:160]} :: ~{m.get('chars',0)} chars"
-        for m in menu) or "(no sections)"
+        f"- [{ids[m['name']]}] {m['name']} :: {m.get('preview','')[:160]} "
+        f":: ~{m.get('chars',0)} chars"
+        for m in menu if m["name"] in ids) or "(no sections)"
 
 
 def _fmt_sections_full(sections: List[dict], max_total: int = 24000) -> str:
@@ -444,16 +798,6 @@ class ClaimNoveltyAgent:
             except ValueError:
                 deep_dive_workers = 4
         self.deep_dive_workers = max(1, deep_dive_workers)
-        # reasoning models (gpt-5*, o-series) reject any temperature other than the default.
-        # For them we also cap the reasoning effort: at the default (medium/high) a single
-        # gpt-5-mini call reasons for many minutes, which makes a batch untenable. "low"
-        # (env NOVELTY_REASONING_EFFORT) brings calls down to seconds with little quality
-        # loss for these structured comparison tasks. Non-reasoning models ignore it.
-        is_reasoning = model_name.startswith(("gpt-5", "o1", "o3", "o4"))
-        if is_reasoning:
-            kw = {"reasoning_effort": os.getenv("NOVELTY_REASONING_EFFORT", "low")}
-        else:
-            kw = {"temperature": 0.0}
         # A per-request timeout is essential: without it a single stalled HTTP connection
         # (half-open socket behind OpenAI's proxy) hangs the whole run forever -- max_retries
         # never fires because the request never *errors*, it just waits. With a timeout the
@@ -466,10 +810,43 @@ class ClaimNoveltyAgent:
             max_retries = int(os.getenv("NOVELTY_LLM_MAX_RETRIES", "6"))
         except ValueError:
             max_retries = 6
-        self.llm = ChatOpenAI(
-            model_name=model_name, api_key=api_key,
-            max_retries=max_retries, timeout=timeout, **kw
-        )
+
+        # One LLM client per ROLE, not per effort level: the per-paper loop's three kinds
+        # of call differ in more than how hard to think. Reading/action-selection and the
+        # falsification section-pick (same call site) are frequent and cheap to redo, so
+        # they can run on a smaller model at low effort. Comparison and the evidence map's
+        # semantic judgments are what a reviewer actually reads and what the evidence gate
+        # checks everything else against -- worth a stronger model, higher effort, or both.
+        #
+        # Each role's (model, effort) is independently overridable, so a model change for
+        # one role never has to touch the others:
+        #   NOVELTY_READING_MODEL / NOVELTY_READING_EFFORT     (default: model_name, low)
+        #   NOVELTY_COMPARE_MODEL / NOVELTY_COMPARE_EFFORT     (default: model_name, high)
+        #   NOVELTY_EVIDENCE_MODEL / NOVELTY_EVIDENCE_EFFORT   (default: model_name, high)
+        # reasoning models (gpt-5*, o-series) reject any temperature other than the default
+        # and instead take a reasoning_effort; non-reasoning models ignore effort entirely.
+        _llm_cache: dict = {}
+
+        def get_llm(model: str, effort: str) -> ChatOpenAI:
+            key = (model, effort)
+            if key not in _llm_cache:
+                is_reasoning = model.startswith(("gpt-5", "o1", "o3", "o4"))
+                kw = ({"reasoning_effort": effort} if is_reasoning else {"temperature": 0.0})
+                _llm_cache[key] = ChatOpenAI(model_name=model, api_key=api_key,
+                                             max_retries=max_retries, timeout=timeout, **kw)
+            return _llm_cache[key]
+
+        def role_llm(env_model: str, env_effort: str, default_effort: str) -> ChatOpenAI:
+            model = os.getenv(env_model, model_name)
+            effort = os.getenv(env_effort, default_effort)
+            return get_llm(model, effort)
+
+        self._role_llm = {
+            "reading": role_llm("NOVELTY_READING_MODEL", "NOVELTY_READING_EFFORT", "low"),
+            "compare": role_llm("NOVELTY_COMPARE_MODEL", "NOVELTY_COMPARE_EFFORT", "high"),
+            "evidence": role_llm("NOVELTY_EVIDENCE_MODEL", "NOVELTY_EVIDENCE_EFFORT", "high"),
+        }
+        self.llm = self._role_llm["reading"]   # default for call sites that don't specify a role
 
     # ------------------------------ helpers ------------------------------ #
 
@@ -478,9 +855,13 @@ class ClaimNoveltyAgent:
         return (f"{claim.get('name','')} — {claim.get('claim_text','')} "
                 f"({claim.get('description','')})").strip()
 
-    def _struct(self, model, prompt):
-        """Structured LLM call returning (parsed, prompt_tokens, completion_tokens)."""
-        res = self.llm.with_structured_output(model, include_raw=True).invoke(prompt)
+    def _struct(self, model, prompt, role: str = "reading"):
+        """Structured LLM call returning (parsed, prompt_tokens, completion_tokens).
+
+        `role` picks which of the per-role clients (reading / compare / evidence) answers
+        this call -- each is its own (model, effort) pair, built in __init__."""
+        llm = self._role_llm.get(role, self.llm)
+        res = llm.with_structured_output(model, include_raw=True).invoke(prompt)
         parsed, raw = res.get("parsed"), res.get("raw")
         pt, ct = _usage(raw) if raw is not None else (0, 0)
         return parsed, pt, ct
@@ -565,10 +946,624 @@ class ClaimNoveltyAgent:
 
     # ------------------------------ phase 2 ------------------------------ #
 
-    def _read_paper_agentic(self, tb: ClaimToolbox, claim: dict, pid: str, claim_ctx: str):
+    # ------------------ the per-paper loop, with its gates ------------------ #
+
+    def _examine_paper(self, tb: ClaimToolbox, claim: dict, pid: str, claim_ctx: str,
+                       carry_deficit: str = "", state: Optional[dict] = None):
+        """One paper's reading: a mandatory first read, then an action loop.
+
+        The shape is fixed in code, not asked of the model:
+
+          MANDATORY INITIAL READ   turn 0 is a read. The agent picks which sections -- the
+                                   three it judges most relevant to the claim -- but it
+                                   cannot dismiss or compare from the table of contents,
+                                   so no verdict rests on section titles alone.
+
+          ACTION LOOP              read_more / propose_compare / propose_dismissal.
+
+          DISMISSAL FALSIFICATION  the first `propose_dismissal` is never granted and is
+                                   never put to a gate. Instead the agent must name the two
+                                   UNREAD sections most likely to REFUTE its own dismissal,
+                                   and those are read in full. Only then does the flag flip
+                                   and the loop continue as before; a dismissal proposed
+                                   again after that goes through.
+
+        That last part is the change this method exists for. A gate asking "was enough
+        read?" accepted three sections on CG-RAG and lost a paper the gold marks as a real
+        partial overlap: the reading was sufficient for the claim the agent made, and the
+        claim was wrong. Asking the agent to look for what would refute itself is a
+        different question, and it costs two sections rather than a judgement about
+        judgement.
+
+        `state`, if given, resumes a PRIOR call on this same paper -- the sections already
+        read, the running character total, and whether dismissal falsification has already
+        been done. Without it, `_paper_loop`'s re-entry after a failed evidence gate would
+        start this method over: `got` and `read` empty again, the mandatory initial read
+        fires again, and three sections already on the page get read and billed a second
+        time, while `used` resets to 0 so the 50,000-character cap no longer bounds what
+        the paper costs across the whole loop -- exactly what the cap exists to prevent.
+
+        Returns (decision, context, sections_read, why, pt, ct, trace, state) -- the last
+        item is what a subsequent call should pass back in as `state`.
+        """
+        pt = ct = 0
+        trace: List[str] = []
+        claim_s = self._claim_str(claim)[:1200]
+        title = (tb.pool.get(pid, {}) or {}).get("title", "")
+        menu = tb.section_menu(pid) or []
+        if not menu:
+            return "compare", "", [], "", pt, ct, ["no section menu"], {}
+
+        def struct(schema, prompt):
+            # Reading/action selection AND dismissal falsification's section pick both
+            # run on the "reading" role: frequent, cheap-to-redo calls -- which section to
+            # read next, which two sections would refute a dismissal -- not the verdict.
+            nonlocal pt, ct
+            try:
+                parsed, a, b = self._struct(schema, prompt, role="reading")
+            except Exception as e:
+                trace.append(f"call failed ({type(e).__name__})")
+                return None
+            pt += a; ct += b
+            return parsed
+
+        state = state or {}
+        got: List[dict] = list(state.get("got") or [])
+        read: List[str] = list(state.get("read") or [])
+        used = int(state.get("used") or 0)
+        falsification_done = bool(state.get("falsification_done"))
+        resuming = bool(got or read)
+        deficits: List[str] = []
+        why = ""
+        cap_hit = False
+        last_take = (0, 0, 0)
+
+        if carry_deficit:
+            deficits.append(carry_deficit)
+
+        # A failed evidence check must cause an actual new read before
+        # another comparison may be proposed.
+        reentry_requires_read = bool(carry_deficit)
+
+        # Stable handles for the menu. The agent names [S7], not a title it has to
+        # reproduce character for character -- see _fmt_sections_menu for what that cost.
+        sec_ids = _section_ids(menu)
+
+        def resolve(requested):
+            return _resolve_sections(requested, menu, sec_ids)
+
+        def unread():
+            return [m for m in menu if m["name"] not in set(read)]
+        def fitting_unread():
+            remaining = max(0, _READ_CAP - used)
+            return [
+                m for m in unread()
+                if int(m.get("chars") or 0) <= remaining
+            ]
+        def take(names):
+            """Read exactly the sections named -- no more.
+
+            `exact=True` because section names carry their outline path: matched as
+            substrings, "3 Evaluation Framework" also pulls in every "3 Evaluation
+            Framework > 3.x" beneath it, and an agent that asked for three sections was
+            given seven. The budget then went where nothing chose to send it."""
+            nonlocal used, last_take
+            new = [n for n in (names or []) if n and n not in read]
+            if not new:
+                last_take = (len(names or []), 0, 0)
+                return []
+            secs = tb.read_sections(pid, new, max_total=max(0, _READ_CAP - used),
+                                    exact=True).get("sections", []) or []
+            done, added = [], 0
+            for s in secs:
+                if s["name"] not in read:
+                    got.append(s); read.append(s["name"])
+                    n = len(s.get("text", ""))
+                    used += n; added += n; done.append(s["name"])
+            last_take = (len(names or []), len(done), added)
+            return done
+
+        def log_read(turn, label, names, reason):
+            # extend, not += : augmented assignment would bind `trace` as a local of this
+            # closure and the append above it would raise before anything was written.
+            req, loaded, added = last_take
+            trace.append(f"turn {turn}: {label} -> {len(names)} sections")
+            trace.extend(f"  - {n}" for n in names)
+            trace.append(f"  requested: {req}")
+            trace.append(f"  loaded: {loaded}")
+            trace.append(f"  chars added: {added:,}")
+            trace.append(f"  total chars: {used:,}/{_READ_CAP:,}")
+            if reason:
+                trace.append(f"  reason: {' '.join(reason.split())[:160]}")
+
+        def deficit_block():
+            if not deficits:
+                return ""
+            return ("\n## Still outstanding -- a check refused an earlier proposal for these\n"
+                    + "\n".join(f"- {d}" for d in deficits[-3:]) + "\n")
+
+        def exhausted(turn):
+            """Return True when no further COMPLETE section can be read."""
+            nonlocal cap_hit
+
+            if used >= _READ_CAP:
+                cap_hit = True
+                trace.append(
+                    f"turn {turn}: read cap exhausted "
+                    f"({used:,}/{_READ_CAP:,} chars) -> compare"
+                )
+                return True
+
+            left = unread()
+
+            if not left:
+                trace.append(
+                    f"turn {turn}: all sections read "
+                    f"({len(read)}/{len(menu)}) -> compare"
+                )
+                return True
+
+            if not fitting_unread():
+                cap_hit = True
+                trace.append(
+                    f"turn {turn}: no complete unread section fits remaining "
+                    f"budget ({_READ_CAP - used:,} chars) -> compare"
+                )
+                return True
+
+            return False
+
+        decision = None
+        for turn in range(_LOOP_MAX_TURNS):
+            if exhausted(turn):
+                decision = "compare"
+                if reentry_requires_read:
+                    trace.append(
+                        f"turn {turn}: evidence deficit remains, but no further reading is possible"
+                    )
+                break
+
+            if not got and not resuming:
+                mandate = _FIRST_READ_MANDATE
+            elif reentry_requires_read:
+                mandate = _EVIDENCE_REENTRY_MANDATE
+            else:
+                mandate = ""
+            act = struct(_PaperAction, _fill(
+                _PAPER_ACTION,
+                claim=claim_s,
+                realization=claim_ctx[:1600],
+                title=title,
+                read=(
+                    _fmt_sections_full(got, max_total=_READ_CAP)
+                    if got
+                    else "(nothing yet -- this turn must be a read)"
+                ),
+                unread=_fmt_sections_menu(unread(), ids=sec_ids),
+                deficits=deficit_block(),
+                mandate=mandate,
+            ))
+            if act is None:
+                decision = "compare"; trace.append(f"turn {turn}: no action -> compare"); break
+            tool = (act.tool or "").strip().lower()
+
+            if reentry_requires_read and tool != "read_more":
+                trace.append(
+                    f"turn {turn}: {tool or 'invalid action'} rejected -- "
+                    "evidence re-entry requires read_more first"
+                )
+                continue
+
+            if act.suspected_deficit and act.suspected_deficit.strip() not in deficits:
+                deficits.append(act.suspected_deficit.strip())
+
+            # ---- turn 0: a read of EXACTLY _FIRST_READ_N sections --------------------
+            # Exactly, not at least. The agent orders its picks by relevance, so the first
+            # three are the three it considers most relevant; letting it name eight made
+            # the mandatory read a way to open half the paper before any decision, which
+            # is the opposite of what a first look is for. More is reachable through
+            # read_more, where each step is chosen and logged on its own.
+            #
+            # `resuming` guards this on a re-entry: `got` is non-empty because it came from
+            # `state`, not because this call already read something, so testing `got`
+            # alone would still treat the first turn of a resumed call as turn 0 and read
+            # the same three sections again.
+            if not got and not resuming:
+                wanted, unresolved = resolve(act.sections)
+                names = take(wanted[:_FIRST_READ_N])
+                if unresolved:
+                    trace.append(f"  unresolved: {', '.join(unresolved[:6])}")
+                if len(names) < _FIRST_READ_N:
+                    names += take([m["name"] for m in
+                                   sorted(unread(), key=lambda m: -m.get("chars", 0))
+                                   ][:_FIRST_READ_N - len(names)])
+                log_read(turn, f"mandatory initial read ({_FIRST_READ_N} sections)",
+                         names, act.why)
+                if not names:
+                    decision = "compare"; trace.append(f"turn {turn}: nothing readable -> compare")
+                    break
+                continue
+
+            if tool == "read_more":
+                wanted, unresolved = resolve(act.sections)
+                names = take(wanted)
+                log_read(turn, "read_more", names, act.why)
+                if unresolved:
+                    trace.append(f"  unresolved: {', '.join(unresolved[:6])}")
+
+                if not names:
+                    # Nothing was read. WHY decides what happens next, and the two reasons
+                    # are not the same: a request the resolver could not match is a bad
+                    # action, and the agent gets to choose again; a genuinely empty menu is
+                    # the end of reading. Conflating them is what sent "RAG vs. GraphRAG"
+                    # into the comparison with three sections open after it had asked for
+                    # four more -- the controller read the resolver's failure as the paper
+                    # being exhausted.
+                    if unread():
+                        invalid_note = (
+                            "ACTION INVALID: none of "
+                            f"{', '.join(unresolved[:6]) or 'the sections named'} matched an "
+                            "unread section. Use the [S#] handles exactly as the menu "
+                            "prints them."
+                        )
+                        if invalid_note not in deficits:
+                            deficits.append(invalid_note)
+                        trace.append(
+                            f"turn {turn}: ACTION INVALID -- requested "
+                            f"{len(act.sections or [])}, resolved 0, "
+                            f"{len(unread())} sections still unread -> choose again"
+                        )
+                        continue
+
+                    if reentry_requires_read:
+                        # The evidence deficit has NOT been resolved by new reading.
+                        trace.append(
+                            f"turn {turn}: evidence re-entry read loaded nothing; "
+                            "deficit remains unresolved"
+                        )
+                        continue
+
+                    decision = "compare"
+                    trace.append(f"turn {turn}: no unread sections remain -> compare")
+                    break
+
+                # This is the important transition:
+                # actual new evidence was read, so comparison becomes eligible again.
+                if reentry_requires_read:
+                    reentry_requires_read = False
+                    trace.append("evidence re-entry satisfied by new reading -> compare")
+                    decision = "compare"
+                    break
+
+            if tool in ("dismiss", "propose_dismissal"):
+                if falsification_done:
+                    decision, why = "dismiss", (act.why or "").strip()
+                    trace.append(f"turn {turn}: propose_dismissal (falsification done) -> DISMISSED")
+                    trace.append(f"  reason: {' '.join(why.split())[:160]}")
+                    break
+                trace.append(f"turn {turn}: propose_dismissal")
+                left = unread()
+                if not left:
+                    falsification_done = True
+                    trace.append(f"turn {turn}: dismissal falsification exhausted "
+                                 f"(no unread sections left)")
+                    continue
+                trace.append(f"turn {turn}: dismissal falsification required")
+                pick = struct(_SectionPick, _fill(
+                    _FALSIFY_DISMISSAL, claim=claim_s, title=title,
+                    why=(act.why or "")[:600],
+                    read=_fmt_sections_full(got, max_total=_READ_CAP),
+                    unread=_fmt_sections_menu(left, ids=sec_ids), n=_FALSIFY_SECTIONS))
+                asked = (getattr(pick, "sections", None) or []) if pick else []
+                wanted, unresolved = resolve(asked)
+                names = take(wanted[:_FALSIFY_SECTIONS])
+                if unresolved:
+                    trace.append(f"  unresolved: {', '.join(unresolved[:6])}")
+                chosen = len(names)
+                if len(names) < min(_FALSIFY_SECTIONS, len(left)):
+                    names += take([m["name"] for m in
+                                   sorted(unread(), key=lambda m: -m.get("chars", 0))
+                                   ][:_FALSIFY_SECTIONS - len(names)])
+                trace += [f"  - {n}" for n in names]
+                trace.append(f"  requested: {min(_FALSIFY_SECTIONS, len(left))}")
+                trace.append(f"  loaded: {len(names)}")
+                trace.append(f"  chars added: {last_take[2]:,}")
+                trace.append(f"  total chars: {used:,}/{_READ_CAP:,}")
+                # The agent's own account of why these sections could refute it is the
+                # point of the gate; a fixed sentence here hid that the code had silently
+                # substituted its largest-unread fallback for the agent's choice.
+                trace.append(f"  reason: {(getattr(pick, 'why', '') or '(none given)')}")
+                if len(names) > chosen:
+                    trace.append(f"  FALLBACK: agent named {chosen} usable section(s), "
+                                 f"{len(names) - chosen} filled in by size")
+                required = min(_FALSIFY_SECTIONS, len(left))
+
+                if len(names) >= required:
+                    falsification_done = True
+                    trace.append(
+                        f"turn {turn}: dismissal_falsification_done=True"
+                    )
+                else:
+                    trace.append(
+                        f"turn {turn}: dismissal falsification incomplete "
+                        f"({len(names)}/{required} complete sections read)"
+                    )
+
+                continue
+
+            decision = "compare"
+            trace.append(f"turn {turn}: propose_compare -> COMPARE")
+            break
+        else:
+            if reentry_requires_read:
+                decision = "compare"
+                cap_hit = True
+                trace.append(
+                    f"BUDGET: {_LOOP_MAX_TURNS} turns exhausted while evidence "
+                    "re-entry still required a new read"
+                )
+            else:
+                decision = decision or "compare"
+                trace.append(
+                    f"BUDGET: {_LOOP_MAX_TURNS} turns exhausted -> compare"
+                )
+        next_state = {"got": got, "read": read, "used": used,
+                      "falsification_done": falsification_done}
+        return (decision, _fmt_sections_full(got, max_total=_READ_CAP), read, why,
+                pt, ct, trace + ([f"read cap was reached ({used:,}/{_READ_CAP:,} chars)"]
+                                 if cap_hit else []), next_state)
+
+    def _paper_loop(self, tb: ClaimToolbox, claim: dict, pid: str, claim_ctx: str):
+        """One paper, start to finish: the reading loop, the comparison, and the gate that
+        can send it back.
+
+        The outer turn exists because the evidence map is where a reading is first tested
+        against something other than itself. A comparison can read well and still rest on
+        nothing checkable, and the only honest answers to that are to look again or to say
+        the claim is not challenged. Looking again is bounded: `_LOOP_MAX_COMPARES` outer
+        turns, and the reading budget is shared across them, so a paper cannot absorb the
+        run.
+
+        Returns (comp, pt, ct, trace).
+        """
+        pt = ct = 0
+        trace: List[str] = []
+        deficit = ""
+        comp = self._to_comp(None)
+        read_state: Optional[dict] = None
+        for turn in range(_LOOP_MAX_COMPARES):
+            # `read_state` carries the sections already read, the running character total
+            # and the falsification flag from the PRIOR call on this paper. Without it a
+            # re-entry after a failed evidence gate re-triggers the mandatory initial
+            # read -- re-reading and re-billing the same sections -- and the character cap
+            # resets to 0, so it no longer bounds what the paper costs across the whole
+            # loop, only within a single call.
+            decision, context, names, why, a, b, tr, read_state = self._examine_paper(
+                tb, claim, pid, claim_ctx, carry_deficit=deficit, state=read_state)
+            pt += a; ct += b
+            trace += [f"[read {turn}] {t}" for t in tr]
+
+            if decision == "dismiss":
+                comp = self._to_comp(None)
+                comp["overlap_degree"] = "superficial"
+                comp["brief_note"] = comp["assessment"] = why or (
+                    "Read at section level; the paper's subject is a different contribution.")
+                trace.append(f"[{turn}] dismissed after {len(names)} sections")
+                return comp, pt, ct, trace
+
+            comp, a, b = self._section_compare(tb, claim, pid, claim_ctx, context)
+            pt += a; ct += b
+
+            # RAW: what the comparison call itself decided, before the evidence map can
+            # overwrite overlap_degree/assessment/evidence_pairs. Logging only the final
+            # state (after the map) loses this -- a paper whose raw compare said
+            # `substantial` and whose map then found nothing checkable reads identically,
+            # in the final fields alone, to one the compare call called `none` outright.
+            # Those are different failures and want different fixes.
+            trace.append(f"[{turn}] RAW COMPARE: degree={comp.get('overlap_degree', '')}")
+            trace.append(f"[{turn}] RAW ASSESSMENT: {comp.get('assessment', '')}")
+            trace.append(f"[{turn}] RAW SHARED: {comp.get('what_is_shared', '')}")
+            trace.append(f"[{turn}] RAW DELTA: {comp.get('submission_delta', '')}")
+
+            if _USE_EVIDENCE_MAP:
+                comp, a, b = self._map_evidence(tb, claim, pid, comp, context)
+                pt += a
+                ct += b
+
+                proposal = comp.get("comparison_proposal") or {}
+                check = comp.get("evidence_check") or {}
+                pairs = comp.get("evidence_pairs") or []
+
+                raw_degree = (proposal.get("overlap_degree") or "").lower()
+                final_degree = (comp.get("overlap_degree") or "").lower()
+                evidence_status = (check.get("status") or "").lower()
+
+                trace.append(
+                    f"[{turn}] SEMANTIC DEGREE: {raw_degree}"
+                )
+                trace.append(
+                    f"[{turn}] SEMANTIC ASSESSMENT: "
+                    f"{proposal.get('assessment', '')}"
+                )
+                trace.append(
+                    f"[{turn}] SEMANTIC SHARED: "
+                    f"{proposal.get('what_is_shared', '')}"
+                )
+                trace.append(
+                    f"[{turn}] SEMANTIC DELTA: "
+                    f"{proposal.get('submission_delta', '')}"
+                )
+
+                trace.append(
+                    f"[{turn}] GROUNDED OWNED PAIRS: {len(pairs)}"
+                )
+
+                for i, p in enumerate(pairs, 1):
+                    relation = " ".join(
+                        str(p.get("rationale", "")).split()
+                    )[:300]
+
+                    submission_quote = " ".join(
+                        str(p.get("claim_quote", "")).split()
+                    )[:400]
+
+                    paper_quote = " ".join(
+                        str(p.get("paper_quote", "")).split()
+                    )[:400]
+
+                    trace.append(
+                        f"[{turn}] PAIR {i}: "
+                        f"strength={p.get('strength', '')} | "
+                        f"relation={relation}"
+                    )
+                    trace.append(
+                        f'[{turn}] PAIR {i} SUBMISSION: "{submission_quote}"'
+                    )
+                    trace.append(
+                        f'[{turn}] PAIR {i} PAPER: "{paper_quote}"'
+                    )
+
+                trace.append(
+                    f"[{turn}] EVIDENCE CHECK: status={evidence_status}"
+                )
+                trace.append(
+                    f"[{turn}] EVIDENCE SUPPORTING PAIRS: "
+                    f"{check.get('supporting_pair_indices', [])}"
+                )
+                trace.append(
+                    f"[{turn}] EVIDENCE REASON: "
+                    f"{check.get('reasoning', '')}"
+                )
+
+                semantic_material = raw_degree in {
+                    "partial",
+                    "substantial",
+                    "same",
+                }
+
+                if evidence_status == "material":
+                    evidence_material = True
+                elif evidence_status == "nonmaterial":
+                    evidence_material = False
+                else:
+                    evidence_material = None
+
+                trace.append(
+                    f"[{turn}] MATERIAL AGREEMENT: "
+                    f"semantic={'material' if semantic_material else 'nonmaterial'} | "
+                    f"evidence={evidence_status or 'missing'}"
+                )
+
+                trace.append(
+                    f"[{turn}] CURRENT SEMANTIC DEGREE: {final_degree}"
+                )
+
+            deficit = self._evidence_deficit(comp) or ""
+            if not deficit:
+                trace.append(f"[{turn}] compared, evidence gate passed")
+                return comp, pt, ct, trace
+            cap_spent = any("read cap was reached" in t for t in tr)
+            if cap_spent or turn + 1 >= _LOOP_MAX_COMPARES:
+                # The deficit stands and no further reading is possible -- either the turns
+                # or the character cap are spent. The comparison is kept as it is, and the
+                # paper is marked INSUFFICIENT rather than closing as a clean verdict: a
+                # `none` that means "nothing found" and a `none` that means "the budget ran
+                # out while something was still missing" are different findings, and a
+                # reviewer is entitled to see which this was.
+                comp = dict(comp)
+                comp["unresolved_deficit"] = deficit
+                comp["paper_state"] = (
+                    "budget_exhausted_with_deficit"
+                    if cap_spent
+                    else "turns_exhausted_with_deficit"
+                )
+                comp["insufficient"] = True
+                comp["refutation_status"] = "cannot_refute"
+                why = ("read cap" if cap_spent else f"{_LOOP_MAX_COMPARES} compares")
+                trace.append(f"BUDGET: {why} spent, INSUFFICIENT -- deficit stands: {deficit[:70]}")
+                return comp, pt, ct, trace
+            trace.append(f"[{turn}] evidence gate REFUSED -> read again: {deficit[:70]}")
+        return comp, pt, ct, trace
+
+    @staticmethod
+    def _evidence_deficit(comp: dict) -> Optional[str]:
+        diag = comp.get("map_diag") or {}
+
+        proposal = comp.get("comparison_proposal") or {}
+        proposed_deg = (proposal.get("overlap_degree") or "").lower()
+
+        proposal_material = proposed_deg in {
+            "partial",
+            "substantial",
+            "same",
+        }
+
+        # The map itself did not complete.
+        if diag.get("call_failed"):
+            return (
+                "the evidence map did not complete, so the semantic comparison "
+                "has not been grounded"
+            )
+
+        # Ownership checking failed. This is uncertainty, not negative evidence.
+        if proposal_material and diag.get("ownership_unchecked"):
+            return (
+                "the semantic comparison proposes substantive overlap, but ownership "
+                "of the candidate evidence could not be verified"
+            )
+
+        # The comparison claims material overlap, but every grounded candidate
+        # actually described cited work rather than this paper.
+        if (
+            proposal_material
+            and diag.get("not_owned")
+            and not (comp.get("evidence_pairs") or [])
+        ):
+            return (
+                "the semantic comparison proposes substantive overlap, but every "
+                "grounded candidate belongs to cited work rather than this paper"
+            )
+
+        check = comp.get("evidence_check") or {}
+        status = (check.get("status") or "").lower()
+
+        # This should normally never be empty after a successful map.
+        if not status:
+            return "the evidence check produced no usable status"
+
+        # Comparison says non-material, grounded evidence says material:
+        # possible comparison false negative -> re-enter.
+        if status == "material" and not proposal_material:
+            return (
+                "grounded evidence supports substantive contribution overlap that "
+                "the semantic comparison did not recognize"
+            )
+
+        # Comparison says material, evidence says only non-material:
+        # possible comparison false positive -> re-enter.
+        if status == "nonmaterial" and proposal_material:
+            return (
+                "the semantic comparison proposes substantive overlap, but the "
+                "grounded evidence currently supports only non-substantive overlap"
+            )
+
+        # Material semantic claim without sufficient grounded support.
+        if status == "insufficient" and proposal_material:
+            return (
+                "the semantic comparison proposes substantive overlap, but the "
+                "available grounded evidence is insufficient to support it"
+            )
+
+        return None
+
+    def _read_paper_agentic(self, tb: ClaimToolbox, claim: dict, pid: str, claim_ctx: str,
+                            may_dismiss: bool = False):
         """The sections the model asks for -- returned as MODEL CONTEXT, nothing else.
 
-        Returns (selected_context, names_read, pt, ct).
+        Returns (selected_context, names_read, pt, ct, dismissed). `dismissed` is None
+        unless `may_dismiss` and the model, having read part of the paper, says it has no
+        bearing on the claim -- then it carries the degree, the reason and the sections
+        that were read before saying so, and the caller skips the comparison.
 
         What this is NOT: it is not the paper. `tb._paper_source_text(pid)` stays the whole
         parsed document and remains the corpus every quote is checked against, so a shorter
@@ -608,12 +1603,47 @@ class ClaimNoveltyAgent:
         used = sum(len(s.get("text", "")) for s in got)
 
         unread = [m for m in menu if m["name"] not in set(read)]
+        if may_dismiss and unread and (len(got) < _DISMISS_MIN_SECTIONS
+                                       or used < _DISMISS_MIN_CHARS):
+            # Dismissing a paper has to rest on having read it. Measured over six runs,
+            # eight papers with a gold label were dropped this way, and half of them after
+            # one or two sections -- the first pick can be narrow, and judging absence from
+            # a narrow slice is the same mistake as judging it from an abstract.
+            #
+            # Topping up costs no model call: read_sections is code. It does put more in
+            # the next prompt, which is the point -- the refusal is then informed.
+            fill = [m["name"] for m in sorted(unread, key=lambda m: -m.get("chars", 0))]
+            extra = tb.read_sections(
+                pid, fill[:_DISMISS_MIN_SECTIONS], max_total=max(0, _READ_CAP - used)
+            ).get("sections", []) or []
+            for s in extra:
+                if s["name"] not in read and (len(got) < _DISMISS_MIN_SECTIONS
+                                              or used < _DISMISS_MIN_CHARS):
+                    got.append(s); read.append(s["name"])
+                    used += len(s.get("text", ""))
+            unread = [m for m in menu if m["name"] not in set(read)]
         if unread and used < _READ_CAP:
-            parsed2, a, b = self._struct(_SectionPick, _fill(
-                _PAPER_READ_MORE, claim=claim_s, realization=claim_ctx[:1600], title=title,
+            # Where nothing screened the pool, this turn may also end the paper: the
+            # schema carries the extra option, and only then is the prompt that offers it
+            # used. In triage mode the papers arriving here were already judged as
+            # possible overlaps, so a dismissal would be second-guessing that screen.
+            schema = _ReadMore if may_dismiss else _SectionPick
+            tmpl = _PAPER_READ_MORE_OR_DROP if may_dismiss else _PAPER_READ_MORE
+            parsed2, a, b = self._struct(schema, _fill(
+                tmpl, claim=claim_s, realization=claim_ctx[:1600], title=title,
                 read=_fmt_sections_full(got, max_total=_READ_CAP),
                 unread=_fmt_sections_menu(unread)))
             pt += a; ct += b
+            if may_dismiss and parsed2 is not None and not getattr(parsed2, "bears_on_claim", True):
+                deg = (getattr(parsed2, "degree", "") or "superficial").lower()
+                dismissed = {
+                    "degree": deg if deg in ("none", "superficial") else "superficial",
+                    "why": (getattr(parsed2, "why", "") or "").strip(),
+                    "sections": list(read),
+                }
+                tb._log("read_paper", f"{pid}: no bearing after {len(read)} of "
+                                      f"{len(menu)} sections -> {dismissed['degree']}")
+                return _fmt_sections_full(got, max_total=_READ_CAP), read, pt, ct, dismissed
             more = [s for s in (getattr(parsed2, "sections", None) or [])
                     if s and s not in read] if parsed2 else []
             if more:
@@ -625,7 +1655,7 @@ class ClaimNoveltyAgent:
 
         tb._log("read_paper", f"{pid}: {len(read)} of {len(menu)} sections, "
                               f"{sum(len(s.get('text','')) for s in got):,} chars")
-        return _fmt_sections_full(got, max_total=_READ_CAP), read, pt, ct
+        return _fmt_sections_full(got, max_total=_READ_CAP), read, pt, ct, None
 
     def _section_compare(self, tb: ClaimToolbox, claim: dict, pid: str, claim_ctx: str,
                          paper_context: str = ""):
@@ -655,10 +1685,20 @@ class ClaimNoveltyAgent:
             paper_text = _fmt_passages(
                 hits.get("passages") or ([{"text": hits.get("abstract", "")}]
                                          if hits.get("abstract") else []))
-        parsed, a, b = self._struct(_SectionComparison, _fill(
-            _PAPER_COMPARE, claim=self._claim_str(claim)[:1200], realization=claim_ctx[:1600],
-            submission=tb._submission_text, title=tb.pool[pid]["title"],
-            sections=paper_text)); pt += a; ct += b
+        # The comparison verdict is what a reviewer reads and what the evidence gate
+        # judges everything else against -- its own "compare" role, unlike the reading
+        # calls that got the model to this point.
+        parsed, a, b = self._struct(
+            _SectionComparison,
+            _fill(
+                _PAPER_COMPARE,
+                claim=self._claim_str(claim)[:1200],
+                realization=claim_ctx[:1600],
+                title=tb.pool[pid]["title"],
+                sections=paper_text,
+            ),
+            role="compare",
+        ); pt += a; ct += b
         # What the UI's "sections read" box reports. With a selection the names are already
         # recorded by read_sections; without one the honest answer is that everything went in.
         if not paper_context:
@@ -719,7 +1759,18 @@ class ClaimNoveltyAgent:
             what_is_shared=comp["what_is_shared"],
             submission_delta=comp["submission_delta"],
             evidence_pairs=comp["evidence_pairs"],
-            extra={k: comp[k] for k in ("map_diag",) if k in comp},
+            extra={
+                k: comp[k]
+                for k in (
+                    "map_diag",
+                    "comparison_proposal",
+                    "evidence_check",
+                    "unresolved_deficit",
+                    "paper_state",
+                    "insufficient",
+                )
+                if k in comp
+            },
             paper_realization=comp.get("paper_realization"),
             assessment=comp.get("assessment", ""),
             fulltext_fetch_status=comp.get("fulltext_fetch_status"),
@@ -747,9 +1798,13 @@ class ClaimNoveltyAgent:
         pt = ct = 0
 
         def struct(schema, prompt):
+            # Passed into evidence_map.build_map/conclude and, through it, into
+            # check_ownership -- every semantic judgment the evidence map makes runs on
+            # the "evidence" role: which correspondences hold, whether the degree they
+            # imply is warranted, whether a span belongs to the paper offering it.
             nonlocal pt, ct
             try:
-                parsed, a, b = self._struct(schema, prompt)
+                parsed, a, b = self._struct(schema, prompt, role="evidence")
             except Exception as e:
                 tb._log("evidence_map", f"{pid}: call failed ({type(e).__name__})")
                 return None
@@ -789,39 +1844,96 @@ class ClaimNoveltyAgent:
         # documents -- never `paper_text`, however it was narrowed. A pair survives only
         # if both spans are found in the full submission and the full paper, so narrowing
         # the search space can lose a pair but can never manufacture one.
-        mapping = evidence_map.build_map(
-            struct, claim_str, submission_text, tb.pool.get(pid, {}).get("title", ""),
-            paper_text, tb._submission_text, tb._paper_source_text(pid),
-            self.min_quote_tokens, self.fuzzy_threshold)
-        kept = mapping["pairs"]
-        verdict = evidence_map.conclude(struct, claim_str, mapping)
+        raw_proposal = {
+            "overlap_degree": comp.get("overlap_degree", ""),
+            "refutation_status": comp.get("refutation_status", ""),
+            "what_is_shared": comp.get("what_is_shared", ""),
+            "submission_delta": comp.get("submission_delta", ""),
+            "assessment": comp.get("assessment", ""),
+        }
 
         comp = dict(comp)
+        comp["comparison_proposal"] = raw_proposal
+        mapping = evidence_map.build_map(
+            struct,
+            claim_str,
+            submission_text,
+            tb.pool.get(pid, {}).get("title", ""),
+            paper_text,
+            tb._submission_text,
+            tb._paper_source_text(pid),
+            self.min_quote_tokens,
+            self.fuzzy_threshold,
+        )
+
+        kept = mapping["pairs"]
+
         comp["map_diag"] = {
-            "submission_chars": len(submission_text), "paper_chars": len(paper_text),
-            "returned": mapping.get("returned", 0), "unverified": mapping.get("dropped", 0),
+            "submission_chars": len(submission_text),
+            "paper_chars": len(paper_text),
+            "returned": mapping.get("returned", 0),
+            "unverified": mapping.get("dropped", 0),
+            "not_owned": mapping.get("not_owned", 0),
+            "ownership_unchecked": mapping.get("ownership_unchecked", 0),
             "kept": len(kept),
             "call_failed": bool(mapping.get("failed")),
         }
+
         if mapping.get("failed"):
-            # Nothing was checked, so nothing may be concluded. Leaving the deep dive's own
-            # judgement in place is the honest outcome; overwriting it with `none` would
-            # report an absence of overlap that was never established.
-            tb._log("evidence_map", f"{pid}: map call failed -- keeping the deep dive's verdict")
+            tb._log(
+                "evidence_map",
+                f"{pid}: map call failed -- keeping the deep dive's verdict"
+            )
             return comp, pt, ct
+
+        check = evidence_map.check_evidence(
+            struct,
+            claim_str,
+            mapping,
+            comparison=raw_proposal,
+        )
+
+        comp["evidence_check"] = {
+            "status": check.get("status", "insufficient"),
+            "reasoning": check.get("reasoning", ""),
+            "supporting_pair_indices": check.get("supporting_pair_indices", []),
+            "grounded_pairs": len(kept),
+        }
+
         comp["evidence_pairs"] = kept
-        comp["overlap_degree"] = verdict["degree"]
-        # The narrative has to follow the same evidence as the degree. Leaving the deep-dive's
-        # prose in place next to a degree derived from the map is how a reviewer ends up
-        # reading "substantially overlaps" above a verdict of `none`.
-        if verdict.get("reasoning"):
-            comp["assessment"] = verdict["reasoning"]
-        if mapping.get("submission_delta"):
-            comp["submission_delta"] = mapping["submission_delta"]
-        comp["refutation_status"] = ("can_refute" if verdict["degree"] in ("substantial", "same")
-                                     else "cannot_refute")
-        tb._log("evidence_map", f"{pid}: {len(kept)} pairs "
-                                f"(+{mapping['dropped']} unverified) -> {verdict['degree']}")
+
+        # IMPORTANT:
+        # overlap_degree, assessment and submission_delta stay exactly as proposed
+        # by the semantic comparison.
+        comp["overlap_degree"] = raw_proposal["overlap_degree"]
+        comp["assessment"] = raw_proposal["assessment"]
+        comp["what_is_shared"] = raw_proposal["what_is_shared"]
+        comp["submission_delta"] = raw_proposal["submission_delta"]
+
+        # Hard invariant:
+        # can_refute is only possible for a strong semantic verdict AND
+        # at least one grounded/owned evidence pair.
+        raw_degree = (raw_proposal.get("overlap_degree") or "").lower()
+
+        supporting = check.get("supporting_pair_indices") or []
+
+        comp["refutation_status"] = (
+            "can_refute"
+            if (
+                raw_degree in ("substantial", "same")
+                and check.get("status") == "material"
+                and bool(supporting)
+            )
+            else "cannot_refute"
+        )
+
+        tb._log(
+            "evidence_map",
+            f"{pid}: {len(kept)} grounded-owned pairs; "
+            f"comparison={raw_degree}, "
+            f"evidence_check={check.get('status', 'insufficient')}"
+        )
+
         return comp, pt, ct
 
     def _deep_dive(self, tb: ClaimToolbox, claim: dict, pid: str, degree: str, claim_ctx: str):
@@ -836,15 +1948,39 @@ class ClaimNoveltyAgent:
         # Chosen ONCE and used by both calls. Reading it twice was the old shape: the
         # whole paper went into the comparison and then into the map again.
         pt = ct = 0
-        paper_context = ""
+        paper_context, dismissed = "", None
+        if _PAPER_LOOP:
+            comp, a, b, trace = self._paper_loop(tb, claim, pid, claim_ctx)
+            pt += a; ct += b
+            comp.setdefault("map_diag", {})["loop"] = trace
+            compare_s = time.perf_counter() - _c0
+            comp["fulltext_fetch_status"] = fts
+            self._record(tb, pid, comp)
+            return pt, ct, {"paper_id": pid,
+                            "title": (tb.pool.get(pid, {}) or {}).get("title", "")[:90],
+                            "parse_s": round(parse_s, 1),
+                            "compare_s": round(compare_s, 1),
+                            "total_s": round(parse_s + compare_s, 1),
+                            "fetch_status": fts}
         if _AGENTIC_SECTIONS:
-            paper_context, _names, a, b = self._read_paper_agentic(tb, claim, pid, claim_ctx)
+            paper_context, _names, a, b, dismissed = self._read_paper_agentic(
+                tb, claim, pid, claim_ctx, may_dismiss=_NO_TRIAGE)
             pt += a; ct += b
-        comp, a, b = self._section_compare(tb, claim, pid, claim_ctx, paper_context)
-        pt += a; ct += b
-        if _USE_EVIDENCE_MAP:
-            comp, a, b = self._map_evidence(tb, claim, pid, comp, paper_context)
+        if dismissed is not None:
+            # Read, and found to be about something else. Recorded as what it is -- a
+            # judgement from the paper's own sections, with those sections named -- and
+            # not put through the comparison, which is what makes reading every paper
+            # affordable at all.
+            comp = self._to_comp(None)
+            comp["overlap_degree"] = dismissed["degree"]
+            comp["brief_note"] = dismissed["why"]
+            comp["assessment"] = dismissed["why"]
+        else:
+            comp, a, b = self._section_compare(tb, claim, pid, claim_ctx, paper_context)
             pt += a; ct += b
+            if _USE_EVIDENCE_MAP:
+                comp, a, b = self._map_evidence(tb, claim, pid, comp, paper_context)
+                pt += a; ct += b
         compare_s = time.perf_counter() - _c0
         comp["fulltext_fetch_status"] = fts
         self._record(tb, pid, comp)
@@ -940,26 +2076,41 @@ class ClaimNoveltyAgent:
         # every retrieved related-work paper gets looked at; only possible overlaps go deeper)
         top = tb._ranked()
         _t = time.perf_counter()
-        triage, a, b = self._triage(tb, claim, top); pt += a; ct += b
-        timings["triage"] = round(time.perf_counter() - _t, 1)
-        shortlist = []
-        for p in top:
-            pid = p["paper_id"]
-            it = triage.get(pid)
-            deg = (it.overlap_degree if it else "none").lower()
-            status = "unclear" if deg in ("partial", "substantial", "same") else "cannot_refute"
-            self._record(tb, pid, {
-                "refutation_status": status, "overlap_degree": deg,
-                "what_is_shared": (it.what_is_shared if it else ""),
-                "submission_delta": (it.submission_delta if it else ""),
-                "brief_note": (it.brief_note if it else "triaged from abstract"),
-                "evidence_pairs": [],
-            }, log=False)
-            if deg in ("partial", "substantial", "same"):
-                shortlist.append((pid, deg))
-        tb._log("triage_result",
-                f"{len(top) - len(shortlist)} clearly distinct (abstract only); "
-                f"{len(shortlist)} need full-text deep dive", progress=True)
+        if _NO_TRIAGE:
+            # Nothing is decided from an abstract: every paper goes to the deep dive, which
+            # opens it at its section level and ends there if what it reads shows the paper
+            # is about something else. No pre-recorded verdict either -- with no screen,
+            # every entry in the ledger comes from having read the paper.
+            #
+            # The dives remain independent of one another, so they still run side by side.
+            # That independence is exactly what a tool loop over the pool gives up: there,
+            # each turn's choice depends on the last one's result, which is why it cannot
+            # be parallelised however the work is divided.
+            shortlist = [(p["paper_id"], "unscreened") for p in top]
+            timings["triage"] = 0.0
+            tb._log("no_triage",
+                    f"{len(shortlist)} papers, none screened from abstracts", progress=True)
+        else:
+            triage, a, b = self._triage(tb, claim, top); pt += a; ct += b
+            timings["triage"] = round(time.perf_counter() - _t, 1)
+            shortlist = []
+            for p in top:
+                pid = p["paper_id"]
+                it = triage.get(pid)
+                deg = (it.overlap_degree if it else "none").lower()
+                status = "unclear" if deg in ("partial", "substantial", "same") else "cannot_refute"
+                self._record(tb, pid, {
+                    "refutation_status": status, "overlap_degree": deg,
+                    "what_is_shared": (it.what_is_shared if it else ""),
+                    "submission_delta": (it.submission_delta if it else ""),
+                    "brief_note": (it.brief_note if it else "triaged from abstract"),
+                    "evidence_pairs": [],
+                }, log=False)
+                if deg in ("partial", "substantial", "same"):
+                    shortlist.append((pid, deg))
+            tb._log("triage_result",
+                    f"{len(top) - len(shortlist)} clearly distinct (abstract only); "
+                    f"{len(shortlist)} need full-text deep dive", progress=True)
         # a deep dive logs ~3 trajectory steps (deep_dive, read_paper, record_comparison)
         est_total["v"] = len(tb.ledger["trajectory"]) + 3 * len(shortlist)
         emit()
@@ -1005,15 +2156,35 @@ class ClaimNoveltyAgent:
         # challenge. The old rule (can_refute only) required near-identity from a single paper and
         # let substantial-overlap-with-a-wrinkle read as novel -- the "A2 grading miss" the eval
         # found (e.g. CvGqMD5OtX: MCS-SQL substantial overlap yet cannot_refute -> wrongly novel).
-        refuters = [c for c in tb.ledger["comparisons"] if c["refutation_status"] == "can_refute"]
-        strong_overlap = []
-        if os.getenv("NOVELTY_CHALLENGE_ON_STRONG_OVERLAP", "1") != "0":
-            strong_overlap = [c for c in tb.ledger["comparisons"]
-                              if (c.get("overlap_degree") or "").lower() in ("substantial", "same")]
-        if refuters or strong_overlap:
-            verdict, suff, stop = "challenged", True, "challenged"
+        comparisons = tb.ledger["comparisons"]
+
+        # Only verifier-approved strong overlaps challenge novelty.
+        refuters = [
+            c for c in comparisons
+            if c.get("refutation_status") == "can_refute"
+        ]
+
+        # Any paper that exhausted its budget with an unresolved evidence deficit
+        # prevents a clean negative novelty conclusion.
+        unresolved = [
+            c for c in comparisons
+            if c.get("insufficient")
+        ]
+
+        if refuters:
+            verdict = "challenged"
+            suff = True
+            stop = "challenged"
+
+        elif unresolved:
+            verdict = "uncertain"
+            suff = False
+            stop = "unresolved_evidence_deficit"
+
         else:
-            verdict, suff, stop = "not_challenged", True, "not_challenged"
+            verdict = "not_challenged"
+            suff = True
+            stop = "not_challenged"
 
         timings["total"] = round(time.perf_counter() - run_t0, 1)
         # "Other" = index building / bookkeeping / verdict not attributed to a named phase.

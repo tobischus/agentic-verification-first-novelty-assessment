@@ -205,9 +205,23 @@ class PassageIndex:
             for name in order
         ]
 
-    def _matches(self, want: str, section: str) -> bool:
-        w, s = want.lower().strip(), section.lower().strip()
-        return bool(w) and (w == s or w in s or s in w)
+    @staticmethod
+    def _norm_name(t: str) -> str:
+        return " ".join((t or "").split()).casefold()
+
+    def _matches(self, want: str, section: str, exact: bool = False) -> bool:
+        """Does this section answer to that name?
+
+        `exact` compares the whole name, ignoring only case and runs of whitespace.
+        It exists because section names now carry their outline path: with substring
+        matching, asking for "3 Evaluation Framework" also returns
+        "3 Evaluation Framework > 3.1 RAG Pipeline" and every other child of it, so an
+        agent that named three sections was handed seven and its reading budget went
+        somewhere it did not choose."""
+        w, s = self._norm_name(want), self._norm_name(section)
+        if not w:
+            return False
+        return w == s if exact else (w == s or w in s or s in w)
 
     def get_section(self, name: str, max_chars: int = 4000) -> Optional[str]:
         """Concatenated text of a named section (fuzzy, case-insensitive title match)."""
@@ -219,7 +233,8 @@ class PassageIndex:
             return None
         return "\n\n".join(parts)[:max_chars]
 
-    def get_sections(self, names: List[str], max_total: int = 40000) -> List[dict]:
+    def get_sections(self, names: List[str], max_total: int = 40000,
+                     exact: bool = False) -> List[dict]:
         """Full text of the requested sections (no per-section cap; only a generous
         total guard so a pathological paper can't blow up the prompt). Returns
         [{'name','text'}] in document order, each matched section once."""
@@ -228,15 +243,21 @@ class PassageIndex:
         for name in self.section_names():          # document order
             if name in seen:
                 continue
-            if not any(self._matches(w, name) for w in wanted):
+            if not any(self._matches(w, name, exact) for w in wanted):
                 continue
             seen.add(name)
             text = "\n\n".join(c["text"] for c in self.chunks if c["section"] == name).strip()
             if not text:
                 continue
             if used + len(text) > max_total:
-                text = text[: max(0, max_total - used)]
-            out.append({"name": name, "text": text})
+                # Do not pretend a partial section was fully read.
+                continue
+
+            out.append({
+                "name": name,
+                "text": text,
+                "complete": True,
+            })
             used += len(text)
             if used >= max_total:
                 break
