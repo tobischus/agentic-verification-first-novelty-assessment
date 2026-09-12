@@ -26,6 +26,7 @@ Three things this module decides, and one it refuses to:
 from __future__ import annotations
 
 import logging
+import os
 import re
 import time
 import xml.etree.ElementTree as ET
@@ -37,6 +38,20 @@ from typing import List, Optional, Tuple
 import requests
 
 logger = logging.getLogger("paper_versions")
+
+
+def enforcement_enabled() -> bool:
+    """Is the temporal check in force? (NOVELTY_VERSION_PINNING, default on.)
+
+    Two modes, and they must be told apart deliberately rather than by accident. With
+    the check in force, a paper carrying no version verdict is not yet usable evidence:
+    "not established" is the starting state, not a pass. Running without the check is a
+    legitimate thing to want -- an offline rerun, a pool predating any of this -- but it
+    has to be asked for, because the alternative is a guarantee that silently applies
+    only to the papers whose resolution happened to succeed.
+    """
+    return (os.getenv("NOVELTY_VERSION_PINNING", "1").strip().lower()
+            not in ("0", "false", "no"))
 
 _ARXIV_API = "http://export.arxiv.org/api/query"
 _NS = "{http://www.w3.org/2005/Atom}"
@@ -138,6 +153,17 @@ class PinnedVersion:
     note: str = ""                 # why a non-usable status came out that way
     doc_sha256: str = ""           # filled in by the downloader, not here
     checked_versions: List[dict] = field(default_factory=list)
+    # The cutoff this verdict was reached against. Stored because a verdict is only
+    # about the pair (paper, cutoff): move the submission date or the required gap and
+    # every pin has to be asked again, which a manifest keyed on the paper alone cannot
+    # know. See FullTextFetcher.resolve_versions.
+    submission_date: str = ""
+    min_gap_days: int = DEFAULT_MIN_GAP_DAYS
+    # False when a version between the pinned one and the newest could not be read. The
+    # pin is still admissible -- its own date says so -- but "the NEWEST admissible one"
+    # is then unproven, because the unread version may sit above it and also qualify.
+    history_complete: bool = True
+    missing_versions: List[str] = field(default_factory=list)
 
     @property
     def usable(self) -> bool:
@@ -244,12 +270,24 @@ def arxiv_admissible_version(arxiv_id: str, submission_date, paper_id: str = "",
             continue
         checked.append({"version": e["version"], "date": e["date"]})
         if gap_verdict(e["date"], submission_date, min_gap_days) == "ok":
+            # Admissible -- its own date establishes that much. Whether it is the NEWEST
+            # admissible one is a different claim, and it fails if any version ABOVE this
+            # one went unread: that version could qualify too and would then be the right
+            # document. Recorded rather than hidden, since the pin itself stays sound.
+            gaps = [f"v{m}" for m in missing if m > k]
+            note = ""
+            if gaps:
+                note = (f"admissible, but {', '.join(gaps)} could not be read -- a newer "
+                        f"admissible version may exist above {e['version']}")
+                logger.info("%s: pinned %s with an incomplete history (%s unread)",
+                            pid, e["version"], ", ".join(gaps))
             return PinnedVersion(
                 pid, "pinned", version=e["version"], version_date=e["date"],
                 url=f"https://arxiv.org/pdf/{aid}{e['version']}.pdf",
                 abstract=e["abstract"], abstract_source="version",
                 latest_version=head["version"] or f"v{n}",
-                latest_version_date=head["date"], checked_versions=checked)
+                latest_version_date=head["date"], checked_versions=checked,
+                history_complete=not gaps, missing_versions=gaps, note=note)
 
     # Nothing admissible among the versions actually SEEN. That is only a statement about
     # the paper if every version was seen: a failed or partial history request would
@@ -286,27 +324,37 @@ def resolve_version(record: dict, submission_date,
     ext = record.get("externalIds") or {}
     arxiv_id = ext.get("ArXiv") or ext.get("arXiv") or ext.get("arxiv")
 
+    def stamped(pin: PinnedVersion) -> PinnedVersion:
+        """Record WHICH cutoff this verdict answers to. A pin is a statement about a
+        (paper, submission date, required gap) triple; without the last two on the
+        record, a manifest cannot tell a still-valid verdict from one whose question
+        has since changed."""
+        pin.submission_date = str(submission_date or "")
+        pin.min_gap_days = min_gap_days
+        return pin
+
     if arxiv_id:
         pin = arxiv_admissible_version(arxiv_id, submission_date, paper_id=pid,
                                        min_gap_days=min_gap_days, session=session,
                                        delay_s=delay_s)
         if pin.usable or pin.status != "unresolved":
-            return pin
+            return stamped(pin)
         # fall through: an unreadable arXiv history still leaves the record's own date,
         # but it can only ever yield the un-versioned document -- which is the thing this
         # module refuses to pin. Report it as unresolved below.
         logger.info("%s: arXiv history unreadable, no version can be pinned", pid)
-        return pin
+        return stamped(pin)
 
     stated = record.get("publication_date") or record.get("year") or ""
     verdict = gap_verdict(stated, submission_date, min_gap_days)
     if verdict == "ok":
-        return PinnedVersion(
+        return stamped(PinnedVersion(
             pid, "single", version_date=(date_bounds(stated) or (None, None))[0].isoformat(),
             abstract=record.get("abstract", ""), abstract_source="record",
-            note="source exposes no version history; single document checked against the cutoff")
+            note="source exposes no version history; single document checked against the cutoff"))
     if verdict == "too_recent":
-        return PinnedVersion(pid, "unavailable", note=f"stated date {stated!r} is not prior work")
-    return PinnedVersion(
+        return stamped(PinnedVersion(
+            pid, "unavailable", note=f"stated date {stated!r} is not prior work"))
+    return stamped(PinnedVersion(
         pid, "uncertain",
-        note=f"stated date {stated!r} is too coarse to establish a {min_gap_days}-day gap")
+        note=f"stated date {stated!r} is too coarse to establish a {min_gap_days}-day gap"))
