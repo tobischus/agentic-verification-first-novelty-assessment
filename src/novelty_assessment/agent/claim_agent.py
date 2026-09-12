@@ -1430,7 +1430,9 @@ class ClaimNoveltyAgent:
             trace.append(f"  chars added: {added:,}")
             trace.append(f"  total chars: {used:,}/{_READ_CAP:,}")
             if reason:
-                trace.append(f"  reason: {' '.join(reason.split())[:160]}")
+                # Stored in full: the trace is the audit record. Shortening for
+                # display is the frontend's job.
+                trace.append(f"  reason: {' '.join(reason.split())}")
 
         def deficit_block():
             if not deficits:
@@ -1624,7 +1626,7 @@ class ClaimNoveltyAgent:
                 if falsification_done:
                     decision, why = "dismiss", (act.why or "").strip()
                     trace.append(f"turn {turn}: propose_dismissal (falsification done) -> DISMISSED")
-                    trace.append(f"  reason: {' '.join(why.split())[:160]}")
+                    trace.append(f"  reason: {' '.join(why.split())}")
                     break
                 trace.append(f"turn {turn}: propose_dismissal")
                 left = fitting_unread()
@@ -1810,15 +1812,15 @@ class ClaimNoveltyAgent:
                 for i, p in enumerate(pairs, 1):
                     relation = " ".join(
                         str(p.get("rationale", "")).split()
-                    )[:300]
+                    )
 
                     submission_quote = " ".join(
                         str(p.get("claim_quote", "")).split()
-                    )[:400]
+                    )
 
                     paper_quote = " ".join(
                         str(p.get("paper_quote", "")).split()
-                    )[:400]
+                    )
 
                     trace.append(
                         f"[{turn}] PAIR {i}: "
@@ -1919,11 +1921,11 @@ class ClaimNoveltyAgent:
                 trace.append(
                     f"BUDGET: {why} spent -- keeping last semantic assessment "
                     f"({comp.get('overlap_degree', '')}) as best available assessment; "
-                    f"UNRESOLVED: {deficit[:70]}"
+                    f"UNRESOLVED: {deficit}"
                 )
 
                 return comp, pt, ct, trace
-            trace.append(f"[{turn}] evidence gate REFUSED -> read again: {deficit[:70]}")
+            trace.append(f"[{turn}] evidence gate REFUSED -> read again: {deficit}")
         return comp, pt, ct, trace
 
     @staticmethod
@@ -2253,7 +2255,13 @@ class ClaimNoveltyAgent:
         rlog = getattr(tb, "run_log", None)
         if rlog is not None:
             try:
-                rlog.paper_outcome(pid, comp, tb.paper_provenance(pid))
+                # sections_used and the fetch status live on the toolbox, not on comp --
+                # read them from the same place the ledger entry does.
+                rlog.paper_outcome(
+                    pid, comp, tb.paper_provenance(pid),
+                    sections_used=list(tb._sections_read.get(pid) or []),
+                    fulltext_fetch_status=comp.get("fulltext_fetch_status")
+                    or (tb._fulltext_status.get(pid) if hasattr(tb, "_fulltext_status") else ""))
             except Exception:
                 pass
 

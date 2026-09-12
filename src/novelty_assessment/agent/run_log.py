@@ -35,6 +35,7 @@ import json
 import os
 import subprocess
 import uuid
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -79,7 +80,7 @@ def git_commit(repo_root: Path, save_diff_to: Optional[Path] = None) -> dict:
     if save_diff_to is not None and diff:
         try:
             save_diff_to.parent.mkdir(parents=True, exist_ok=True)
-            save_diff_to.write_text(diff, encoding="utf-8")
+            save_diff_to.write_bytes(diff.encode("utf-8"))   # see _snapshot: no CRLF
             info["diff_path"] = save_diff_to.name
             info["diff_chars"] = len(diff)
         except Exception:
@@ -173,7 +174,10 @@ class RunLog:
             rel = Path("contexts") / self.run_id / f"{cid.replace(':', '_')}.txt"
             out = self._log_dir() / rel
             out.parent.mkdir(parents=True, exist_ok=True)
-            out.write_text(text or "", encoding="utf-8")
+            # Bytes, not write_text: on Windows the text writer turns every \n into
+            # \r\n, and the file then hashes to something other than the sha256 recorded
+            # beside it -- the snapshot would be unverifiable exactly where it matters.
+            out.write_bytes((text or "").encode("utf-8"))
             return rel.as_posix()
         except Exception:
             return ""
@@ -208,7 +212,9 @@ class RunLog:
             "parsed_text_sha256": p.get("parsed_text_sha256", ""),
         })
 
-    def paper_outcome(self, paper_id: str, comp: dict, pool_entry: dict = None) -> None:
+    def paper_outcome(self, paper_id: str, comp: dict, pool_entry: dict = None,
+                      sections_used: list = None,
+                      fulltext_fetch_status: str = "") -> None:
         """Everything already recorded about one paper, exported unshortened.
 
         The reasoning was never missing -- the loop writes a turn-by-turn trace and the
@@ -255,9 +261,11 @@ class RunLog:
             "map_diag": {k: v for k, v in diag.items() if k != "loop"},
             "unresolved_deficit": c.get("unresolved_deficit", ""),
             "unresolved_reason": c.get("unresolved_reason", ""),
-            "paper_state": c.get("paper_state", ""),
-            "sections_used": c.get("sections_used", []),
-            "fulltext_fetch_status": c.get("fulltext_fetch_status", ""),
+            # No "paper_state" beside final_state: one field, one name. The loop's own
+            # value ("unresolved_budget") already feeds the state above.
+            "sections_used": list(sections_used or c.get("sections_used") or []),
+            "fulltext_fetch_status": (fulltext_fetch_status
+                                      or c.get("fulltext_fetch_status", "")),
             # The loop's own turn-by-turn record, complete and unshortened: proposed vs
             # executed action, why each read was asked for, the degree each round
             # proposed, what the checker said, and the re-entry reason.
@@ -367,8 +375,36 @@ class RunLog:
             d = self._log_dir()
             d.mkdir(parents=True, exist_ok=True)
             p = d / f"{self.claim_id}_{self.run_id}.json"
+            self.outcome["bundle"] = f"{p.stem}.zip"
             p.write_text(json.dumps(self.to_dict(), ensure_ascii=False, indent=1),
                          encoding="utf-8")
+            self._bundle(p)
             return p
+        except Exception:
+            return None
+
+    def _bundle(self, log_path: Path) -> Optional[Path]:
+        """Pack log + every referenced snapshot + the uncommitted diff into one zip.
+
+        A snapshot_path the reader cannot open proves nothing: the hash can be checked
+        against the text only when both travel together. One file is what gets handed on,
+        so the bundle is what has to be self-contained.
+        """
+        if os.getenv("NOVELTY_RUNLOG_BUNDLE", "1").strip().lower() in ("0", "false", "no"):
+            return None
+        try:
+            d = self._log_dir()
+            zpath = log_path.with_suffix(".zip")
+            diff_name = ((self.config.get("git") or {}).get("diff_path") or "")
+            with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED) as z:
+                z.write(log_path, log_path.name)
+                if diff_name and (d / diff_name).exists():
+                    z.write(d / diff_name, diff_name)
+                for c in self.contexts.values():
+                    rel = c.get("snapshot_path") or ""
+                    src = d / rel
+                    if rel and src.exists():
+                        z.write(src, rel)
+            return zpath
         except Exception:
             return None
