@@ -19,6 +19,18 @@ Judge (Step 6) checks that B follows from A.
 Design decisions (thesis): Q1 two-stage hybrid (embedding recall -> LLM judge);
 Q2 top-k per claim (k is the ablation hyperparameter); Q3 clusters are a
 retrieval/navigation signal only, never a direct judgment input.
+
+NOT the RQ1 baseline any more. For "what does the agentic control flow add?", use
+agent/linear_baseline.py: it is the agent with its per-paper loop replaced by a single
+pass, so the pool, the version-pinned sources, the submission context and the full
+evidence check (text + ownership + check_evidence) are shared by construction. This
+class differs from the current agent in four further ways that would otherwise be
+measured as if they were the control flow: it preselects a SPECTER2 top-k per claim
+instead of taking the whole retrieval snapshot, loads full text through its own
+unverified path rather than the hash-checked loader, shows the model a 1,600-character
+realization instead of the claim's submission basis, and verifies quote pairs textually
+without the ownership and evidence-check gates. It stays here because the linear
+(non-agentic) pipeline in orchestrator.py still runs it end to end.
 """
 import argparse
 import json
