@@ -23,6 +23,7 @@ import os
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 from typing import List, Optional
 import hashlib
 from dotenv import load_dotenv
@@ -686,6 +687,16 @@ def _fill(template: str, **kw) -> str:
     return out
 
 
+def rl_sha(text: str) -> str:
+    """Short digest of a VERIFICATION corpus, for the record.
+
+    The corpora are the whole documents and never the selected context; recording their
+    digests beside the context ids is what shows, afterwards, that a narrowed context did
+    not narrow what quotes were checked against.
+    """
+    return hashlib.sha256((text or "").encode("utf-8")).hexdigest()[:12]
+
+
 def _section_ids(menu: List[dict]) -> dict:
     """{section name: stable handle} for one paper's menu, in menu order."""
     return {m["name"]: f"S{i + 1}" for i, m in enumerate(menu)}
@@ -890,6 +901,99 @@ class ClaimNoveltyAgent:
         return (f"{claim.get('name','')} — {claim.get('claim_text','')} "
                 f"({claim.get('description','')})").strip()
 
+    def _new_run_log(self, claim: dict):
+        """Everything about this run that is not in the ledger and not in the text.
+
+        Collected at the start rather than the end: a setting read afterwards is the
+        setting the process finished with, which is not necessarily the one the calls
+        were made under.
+        """
+        from . import run_log as rl
+
+        log = rl.RunLog(self.submission_id, claim.get("id", ""), self.data_dir)
+        repo_root = Path(__file__).resolve().parents[3]
+
+        def role_cfg(role: str, env_model: str, env_effort: str, default_effort: str) -> dict:
+            llm = self._role_llm.get(role)
+            return {
+                "model": os.getenv(env_model, self.model_name),
+                "reasoning_effort": os.getenv(env_effort, default_effort),
+                # What the client ended up with, in case the env and the object disagree.
+                "client_model": getattr(llm, "model_name", "") or getattr(llm, "model", ""),
+            }
+
+        try:
+            sub_meta = json.loads(
+                (Path(self.data_dir) / self.submission_id /
+                 f"{self.submission_id}.json").read_text(encoding="utf-8"))
+        except Exception:
+            sub_meta = {}
+
+        import sys as _sys
+        _sys.path.insert(0, str(repo_root / "src" / "retrieval"))
+        try:
+            import paper_versions as pv
+            gap, pinning = pv.DEFAULT_MIN_GAP_DAYS, pv.enforcement_enabled()
+        except Exception:
+            gap, pinning = None, None
+        try:
+            from pdf_sections import _USE_OUTLINE as outline_flag
+        except Exception:
+            outline_flag = None
+
+        log.config = {
+            "git": rl.git_commit(repo_root),
+            "agent_model_default": self.model_name,
+            "roles": {
+                "reading": role_cfg("reading", "NOVELTY_READING_MODEL",
+                                    "NOVELTY_READING_EFFORT", "low"),
+                "compare": role_cfg("compare", "NOVELTY_COMPARE_MODEL",
+                                    "NOVELTY_COMPARE_EFFORT", "high"),
+                "evidence": role_cfg("evidence", "NOVELTY_EVIDENCE_MODEL",
+                                     "NOVELTY_EVIDENCE_EFFORT", "high"),
+            },
+            "flags": {
+                "NOVELTY_PDF_OUTLINE": outline_flag,
+                "NOVELTY_AGENTIC_SECTIONS": _AGENTIC_SECTIONS,
+                "NOVELTY_NO_TRIAGE": _NO_TRIAGE,
+                "NOVELTY_PAPER_LOOP": _PAPER_LOOP,
+                "NOVELTY_EVIDENCE_MAP": _USE_EVIDENCE_MAP,
+                "NOVELTY_VERSION_PINNING": pinning,
+            },
+            "budgets": {
+                "read_cap_chars": _READ_CAP,
+                "loop_max_turns": _LOOP_MAX_TURNS,
+                "loop_max_compares": _LOOP_MAX_COMPARES,
+                "first_read_sections": _FIRST_READ_N,
+                "falsify_sections": _FALSIFY_SECTIONS,
+                "submission_context_cap": _SUBMISSION_CONTEXT_CAP,
+                "deep_dive_workers": self.deep_dive_workers,
+                "min_quote_tokens": self.min_quote_tokens,
+                "fuzzy_threshold": self.fuzzy_threshold,
+            },
+            "cutoff": {
+                "submission_date": str(sub_meta.get("publication_date")
+                                       or sub_meta.get("year") or ""),
+                "min_gap_days": gap,
+            },
+            "prompts": rl.prompt_hashes(_sys.modules[__name__]),
+            "schemas": rl.schema_hashes({
+                "SectionPick": _SectionPick, "ReadMore": _ReadMore,
+                "PaperAction": _PaperAction, "GateVerdict": _GateVerdict,
+                "SectionComparison": _SectionComparison, "Realization": _Realization,
+            }),
+        }
+        try:
+            from . import evidence_map as _em
+            log.config["prompts"].update(rl.prompt_hashes(_em))
+            log.config["schemas"].update(rl.schema_hashes({
+                "EvidenceMap": _em.EvidenceMap, "Correspondence": _em.Correspondence,
+                "EvidenceCheck": _em.EvidenceCheck,
+            }))
+        except Exception:
+            pass
+        return log
+
     def _struct(self, model, prompt, role: str = "reading"):
         """Structured LLM call returning (parsed, prompt_tokens, completion_tokens).
 
@@ -961,6 +1065,11 @@ class ClaimNoveltyAgent:
         blocks, sources, omitted, notes = [], [], [], []
         used = 0
         requested = []
+        # What the model asked for, verbatim, before resolution -- kept apart from the
+        # titles it resolved to. A handle that matched nothing and a section that was
+        # dropped for want of budget are different failures, and only the raw request
+        # distinguishes them afterwards.
+        asked_handles, why = [], ""
 
         def append_source(name, text, kind, passage_id=None):
             nonlocal used
@@ -999,8 +1108,11 @@ class ClaimNoveltyAgent:
             pt += a
             ct += b
 
+            asked_handles = list(getattr(parsed, "sections", None) or [])
+            why = (getattr(parsed, "why", "") or "").strip()
+
             requested, unresolved = _resolve_sections(
-                getattr(parsed, "sections", None) or [],
+                asked_handles,
                 menu,
                 ids,
             )
@@ -1031,10 +1143,17 @@ class ClaimNoveltyAgent:
                     None,
                 )
 
-                if sec is None or not append_source(
-                    name, sec.get("text"), "section"
-                ):
-                    omitted.append(name)
+                # Why a requested section is not in the context, not merely that it is
+                # absent: "the budget was already spent" and "the section could not be
+                # read" leave the same gap and call for different fixes.
+                if sec is None:
+                    omitted.append({"section": name, "reason": "not returned by read_sections",
+                                    "remaining_chars": remaining})
+                elif not append_source(name, sec.get("text"), "section"):
+                    omitted.append({"section": name,
+                                    "reason": "would exceed the context budget",
+                                    "section_chars": len(sec.get("text") or ""),
+                                    "remaining_chars": remaining})
 
         if not blocks:
             # Prefer the complete source when it fits.
@@ -1076,6 +1195,12 @@ class ClaimNoveltyAgent:
                 "No original submission passages available for comparison."
             )
 
+        # Two hashes, because they answer different questions. The source hash says which
+        # DOCUMENT this came from; the context hash says which SELECTION of it was sent.
+        # Only the source hash existed, and it is identical for every selection -- so two
+        # runs that read different halves of the submission and reached different verdicts
+        # were indistinguishable in the record.
+        kinds = sorted({s.get("kind") for s in sources if s.get("kind")})
         basis = {
             "text": text,
             "sources": sources,
@@ -1087,13 +1212,40 @@ class ClaimNoveltyAgent:
             "source_sha256": hashlib.sha256(
                 tb._submission_text.encode("utf-8")
             ).hexdigest(),
+            "context_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+            "content_kinds": kinds,
         }
+
+        log = getattr(tb, "run_log", None)
+        if log is not None:
+            basis["context_id"] = log.register_context(
+                "submission", text,
+                claim_id=claim.get("id", ""),
+                sections=[s.get("section") for s in sources],
+                content_kinds=kinds,
+                budget_chars=cap,
+            )
+            log.submission_selection = {
+                "requested_handles": asked_handles,
+                "resolved_sections": requested,
+                "loaded_sections": [s.get("section") for s in sources],
+                "why": why,
+                "omitted_sections": omitted,
+                "notes": notes,
+                "context_id": basis["context_id"],
+                "context_sha256": basis["context_sha256"],
+                "chars": len(text),
+                "budget_chars": cap,
+                "content_kinds": kinds,
+                "source_sha256": basis["source_sha256"],
+            }
 
         tb.submission_basis = basis
 
         tb._log(
             "submission_basis",
-            f"{len(sources)} source blocks, {len(text):,}/{cap:,} chars; "
+            f"{len(sources)} source blocks, {len(text):,}/{cap:,} chars "
+            f"[{basis.get('context_id', 'ctx?')}], kinds={','.join(kinds) or '-'}; "
             f"{len(omitted)} sections omitted; " + "; ".join(notes),
             progress=True,
         )
@@ -1600,7 +1752,7 @@ class ClaimNoveltyAgent:
                 )
 
                 return comp, pt, ct, trace
-            comp, a, b = self._section_compare(tb, claim, pid, claim_ctx, context)
+            comp, a, b = self._section_compare(tb, claim, pid, claim_ctx, context, turn=turn)
             pt += a; ct += b
 
             # RAW: what the comparison call itself decided, before the evidence map can
@@ -1615,7 +1767,7 @@ class ClaimNoveltyAgent:
             trace.append(f"[{turn}] RAW DELTA: {comp.get('submission_delta', '')}")
 
             if _USE_EVIDENCE_MAP:
-                comp, a, b = self._map_evidence(tb, claim, pid, comp, context)
+                comp, a, b = self._map_evidence(tb, claim, pid, comp, context, turn=turn)
                 pt += a
                 ct += b
 
@@ -1959,7 +2111,7 @@ class ClaimNoveltyAgent:
         return _fmt_sections_full(got, max_total=_READ_CAP), read, pt, ct, None
 
     def _section_compare(self, tb: ClaimToolbox, claim: dict, pid: str, claim_ctx: str,
-                         paper_context: str = ""):
+                         paper_context: str = "", turn: int = 0):
         """Deep dive on the prior paper's WHOLE text: realization + the overlap judgment.
 
         The model used to choose sections from a menu and read those -- 13 to 21% of a paper
@@ -2000,6 +2152,20 @@ class ClaimNoveltyAgent:
             ),
             role="compare",
         ); pt += a; ct += b
+        # Which text this verdict was actually formed on. "Sections read" says what was
+        # available by now; these two ids say what the prompt contained, which is what
+        # differs between a first comparison and the one after a re-entry.
+        log = getattr(tb, "run_log", None)
+        if log is not None:
+            log.paper_source(pid, tb.paper_provenance(pid))
+            log.round_contexts(
+                pid, turn, call="semantic_compare",
+                submission_context=(tb.submission_basis or {}).get("context_id", ""),
+                paper_context=log.register_context(
+                    "paper", paper_text, paper_id=pid,
+                    selection="agent_sections" if paper_context else "whole_document",
+                    sections=list(tb._sections_read.get(pid) or [])),
+            )
         # What the UI's "sections read" box reports. With a selection the names are already
         # recorded by read_sections; without one the honest answer is that everything went in.
         if not paper_context:
@@ -2080,7 +2246,7 @@ class ClaimNoveltyAgent:
 
 
     def _map_evidence(self, tb: "ClaimToolbox", claim: dict, pid: str, comp: dict,
-                      paper_context: str = ""):
+                      paper_context: str = "", turn: int = 0):
         """Replace the comparison's own quotes and degree with a verified claim-evidence map.
 
         The deep-dive call decides the degree and produces the quotes in one breath, and it
@@ -2156,6 +2322,22 @@ class ClaimNoveltyAgent:
 
         comp = dict(comp)
         comp["comparison_proposal"] = raw_proposal
+        # The map gets its own pair of contexts and they are NOT the compare's: the
+        # submission side is claim-local here, the paper side may be the whole document.
+        # Recording only one pair per paper would attribute the map's pairs to text it
+        # never saw.
+        log = getattr(tb, "run_log", None)
+        if log is not None:
+            log.paper_source(pid, tb.paper_provenance(pid))
+            log.round_contexts(
+                pid, turn, call="evidence_map",
+                submission_context=log.register_context(
+                    "submission", submission_text, paper_id=pid, role="evidence_map"),
+                paper_context=log.register_context(
+                    "paper", paper_text, paper_id=pid, role="evidence_map"),
+                verification_submission_sha256=rl_sha(tb._submission_text),
+                verification_paper_sha256=rl_sha(tb._paper_source_text(pid)),
+            )
         mapping = evidence_map.build_map(
             struct,
             claim_str,
@@ -2314,6 +2496,11 @@ class ClaimNoveltyAgent:
             closest_n=self.closest_n, min_quote_tokens=self.min_quote_tokens,
             fuzzy_threshold=self.fuzzy_threshold, grobid_server=self.grobid_server,
         )
+        # Provenance for this claim run: what was configured, which text each call
+        # actually received, and how it ended. Attached to the toolbox so every step
+        # that sends text to a model can register it where it happens, rather than
+        # being reconstructed afterwards from what happened to be logged.
+        self.run_log = tb.run_log = self._new_run_log(claim)
         pt = ct = 0
         est_total = {"v": 0}  # estimated total steps; 0 until the triage shortlist is known (frontend hides "/max" then)
         # Wall-clock breakdown per phase -- surfaced in the Review UI so the reviewer can
@@ -2561,8 +2748,29 @@ class ClaimNoveltyAgent:
                          f"from cache ({cache_rate:.1%}) by role: {cache_by_role_str}")
 
         entry = tb.artifact_entry()
+
+        # How this claim ended, in one place and with the three endings kept apart. The
+        # pieces existed -- a verdict here, an `unresolved` flag on one comparison, a
+        # failed map call in another's diagnostics -- and a reader had to assemble them
+        # to tell "checked, nothing found" from "we stopped while something was missing"
+        # from "a call broke".
+        outcome = self.run_log.finish(
+            verdict, entry.get("comparisons") or [],
+            stop_reason=stop, evidence_sufficient=bool(suff))
+        self.run_log.config["cost"] = {
+            "prompt_tokens": pt, "completion_tokens": ct,
+            "usd": _usd(self.model_name, pt, ct),
+        }
+        log_path = self.run_log.write()
+        tb._log("run_log",
+                f"{self.run_log.run_id}: {outcome['n_compared']} compared, "
+                f"review_complete={outcome['review_complete']}, "
+                f"{len(outcome['open_papers'])} open"
+                + (f" -> {log_path.name}" if log_path else ""))
+
         entry.update({
             "submission_basis": tb.submission_basis,
+            "run_log": self.run_log.to_dict(),
             "agent_verdict": verdict,
             "agent_rationale": "",
             "evidence_sufficient": bool(suff),
