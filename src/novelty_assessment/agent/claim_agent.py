@@ -798,6 +798,17 @@ def _fmt_passages(hits: List[dict], max_total: int = 1800) -> str:
 
 
 class ClaimNoveltyAgent:
+    #: Whether `_deep_dive` runs the per-paper loop (reading turns, gates, re-entry) or
+    #: the older single read + compare path. Defaults to the module flag, and is a class
+    #: attribute so the linear baseline can pin it to the loop entry point it replaces
+    #: (see agent/linear_baseline.py) rather than depending on the environment.
+    _use_paper_loop = _PAPER_LOOP
+
+    #: Whether the whole pool goes to the deep dive (no abstract screen). Also a class
+    #: attribute for the baseline's sake: an abstract triage IS an early exit, so a
+    #: baseline that inherited one would not be the single-pass system it claims to be.
+    _no_triage = _NO_TRIAGE
+
     def __init__(
         self,
         data_dir: str,
@@ -1765,119 +1776,13 @@ class ClaimNoveltyAgent:
             comp, a, b = self._section_compare(tb, claim, pid, claim_ctx, context, turn=turn)
             pt += a; ct += b
 
-            # RAW: what the comparison call itself decided, before the evidence map can
-            # overwrite overlap_degree/assessment/evidence_pairs. Logging only the final
-            # state (after the map) loses this -- a paper whose raw compare said
-            # `substantial` and whose map then found nothing checkable reads identically,
-            # in the final fields alone, to one the compare call called `none` outright.
-            # Those are different failures and want different fixes.
-            trace.append(f"[{turn}] RAW COMPARE: degree={comp.get('overlap_degree', '')}")
-            trace.append(f"[{turn}] RAW ASSESSMENT: {comp.get('assessment', '')}")
-            trace.append(f"[{turn}] RAW SHARED: {comp.get('what_is_shared', '')}")
-            trace.append(f"[{turn}] RAW DELTA: {comp.get('submission_delta', '')}")
+            self._trace_raw(trace, turn, comp)
 
             if _USE_EVIDENCE_MAP:
                 comp, a, b = self._map_evidence(tb, claim, pid, comp, context, turn=turn)
                 pt += a
                 ct += b
-
-                proposal = comp.get("comparison_proposal") or {}
-                check = comp.get("evidence_check") or {}
-                pairs = comp.get("evidence_pairs") or []
-
-                raw_degree = (proposal.get("overlap_degree") or "").lower()
-                final_degree = (comp.get("overlap_degree") or "").lower()
-                evidence_status = (check.get("status") or "").lower()
-
-                trace.append(
-                    f"[{turn}] SEMANTIC DEGREE: {raw_degree}"
-                )
-                trace.append(
-                    f"[{turn}] SEMANTIC ASSESSMENT: "
-                    f"{proposal.get('assessment', '')}"
-                )
-                trace.append(
-                    f"[{turn}] SEMANTIC SHARED: "
-                    f"{proposal.get('what_is_shared', '')}"
-                )
-                trace.append(
-                    f"[{turn}] SEMANTIC DELTA: "
-                    f"{proposal.get('submission_delta', '')}"
-                )
-
-                trace.append(
-                    f"[{turn}] GROUNDED OWNED PAIRS: {len(pairs)}"
-                )
-
-                for i, p in enumerate(pairs, 1):
-                    relation = " ".join(
-                        str(p.get("rationale", "")).split()
-                    )
-
-                    submission_quote = " ".join(
-                        str(p.get("claim_quote", "")).split()
-                    )
-
-                    paper_quote = " ".join(
-                        str(p.get("paper_quote", "")).split()
-                    )
-
-                    trace.append(
-                        f"[{turn}] PAIR {i}: "
-                        f"strength={p.get('strength', '')} | "
-                        f"relation={relation}"
-                    )
-                    trace.append(
-                        f'[{turn}] PAIR {i} SUBMISSION: "{submission_quote}"'
-                    )
-                    trace.append(
-                        f'[{turn}] PAIR {i} PAPER: "{paper_quote}"'
-                    )
-
-                trace.append(
-                    f"[{turn}] EVIDENCE CHECK: status={evidence_status}"
-                )
-                trace.append(
-                    f"[{turn}] EVIDENCE SUPPORTING PAIRS: "
-                    f"{check.get('supporting_pair_indices', [])}"
-                )
-                trace.append(
-                    f"[{turn}] EVIDENCE REASON: "
-                    f"{check.get('reasoning', '')}"
-                )
-                trace.append(
-                    f"[{turn}] PROPOSED DEGREE SUPPORTED: "
-                    f"{check.get('proposed_degree_supported')}"
-                )
-
-                if check.get("unresolved_question"):
-                    trace.append(
-                        f"[{turn}] UNRESOLVED QUESTION: "
-                        f"{check['unresolved_question']}"
-                    )
-
-                semantic_material = raw_degree in {
-                    "partial",
-                    "substantial",
-                    "same",
-                }
-
-                if evidence_status == "material":
-                    evidence_material = True
-                elif evidence_status == "nonmaterial":
-                    evidence_material = False
-                else:
-                    evidence_material = None
-
-                trace.append(
-                    f"[{turn}] MATERIAL AGREEMENT: "
-                    f"semantic={'material' if semantic_material else 'nonmaterial'} | "
-                    f"evidence={evidence_status or 'missing'}"
-                )
-
-                trace.append(
-                    f"[{turn}] CURRENT SEMANTIC DEGREE: {final_degree}"
-                )
+                self._trace_grounding(trace, turn, comp)
 
             deficit = self._evidence_deficit(comp) or ""
             if not deficit:
@@ -1927,6 +1832,119 @@ class ClaimNoveltyAgent:
                 return comp, pt, ct, trace
             trace.append(f"[{turn}] evidence gate REFUSED -> read again: {deficit}")
         return comp, pt, ct, trace
+
+    # ---- trace rendering, shared with the linear baseline ------------------ #
+    # Extracted so the baseline's single pass writes the SAME audit lines from the same
+    # code rather than from a copy that can drift. Formatting only: these append to a
+    # list and decide nothing.
+
+    @staticmethod
+    def _trace_raw(trace: List[str], turn: int, comp: dict) -> None:
+        """What the comparison call itself decided, before the evidence map can overwrite
+        overlap_degree/assessment/evidence_pairs. Logging only the final state loses this
+        -- a paper whose raw compare said `substantial` and whose map then found nothing
+        checkable reads identically, in the final fields alone, to one the compare call
+        called `none` outright. Those are different failures and want different fixes."""
+        trace.append(f"[{turn}] RAW COMPARE: degree={comp.get('overlap_degree', '')}")
+        trace.append(f"[{turn}] RAW ASSESSMENT: {comp.get('assessment', '')}")
+        trace.append(f"[{turn}] RAW SHARED: {comp.get('what_is_shared', '')}")
+        trace.append(f"[{turn}] RAW DELTA: {comp.get('submission_delta', '')}")
+
+    @staticmethod
+    def _trace_grounding(trace: List[str], turn: int, comp: dict) -> None:
+        """The semantic proposal, every grounded-and-owned pair, and the checker's verdict
+        on them -- the three things a reader needs to see whether the degree that survived
+        rests on evidence or on the proposal alone."""
+        proposal = comp.get("comparison_proposal") or {}
+        check = comp.get("evidence_check") or {}
+        pairs = comp.get("evidence_pairs") or []
+
+        raw_degree = (proposal.get("overlap_degree") or "").lower()
+        final_degree = (comp.get("overlap_degree") or "").lower()
+        evidence_status = (check.get("status") or "").lower()
+
+        trace.append(
+            f"[{turn}] SEMANTIC DEGREE: {raw_degree}"
+        )
+        trace.append(
+            f"[{turn}] SEMANTIC ASSESSMENT: "
+            f"{proposal.get('assessment', '')}"
+        )
+        trace.append(
+            f"[{turn}] SEMANTIC SHARED: "
+            f"{proposal.get('what_is_shared', '')}"
+        )
+        trace.append(
+            f"[{turn}] SEMANTIC DELTA: "
+            f"{proposal.get('submission_delta', '')}"
+        )
+
+        trace.append(
+            f"[{turn}] GROUNDED OWNED PAIRS: {len(pairs)}"
+        )
+
+        for i, p in enumerate(pairs, 1):
+            relation = " ".join(
+                str(p.get("rationale", "")).split()
+            )
+
+            submission_quote = " ".join(
+                str(p.get("claim_quote", "")).split()
+            )
+
+            paper_quote = " ".join(
+                str(p.get("paper_quote", "")).split()
+            )
+
+            trace.append(
+                f"[{turn}] PAIR {i}: "
+                f"strength={p.get('strength', '')} | "
+                f"relation={relation}"
+            )
+            trace.append(
+                f'[{turn}] PAIR {i} SUBMISSION: "{submission_quote}"'
+            )
+            trace.append(
+                f'[{turn}] PAIR {i} PAPER: "{paper_quote}"'
+            )
+
+        trace.append(
+            f"[{turn}] EVIDENCE CHECK: status={evidence_status}"
+        )
+        trace.append(
+            f"[{turn}] EVIDENCE SUPPORTING PAIRS: "
+            f"{check.get('supporting_pair_indices', [])}"
+        )
+        trace.append(
+            f"[{turn}] EVIDENCE REASON: "
+            f"{check.get('reasoning', '')}"
+        )
+        trace.append(
+            f"[{turn}] PROPOSED DEGREE SUPPORTED: "
+            f"{check.get('proposed_degree_supported')}"
+        )
+
+        if check.get("unresolved_question"):
+            trace.append(
+                f"[{turn}] UNRESOLVED QUESTION: "
+                f"{check['unresolved_question']}"
+            )
+
+        semantic_material = raw_degree in {
+            "partial",
+            "substantial",
+            "same",
+        }
+
+        trace.append(
+            f"[{turn}] MATERIAL AGREEMENT: "
+            f"semantic={'material' if semantic_material else 'nonmaterial'} | "
+            f"evidence={evidence_status or 'missing'}"
+        )
+
+        trace.append(
+            f"[{turn}] CURRENT SEMANTIC DEGREE: {final_degree}"
+        )
 
     @staticmethod
     def _evidence_deficit(comp: dict) -> Optional[str]:
@@ -2492,7 +2510,7 @@ class ClaimNoveltyAgent:
         # whole paper went into the comparison and then into the map again.
         pt = ct = 0
         paper_context, dismissed = "", None
-        if _PAPER_LOOP:
+        if self._use_paper_loop:
             comp, a, b, trace = self._paper_loop(tb, claim, pid, claim_ctx)
             pt += a; ct += b
             comp.setdefault("map_diag", {})["loop"] = trace
@@ -2654,7 +2672,7 @@ class ClaimNoveltyAgent:
         # every retrieved related-work paper gets looked at; only possible overlaps go deeper)
         top = tb._ranked()
         _t = time.perf_counter()
-        if _NO_TRIAGE:
+        if self._no_triage:
             # Nothing is decided from an abstract: every paper goes to the deep dive, which
             # opens it at its section level and ends there if what it reads shows the paper
             # is about something else. No pre-recorded verdict either -- with no screen,
