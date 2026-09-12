@@ -24,6 +24,7 @@ related_work_data/grobid_fulltext/{paper_id}.txt automatically, whichever path
 produced it.
 """
 import argparse
+import hashlib
 import json
 import logging
 import os
@@ -31,6 +32,7 @@ import re
 import sys
 import time
 import xml.etree.ElementTree as ET
+from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
@@ -171,14 +173,34 @@ class FullTextFetcher:
             return r  # genuine 4xx (404 etc.) -> no point retrying
         return None
 
-    def ensure_pdf(self, paper: dict, pdfs_dir: Path) -> bool:
-        """Ensure a VALID {paper_id}.pdf exists; try S2 / Unpaywall(+PMC) / arXiv."""
+    def ensure_pdf(self, paper: dict, pdfs_dir: Path, pin: dict = None) -> bool:
+        """Ensure a VALID {paper_id}.pdf exists; try S2 / Unpaywall(+PMC) / arXiv.
+
+        With `pin` (a paper_versions record), the pinned version's URL is the ONLY one
+        tried for a paper that has one. The alternatives below all resolve to "whatever
+        that identifier serves today": `arxiv.org/pdf/2301.12345.pdf` is the newest
+        version, and an openAccessPdf or publisher link is the current file. Falling back
+        to them after a pin would quietly restore the very thing pinning exists to stop --
+        comparing a submission against a document written after it.
+        """
         pid, title = paper["paper_id"], paper.get("title", "")
         dest = pdfs_dir / f"{pid}.pdf"
         if dest.exists():
             if self._is_valid_pdf(dest):
                 return True
             dest.unlink()  # corrupt cached download (HTML/empty) -> re-fetch
+
+        if pin and pin.get("url"):
+            ok, detail = self._try_download(pin["url"], dest)
+            if ok:
+                logger.info(f"  downloaded [{detail}] <- {pin['url']}  "
+                            f"(pinned {pin.get('version', '?')} of {pin.get('version_date', '?')})")
+                return True
+            # No fallback: a pinned paper is either fetched at its pinned version or not
+            # fetched at all. The deep dive can still run on the abstract.
+            logger.info(f"  download FAILED [{detail}] <- {pin['url']}  "
+                        f"(pinned {pin.get('version', '?')}; NOT falling back to the current version)")
+            return False
 
         urls, doi = [], paper.get("doi")
 
@@ -267,16 +289,198 @@ class FullTextFetcher:
         ft_dir.mkdir(parents=True, exist_ok=True)
         return rwd, pdfs_dir, ft_dir
 
+    # --------------------------- version pinning ------------------------- #
+    # Which version of each paper the review is allowed to read, decided once and
+    # recorded, so that the file on disk, the text parsed out of it and the quotes
+    # verified against that text all refer to the same document -- and so a reviewer can
+    # see which document that was. See src/retrieval/paper_versions.py for the rules.
+
+    VERSIONS_FILE = "versions.json"
+
+    @staticmethod
+    def _sha256(path: Path) -> str:
+        h = hashlib.sha256()
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                h.update(chunk)
+        return h.hexdigest()
+
+    def _versions_path(self, rwd: Path) -> Path:
+        return rwd / self.VERSIONS_FILE
+
+    def _load_versions(self, rwd: Path) -> dict:
+        p = self._versions_path(rwd)
+        if not p.exists():
+            return {}
+        try:
+            return json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            logger.info(f"  versions manifest unreadable, starting a new one: {p}")
+            return {}
+
+    def _save_versions(self, rwd: Path, data: dict) -> None:
+        self._versions_path(rwd).write_text(
+            json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+
+    @staticmethod
+    def _submission_date(data_dir: str, submission_id: str) -> str:
+        """The date the prior-work cutoff is measured against."""
+        meta_path = Path(data_dir) / submission_id / f"{submission_id}.json"
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        except Exception:
+            return ""
+        return str(meta.get("publication_date") or meta.get("year") or "")
+
+    def resolve_versions(self, data_dir: str, submission_id: str, paper_ids=None,
+                         force: bool = False) -> dict:
+        """Pin each paper to the newest version that is still prior work.
+
+        Writes related_work_data/versions.json: per paper the status, version, that
+        version's date, the version-bound URL and (once downloaded) the file's sha256.
+        Returns the same mapping.
+
+        Papers whose version cannot be pinned are recorded with the reason and are NOT
+        given a URL, so the downloader leaves them alone rather than fetching the current
+        file. That is the whole point: an unpinnable paper should be visibly absent, not
+        invisibly wrong.
+        """
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "retrieval"))
+        import paper_versions as pv
+
+        rwd, _, _ = self._dirs(data_dir, submission_id)
+        ranked = json.loads((rwd / "ranked_papers.json").read_text(encoding="utf-8"))
+        by_id = {p["paper_id"]: p for p in ranked}
+        if paper_ids is None:
+            paper_ids = list(by_id)
+
+        sub_date = self._submission_date(data_dir, submission_id)
+        if not sub_date:
+            logger.info("no submission date on file -- cannot pin versions against a cutoff")
+            return {}
+
+        manifest = self._load_versions(rwd)
+        todo = [pid for pid in paper_ids
+                if force or pid not in manifest or not manifest[pid].get("resolved_at")]
+        logger.info(f"pinning versions against submission date {sub_date} "
+                    f"({len(todo)} to resolve, {len(paper_ids) - len(todo)} already recorded)")
+
+        for i, pid in enumerate(todo, 1):
+            rec = by_id.get(pid)
+            if rec is None:
+                continue
+            pin = pv.resolve_version(rec, sub_date)
+            entry = pin.to_dict()
+            entry["resolved_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            entry["record_date"] = rec.get("publication_date") or rec.get("year") or ""
+            entry["title"] = rec.get("title", "")
+            # Keep any hash from a previous download only if the version is unchanged.
+            old = manifest.get(pid) or {}
+            if old.get("version") == entry.get("version") and old.get("doc_sha256"):
+                entry["doc_sha256"] = old["doc_sha256"]
+            manifest[pid] = entry
+
+            title = rec.get("title", "")[:55]
+            if pin.usable:
+                logger.info(f"[ver {i}/{len(todo)}] {pid} {title} -> "
+                            f"{pin.status} {pin.version or '(single)'} {pin.version_date}")
+            else:
+                # Loud on purpose: this is a paper the review will NOT read, and the
+                # reason belongs in front of whoever reads the log.
+                logger.info(f"[ver {i}/{len(todo)}] {pid} {title} -> {pin.status.upper()}: "
+                            f"{pin.note} (latest {pin.latest_version} {pin.latest_version_date})")
+
+        self._save_versions(rwd, manifest)
+        self._apply_version_abstracts(rwd, ranked, manifest)
+        counts = {}
+        for pid in paper_ids:
+            counts[(manifest.get(pid) or {}).get("status", "unrecorded")] = \
+                counts.get((manifest.get(pid) or {}).get("status", "unrecorded"), 0) + 1
+        logger.info(f"version pinning: {counts}")
+        return manifest
+
+    def pin_for_record(self, data_dir: str, submission_id: str, record: dict) -> dict:
+        """Pin ONE paper, for candidates that arrive after the batch pass (retrieve_more).
+
+        Same rules and same manifest as `resolve_versions`; separate only because a paper
+        the agent just retrieved is not in ranked_papers.json yet, so there is nothing to
+        look it up in. Returns the pin dict (empty when it cannot be resolved).
+        """
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "retrieval"))
+        import paper_versions as pv
+
+        pid = record.get("paper_id") or ""
+        rwd, _, _ = self._dirs(data_dir, submission_id)
+        manifest = self._load_versions(rwd)
+        if manifest.get(pid, {}).get("resolved_at"):
+            return manifest[pid]
+
+        sub_date = self._submission_date(data_dir, submission_id)
+        if not sub_date or not pid:
+            return {}
+        pin = pv.resolve_version(record, sub_date)
+        entry = pin.to_dict()
+        entry["resolved_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        entry["record_date"] = record.get("publication_date") or record.get("year") or ""
+        entry["title"] = record.get("title", "")
+        manifest[pid] = entry
+        self._save_versions(rwd, manifest)
+        if not pin.usable:
+            logger.info(f"[ver] {pid} {record.get('title','')[:55]} -> "
+                        f"{pin.status.upper()}: {pin.note}")
+        return entry
+
+    def _apply_version_abstracts(self, rwd: Path, ranked: list, manifest: dict) -> None:
+        """Put the PINNED version's own abstract into ranked_papers.json.
+
+        The abstract S2 holds is the current record's, which for a paper pinned to an
+        older version is a different text than the one being compared -- a later abstract
+        can describe results the pinned version does not contain. Where arXiv gave us the
+        version's own abstract, it replaces the record's; where it did not, the record's
+        abstract stays but is labelled as such, so nothing silently passes a current
+        summary off as evidence about an older document.
+        """
+        changed = 0
+        for p in ranked:
+            entry = manifest.get(p.get("paper_id")) or {}
+            if not entry:
+                continue
+            p["pinned_version"] = entry.get("version", "")
+            p["pinned_version_date"] = entry.get("version_date", "")
+            p["version_status"] = entry.get("status", "")
+            src = entry.get("abstract_source") or ""
+            if src == "version" and entry.get("abstract"):
+                if (p.get("abstract") or "").strip() != entry["abstract"].strip():
+                    p["abstract_latest_record"] = p.get("abstract", "")
+                    p["abstract"] = entry["abstract"]
+                    changed += 1
+            p["abstract_source"] = src or "record"
+        (rwd / "ranked_papers.json").write_text(
+            json.dumps(ranked, ensure_ascii=False, indent=1), encoding="utf-8")
+        if changed:
+            logger.info(f"  replaced {changed} abstract(s) with the pinned version's own text")
+
     # ---- PHASE 1: download PDFs only, no GROBID dependency (runs for the whole pool) --- #
 
-    def download_pdfs(self, data_dir: str, submission_id: str, paper_ids=None) -> dict:
-        """Ensure a PDF is on disk for each target paper. Returns {paper_id: bool}."""
-        rwd, pdfs_dir, _ = self._dirs(data_dir, submission_id)
+    def download_pdfs(self, data_dir: str, submission_id: str, paper_ids=None,
+                      pin_versions: bool = True) -> dict:
+        """Ensure a PDF is on disk for each target paper. Returns {paper_id: bool}.
+
+        With `pin_versions`, each paper is first pinned to the newest version that is
+        still prior work, and only that version is fetched. A file already on disk counts
+        as present only if the manifest says it IS that version: everything downloaded
+        before pinning existed came from an unversioned URL, which served whatever was
+        current that day, so those are re-fetched rather than trusted.
+        """
+        rwd, pdfs_dir, ft_dir = self._dirs(data_dir, submission_id)
         ranked = json.loads((rwd / "ranked_papers.json").read_text(encoding="utf-8"))
         by_id = {p["paper_id"]: p for p in ranked}
 
         if paper_ids is None:
             paper_ids = list(by_id)
+
+        manifest = (self.resolve_versions(data_dir, submission_id, paper_ids)
+                    if pin_versions else {})
 
         try:
             import progress as _progress  # optional sub-progress for the frontend
@@ -294,20 +498,55 @@ class FullTextFetcher:
                 results[pid] = False
                 continue
             title = by_id[pid].get("title", "")[:60]
+            pin = manifest.get(pid) or {}
             pdf_path = pdfs_dir / f"{pid}.pdf"
-            if pdf_path.exists() and self._is_valid_pdf(pdf_path):
-                results[pid] = True
-                logger.info(f"[dl {idx+1}/{n}] {pid}  {title} -> already on disk")
+
+            if pin_versions and pin and not pin.get("url"):
+                # Pinning ran and could not settle on a version. Not an error to retry:
+                # a decision, and it stands until the record or the source changes.
+                results[pid] = False
+                logger.info(f"[dl {idx+1}/{n}] {pid}  {title} -> skipped "
+                            f"({pin.get('status', 'unresolved')}: {pin.get('note', '')})")
                 continue
-            logger.info(f"[dl {idx+1}/{n}] {pid}  {title}")
+
+            if pdf_path.exists() and self._is_valid_pdf(pdf_path):
+                on_disk = pin.get("doc_sha256")
+                if not pin_versions or not pin:
+                    results[pid] = True
+                    logger.info(f"[dl {idx+1}/{n}] {pid}  {title} -> already on disk")
+                    continue
+                if on_disk and on_disk == self._sha256(pdf_path):
+                    results[pid] = True
+                    logger.info(f"[dl {idx+1}/{n}] {pid}  {title} -> already on disk "
+                                f"({pin.get('version') or 'single'})")
+                    continue
+                # Either no hash was ever recorded (downloaded before pinning) or the file
+                # is a different document than the pin names. Both mean the cached PDF --
+                # and the text parsed out of it -- cannot be attributed to the pinned
+                # version, so both go.
+                logger.info(f"[dl {idx+1}/{n}] {pid}  {title} -> cached PDF is not the "
+                            f"pinned {pin.get('version') or 'version'}, re-fetching")
+                pdf_path.unlink()
+                stale_txt = ft_dir / f"{pid}.txt"
+                if stale_txt.exists():
+                    stale_txt.unlink()
+            else:
+                logger.info(f"[dl {idx+1}/{n}] {pid}  {title}")
+
             t0 = time.time()
-            ok = self.ensure_pdf(by_id[pid], pdfs_dir)
+            ok = self.ensure_pdf(by_id[pid], pdfs_dir, pin=pin or None)
             results[pid] = ok
+            if ok and pin_versions and pin:
+                pin["doc_sha256"] = self._sha256(pdf_path)
+                pin["downloaded_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+                manifest[pid] = pin
             if not ok:
                 logger.info(f"  -> no_pdf (no downloadable PDF found)  [{time.time()-t0:.1f}s]")
             time.sleep(1)  # be nice to S2/arXiv
         if _progress:
             _progress.report(n, n)
+        if pin_versions and manifest:
+            self._save_versions(rwd, manifest)
         n_ok = sum(1 for v in results.values() if v)
         logger.info(f"PDF download done: {n_ok}/{n} available on disk")
         return results
