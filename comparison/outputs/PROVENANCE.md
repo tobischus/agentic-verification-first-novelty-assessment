@@ -35,18 +35,23 @@ estimate of it. That is why the pilot reports stability per criterion and no ove
   restriction to one section is deliberate information loss and the only way to place a
   full-review system beside novelty-only systems. Verified by re-deriving the existing
   transducing file from the rule: 694 words, identical.
-- `transducing_language_models__opennovelty.md` — the authors' own published report
-  (lightweight variant), converted from PDF with `eval/pdf_to_md.py`. Not re-run locally:
-  their Phase 2 depends on the WisPaper API, which needs an account and a browser login.
+- `*__opennovelty.md` — the authors' own published report (lightweight variant),
+  converted from PDF with `eval/pdf_to_md.py`. Not re-run locally: their Phase 2 depends
+  on the WisPaper API, which needs an account and a browser login. The GraphRAG report
+  was supplied by the user (2026-01-04 generation date) after the rest of pilot v1 had
+  already run; the 8 pairs it completes were added as a second batch, same prompt, same
+  other four reports, same seed -- see "Second batch" below.
 
-### Missing: OpenNovelty for GraphRAG
+### Second batch (2026-09-12): the 8 completing calls
 
-There is no OpenNovelty report for `graphrag_when_to_use`, and one cannot be produced
-here: the authors published reports for five other papers, and running their pipeline
-needs a WisPaper token obtained through an interactive login. The pilot therefore judges
-five systems on `transducing_language_models` (10 pairs) and four on
-`graphrag_when_to_use` (6 pairs). With a token, the four missing pairs add 8 calls and
-the existing 32 stay valid -- the prompt and every other report are unchanged.
+`graphrag_when_to_use__opennovelty.md` arrived after the first 32 calls were already
+recorded. Its 8 pairs (opennovelty vs. each of the other four systems, both orders) were
+run with the identical prompt (`novelty_report_judge_v1`, same sha256) and the identical
+other four reports -- nothing about the already-judged 32 calls was touched or re-run.
+Per the protocol this makes it one pilot, not a new version: prompt and previously-judged
+outputs unchanged. All 10 reports x pairwise x both orders = 40 calls total, all valid on
+the first attempt, position check unchanged in character (48.0% A-share over 200
+judgements).
 
 ## Archived
 
