@@ -942,7 +942,12 @@ class ClaimNoveltyAgent:
             outline_flag = None
 
         log.config = {
-            "git": rl.git_commit(repo_root),
+            # With the uncommitted diff saved beside the log, "dirty" stops being a
+            # disclaimer and becomes a record: the exact source this run executed.
+            "git": rl.git_commit(
+                repo_root,
+                save_diff_to=(Path(self.data_dir) / self.submission_id / "run_logs"
+                              / f"{claim.get('id', 'claim')}_{log.run_id}.diff")),
             "agent_model_default": self.model_name,
             "roles": {
                 "reading": role_cfg("reading", "NOVELTY_READING_MODEL",
@@ -1726,6 +1731,9 @@ class ClaimNoveltyAgent:
             if decision == "dismiss":
                 comp = self._to_comp(None)
                 comp["overlap_degree"] = "superficial"
+                # Marked, so the run log can report "dismissed" as its own ending rather
+                # than as a superficial comparison that happens to carry no evidence.
+                comp["dismissed"] = True
                 comp["brief_note"] = comp["assessment"] = why or (
                     "Read at section level; the paper's subject is a different contribution.")
                 trace.append(f"[{turn}] dismissed after {len(names)} sections")
@@ -2157,13 +2165,34 @@ class ClaimNoveltyAgent:
         # differs between a first comparison and the one after a re-entry.
         log = getattr(tb, "run_log", None)
         if log is not None:
-            log.paper_source(pid, tb.paper_provenance(pid))
+            prov = tb.paper_provenance(pid)
+            log.paper_source(pid, prov)
+            # WHAT this text is, not just how it was selected. "whole_document" was
+            # ambiguous in the one case where it mattered: with no parsed full text the
+            # fallback is the whole of abstract+intro, which is also "whole" -- so a
+            # 1.2k-character stand-in and a 60k-character paper were labelled alike.
+            has_ft = bool((tb.pool.get(pid) or {}).get("fulltext"))
+            if paper_context:
+                content_source = "agent_sections"
+            elif has_ft:
+                content_source = "fulltext"
+            elif (tb.pool.get(pid) or {}).get("intro"):
+                content_source = "abstract_and_intro"
+            else:
+                content_source = "abstract"
+            ft_status = (getattr(tb, "_fulltext_status", {}) or {}).get(pid, "")
+            fallback_reason = ""
+            if content_source in ("abstract", "abstract_and_intro"):
+                fallback_reason = (ft_status or prov.get("version_status", "")
+                                   or "no parsed full text available")
             log.round_contexts(
                 pid, turn, call="semantic_compare",
                 submission_context=(tb.submission_basis or {}).get("context_id", ""),
                 paper_context=log.register_context(
                     "paper", paper_text, paper_id=pid,
-                    selection="agent_sections" if paper_context else "whole_document",
+                    content_source=content_source,
+                    fulltext_status=ft_status,
+                    fallback_reason=fallback_reason,
                     sections=list(tb._sections_read.get(pid) or [])),
             )
         # What the UI's "sections read" box reports. With a selection the names are already
@@ -2216,6 +2245,18 @@ class ClaimNoveltyAgent:
         instead of the ledger entry is how a caller ends up with an assessment whose quotes
         were never verified.
         """
+        # Every comparison passes through here, including the ones that never reached a
+        # compare call (a dismissed paper is recorded straight from the loop). Writing the
+        # run log's per-paper entry at this single funnel is what makes the log's paper
+        # count agree with the ledger's: hooking it to the compare call alone left a
+        # dismissed paper counted but absent.
+        rlog = getattr(tb, "run_log", None)
+        if rlog is not None:
+            try:
+                rlog.paper_outcome(pid, comp, tb.paper_provenance(pid))
+            except Exception:
+                pass
+
         return tb.record_comparison(
             paper_id=pid,
             refutation_status=comp["refutation_status"],
@@ -2467,6 +2508,7 @@ class ClaimNoveltyAgent:
             # affordable at all.
             comp = self._to_comp(None)
             comp["overlap_degree"] = dismissed["degree"]
+            comp["dismissed"] = True
             comp["brief_note"] = dismissed["why"]
             comp["assessment"] = dismissed["why"]
         else:

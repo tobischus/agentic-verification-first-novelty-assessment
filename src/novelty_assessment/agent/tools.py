@@ -143,6 +143,10 @@ class ClaimToolbox:
         # which sections were actually read in full per paper_id (incl. "submission"),
         # so the review can show "sections used for the comparison" instead of "full text"
         self._sections_read = {}
+        # pid -> what ensure_fulltext concluded ("ok", "no_pdf", "no_version",
+        # "parse_error", ...). Kept so the run log can say WHY a comparison fell back to
+        # the abstract instead of leaving the reader to infer it from a small context.
+        self._fulltext_status = {}
         self._steps_since_progress = 0
 
         # Papers the version gate kept out, recorded now that there is a ledger to record
@@ -522,6 +526,9 @@ class ClaimToolbox:
         available PDF could not be parsed). Parsing is IN PROCESS (PyMuPDF, ~1s)
         -- no GROBID service involved for related work."""
         if pid == "submission" or self._has_fulltext(pid):
+            # Recorded too: an empty status in the log reads as "never asked", which is a
+            # different thing from "was already there".
+            self._fulltext_status.setdefault(pid, "already_had")
             return "already_had"
         try:
             import sys
@@ -539,6 +546,7 @@ class ClaimToolbox:
             # parse, where it can still prevent the text rather than merely disown it.
             status = self._prepare_pinned_pdf(fetcher, pid, pdf_path)
             if status:
+                self._fulltext_status[pid] = status
                 self._log("ensure_fulltext", f"{pid} -> {status}")
                 return status
 
@@ -552,11 +560,14 @@ class ClaimToolbox:
             self._versions_cache = None
             text = self._load_fulltext_file(pid)
             if not text:
-                self._log("ensure_fulltext", f"{pid} -> parsed text failed its own check")
-                return "parse_error"
+                self._fulltext_status[pid] = "parse_unverified"
+                self._log("ensure_fulltext",
+                          f"{pid} -> parsed text failed its own provenance check")
+                return "parse_unverified"
             self.pool[pid]["fulltext"] = text
             self._paper_index.pop(pid, None)  # rebuild the section/passage index from full text
             self._paper_text.pop(pid, None)
+        self._fulltext_status[pid] = status
         self._log("ensure_fulltext", f"{pid} -> {status}")
         return status
 

@@ -30,6 +30,7 @@ import logging
 import os
 import re
 import sys
+import threading
 import time
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
@@ -319,6 +320,14 @@ class FullTextFetcher:
 
     VERSIONS_FILE = "versions.json"
 
+    # versions.json is updated read-modify-write, and deep dives run several papers at
+    # once in one process: two workers that load the same manifest and save it back both
+    # write their own paper and silently drop the other's. That is how a parsed text lost
+    # its provenance and was then refused by the very check the provenance exists for --
+    # the paper fell back to its abstract with nothing saying why. Module-level, because
+    # the callers build their own FullTextFetcher instances.
+    _MANIFEST_LOCK = threading.RLock()
+
     # The two statuses a paper may be read at: a specific admissible version, or the one
     # document a source without version history has, checked against the cutoff. Everything
     # else (unavailable / uncertain / unresolved) is a paper the review does not read.
@@ -509,8 +518,12 @@ class FullTextFetcher:
         entry["resolved_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
         entry["record_date"] = record.get("publication_date") or record.get("year") or ""
         entry["title"] = record.get("title", "")
-        manifest[pid] = entry
-        self._save_versions(rwd, manifest)
+        with self._MANIFEST_LOCK:
+            # Re-read inside the lock: another worker may have written since the
+            # unlocked read above, and saving a stale copy drops its entry.
+            manifest = self._load_versions(rwd)
+            manifest[pid] = entry
+            self._save_versions(rwd, manifest)
         if not pin.usable:
             logger.info(f"[ver] {pid} {record.get('title','')[:55]} -> "
                         f"{pin.status.upper()}: {pin.note}")
@@ -525,15 +538,16 @@ class FullTextFetcher:
         pass and fetched again, every time.
         """
         rwd, _, _ = self._dirs(data_dir, submission_id)
-        manifest = self._load_versions(rwd)
-        entry = manifest.get(paper_id)
-        if not entry or not pdf_path.exists():
-            return ""
-        digest = self._sha256(pdf_path)
-        entry["doc_sha256"] = digest
-        entry["downloaded_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
-        manifest[paper_id] = entry
-        self._save_versions(rwd, manifest)
+        with self._MANIFEST_LOCK:
+            manifest = self._load_versions(rwd)
+            entry = manifest.get(paper_id)
+            if not entry or not pdf_path.exists():
+                return ""
+            digest = self._sha256(pdf_path)
+            entry["doc_sha256"] = digest
+            entry["downloaded_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            manifest[paper_id] = entry
+            self._save_versions(rwd, manifest)
         return digest
 
     def _apply_version_abstracts(self, rwd: Path, ranked: list, manifest: dict) -> None:
@@ -706,15 +720,16 @@ class FullTextFetcher:
         # stale nougat dump be served next to a freshly parsed grobid one.
         try:
             rwd, _, _ = self._dirs(data_dir, submission_id)
-            manifest = self._load_versions(rwd)
-            entry = manifest.get(paper_id)
-            if entry is not None:
-                entry["parsed_from_sha256"] = self._sha256(pdf_path)
-                entry["parsed_text_path"] = out_path.relative_to(rwd).as_posix()
-                entry["parsed_text_sha256"] = self._sha256(out_path)
-                entry["parsed_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
-                manifest[paper_id] = entry
-                self._save_versions(rwd, manifest)
+            with self._MANIFEST_LOCK:
+                manifest = self._load_versions(rwd)
+                entry = manifest.get(paper_id)
+                if entry is not None:
+                    entry["parsed_from_sha256"] = self._sha256(pdf_path)
+                    entry["parsed_text_path"] = out_path.relative_to(rwd).as_posix()
+                    entry["parsed_text_sha256"] = self._sha256(out_path)
+                    entry["parsed_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+                    manifest[paper_id] = entry
+                    self._save_versions(rwd, manifest)
         except Exception as e:
             logger.info(f"[parse] {paper_id}: could not record provenance ({type(e).__name__})")
         logger.info(f"[parse] {paper_id} -> ok ({len(text)} chars)  [{time.time()-t0:.1f}s]")

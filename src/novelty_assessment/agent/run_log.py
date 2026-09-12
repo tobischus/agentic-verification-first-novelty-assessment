@@ -48,26 +48,43 @@ def _short(digest: str) -> str:
     return digest[:12]
 
 
-def git_commit(repo_root: Path) -> dict:
-    """The commit the run executed at, and whether the tree was modified.
+def git_commit(repo_root: Path, save_diff_to: Optional[Path] = None) -> dict:
+    """The commit the run executed at, and the edits on top of it.
 
     A commit alone is misleading in a working repository: most runs here happen on an
-    edited tree, and reporting only the hash would claim a reproducibility the files do
-    not have.
+    edited tree, so the hash names code that was not the code that ran. Recording only
+    `dirty: true` states the problem without fixing it, so the uncommitted diff is saved
+    beside the log and hashed -- two runs whose diff hashes match really did run the same
+    source, committed or not.
     """
     def run(*args) -> str:
         try:
             return subprocess.run(args, cwd=str(repo_root), capture_output=True,
-                                  text=True, timeout=10).stdout.strip()
+                                  text=True, timeout=20).stdout
         except Exception:
             return ""
-    commit = run("git", "rev-parse", "HEAD")
-    return {
+    commit = run("git", "rev-parse", "HEAD").strip()
+    status = run("git", "status", "--porcelain").strip()
+    info = {
         "commit": commit,
         "short": commit[:10],
-        "branch": run("git", "rev-parse", "--abbrev-ref", "HEAD"),
-        "dirty": bool(run("git", "status", "--porcelain")),
+        "branch": run("git", "rev-parse", "--abbrev-ref", "HEAD").strip(),
+        "dirty": bool(status),
     }
+    if not status:
+        return info
+    diff = run("git", "diff", "HEAD")
+    info["dirty_files"] = [ln[3:] for ln in status.splitlines() if ln[3:]]
+    info["diff_sha256"] = sha256_text(diff)
+    if save_diff_to is not None and diff:
+        try:
+            save_diff_to.parent.mkdir(parents=True, exist_ok=True)
+            save_diff_to.write_text(diff, encoding="utf-8")
+            info["diff_path"] = save_diff_to.name
+            info["diff_chars"] = len(diff)
+        except Exception:
+            pass
+    return info
 
 
 def prompt_hashes(module) -> dict:
@@ -125,22 +142,44 @@ class RunLog:
     def register_context(self, kind: str, text: str, **meta) -> str:
         """Record a block of text that will be sent to a model; return its id.
 
-        The id comes from the content, so it is stable across runs and cannot be
-        reused by a different selection. The text itself is NOT stored: it is already
-        on disk in its source documents, and copying it here would turn a provenance
-        record into a second, diverging copy of the corpus.
+        The id comes from the content, so it is stable across runs and cannot be reused
+        by a different selection. The text is written out beside the log as well: a hash
+        proves two runs saw the same context but reconstructs nothing, and the selection
+        cannot be rebuilt from the source documents either, because WHICH slice was taken
+        is exactly what the record exists to preserve. Snapshots can be turned off with
+        NOVELTY_RUNLOG_SNAPSHOTS=0 where the disk cost is not wanted (~250 KB a run).
         """
         digest = sha256_text(text or "")
         cid = f"{kind}:{_short(digest)}"
         if cid not in self.contexts:
-            self.contexts[cid] = {
+            entry = {
                 "id": cid,
                 "kind": kind,
                 "sha256": digest,
                 "chars": len(text or ""),
                 **meta,
             }
+            path = self._snapshot(cid, text)
+            if path:
+                entry["snapshot_path"] = path
+            self.contexts[cid] = entry
         return cid
+
+    def _snapshot(self, cid: str, text: str) -> str:
+        """Write one context to disk; returns the path relative to the log directory."""
+        if os.getenv("NOVELTY_RUNLOG_SNAPSHOTS", "1").strip().lower() in ("0", "false", "no"):
+            return ""
+        try:
+            rel = Path("contexts") / self.run_id / f"{cid.replace(':', '_')}.txt"
+            out = self._log_dir() / rel
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(text or "", encoding="utf-8")
+            return rel.as_posix()
+        except Exception:
+            return ""
+
+    def _log_dir(self) -> Path:
+        return Path(self.data_dir) / self.submission_id / "run_logs"
 
     # ---------------------------- comparisons ----------------------------- #
 
@@ -167,6 +206,62 @@ class RunLog:
             "missing_versions": p.get("missing_versions", []),
             "parsed_text_path": p.get("parsed_text_path", ""),
             "parsed_text_sha256": p.get("parsed_text_sha256", ""),
+        })
+
+    def paper_outcome(self, paper_id: str, comp: dict, pool_entry: dict = None) -> None:
+        """Everything already recorded about one paper, exported unshortened.
+
+        The reasoning was never missing -- the loop writes a turn-by-turn trace and the
+        checker returns its own verdict with the pairs it relied on -- but only the last
+        conflict survived into the export, so a reader could see THAT a paper ended in
+        disagreement and not which evidence caused it or what the second pass changed.
+        Nothing here is new information; it is the existing trace and the existing
+        verdicts, carried through instead of collapsed.
+        """
+        c = comp or {}
+        diag = c.get("map_diag") or {}
+        prov = self.comparisons.setdefault(paper_id, {"paper_id": paper_id})
+        if pool_entry:
+            self.paper_source(paper_id, pool_entry)
+
+        # How this paper ended, as one of four states rather than as several flags a
+        # reader has to combine.
+        if diag.get("call_failed"):
+            state = "technical_error"
+        elif c.get("unresolved") or c.get("insufficient"):
+            state = "budget_exhausted"
+        elif c.get("dismissed") or (c.get("map_diag") or {}).get("dismissed"):
+            state = "dismissed"
+        elif c.get("overlap_degree"):
+            state = "checked"
+        else:
+            state = "not_compared"
+
+        prov.update({
+            "final_state": state,
+            "final_comparison": {
+                "overlap_degree": c.get("overlap_degree", ""),
+                "refutation_status": c.get("refutation_status", ""),
+                "assessment": c.get("assessment", ""),
+                "what_is_shared": c.get("what_is_shared", ""),
+                "submission_delta": c.get("submission_delta", ""),
+                "brief_note": c.get("brief_note", ""),
+            },
+            # The semantic proposal BEFORE the evidence map saw it: the pair of values is
+            # what shows whether grounding changed the reading or only confirmed it.
+            "comparison_proposal": c.get("comparison_proposal") or {},
+            "evidence_check": c.get("evidence_check") or {},
+            "evidence_pairs": c.get("evidence_pairs") or [],
+            "map_diag": {k: v for k, v in diag.items() if k != "loop"},
+            "unresolved_deficit": c.get("unresolved_deficit", ""),
+            "unresolved_reason": c.get("unresolved_reason", ""),
+            "paper_state": c.get("paper_state", ""),
+            "sections_used": c.get("sections_used", []),
+            "fulltext_fetch_status": c.get("fulltext_fetch_status", ""),
+            # The loop's own turn-by-turn record, complete and unshortened: proposed vs
+            # executed action, why each read was asked for, the degree each round
+            # proposed, what the checker said, and the re-entry reason.
+            "decision_trace": list(diag.get("loop") or []),
         })
 
     def round_contexts(self, paper_id: str, turn: int, **context_ids) -> None:
@@ -224,6 +319,19 @@ class RunLog:
                 "state": "not_admissible", "reason": f"version {status}",
             })
 
+        # Every counted paper must be findable here by id and final state. n_compared
+        # counted the ledger while prior_work only held papers that reached a comparison
+        # call, so a paper dismissed before one was counted and then absent -- the two
+        # numbers disagreed with no way to see which paper the difference was.
+        for c in comparisons or []:
+            pid = c.get("paper_id")
+            if pid and pid not in self.comparisons:
+                self.paper_outcome(pid, c)
+        by_state = {}
+        for prov in self.comparisons.values():
+            st = prov.get("final_state") or "not_compared"
+            by_state[st] = by_state.get(st, 0) + 1
+
         self.outcome = {
             "claim_verdict": verdict,
             "stop_reason": stop_reason,
@@ -232,6 +340,8 @@ class RunLog:
             # accepted -- not merely that the loop stopped.
             "review_complete": not open_papers,
             "n_compared": len(comparisons or []),
+            "n_papers_recorded": len(self.comparisons),
+            "papers_by_state": by_state,
             "open_papers": open_papers,
             "finished_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         }
@@ -254,7 +364,7 @@ class RunLog:
 
     def write(self) -> Optional[Path]:
         try:
-            d = Path(self.data_dir) / self.submission_id / "run_logs"
+            d = self._log_dir()
             d.mkdir(parents=True, exist_ok=True)
             p = d / f"{self.claim_id}_{self.run_id}.json"
             p.write_text(json.dumps(self.to_dict(), ensure_ascii=False, indent=1),
