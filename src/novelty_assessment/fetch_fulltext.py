@@ -185,6 +185,16 @@ class FullTextFetcher:
         """
         pid, title = paper["paper_id"], paper.get("title", "")
         dest = pdfs_dir / f"{pid}.pdf"
+
+        # No pin, with the check in force, means no established date -- and a caller that
+        # forgot to pin should not be handed a document as though one had been checked.
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "retrieval"))
+        import paper_versions as pv
+        if not pin and pv.enforcement_enabled():
+            logger.info(f"  refusing to fetch {pid} without a version verdict "
+                        f"(resolve it first, or set NOVELTY_VERSION_PINNING=0) | {title[:45]}")
+            return False
+
         if dest.exists():
             if self._is_valid_pdf(dest):
                 # A file being present says nothing about WHICH document it is. Callers
@@ -404,8 +414,29 @@ class FullTextFetcher:
             return {}
 
         manifest = self._load_versions(rwd)
-        todo = [pid for pid in paper_ids
-                if force or pid not in manifest or not manifest[pid].get("resolved_at")]
+        gap = pv.DEFAULT_MIN_GAP_DAYS
+
+        def stale(pid: str) -> bool:
+            """Is the recorded verdict still an answer to the question being asked?
+
+            A pin says "this version is admissible against THAT cutoff". Change the
+            submission's date -- a corrected metadata field, a resubmission -- or the
+            required gap, and the recorded answer is about a question nobody is asking
+            any more, while still looking settled. Entries from before these two were
+            recorded (no submission_date on file) are re-resolved for the same reason.
+            """
+            e = manifest.get(pid)
+            if not e or not e.get("resolved_at"):
+                return True
+            return (e.get("submission_date") != str(sub_date)
+                    or int(e.get("min_gap_days") or -1) != gap)
+
+        todo = [pid for pid in paper_ids if force or stale(pid)]
+        requestioned = [pid for pid in todo
+                        if (manifest.get(pid) or {}).get("resolved_at") and not force]
+        if requestioned:
+            logger.info(f"cutoff changed since {len(requestioned)} pin(s) were recorded "
+                        f"-- re-resolving them against {sub_date} / {gap}d")
         logger.info(f"pinning versions against submission date {sub_date} "
                     f"({len(todo)} to resolve, {len(paper_ids) - len(todo)} already recorded)")
 
@@ -418,10 +449,16 @@ class FullTextFetcher:
             entry["resolved_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
             entry["record_date"] = rec.get("publication_date") or rec.get("year") or ""
             entry["title"] = rec.get("title", "")
-            # Keep any hash from a previous download only if the version is unchanged.
+            # Carry the download/parse provenance across ONLY while it still describes
+            # the same document. A re-resolution that lands on a different version must
+            # not inherit the old file's hashes, or the cached PDF and its parsed text
+            # would pass the very checks that exist to catch them.
             old = manifest.get(pid) or {}
             if old.get("version") == entry.get("version") and old.get("doc_sha256"):
-                entry["doc_sha256"] = old["doc_sha256"]
+                for k in ("doc_sha256", "downloaded_at", "parsed_from_sha256",
+                          "parsed_at", "parsed_text_path", "parsed_text_sha256"):
+                    if old.get(k):
+                        entry[k] = old[k]
             manifest[pid] = entry
 
             title = rec.get("title", "")[:55]
@@ -456,12 +493,17 @@ class FullTextFetcher:
         pid = record.get("paper_id") or ""
         rwd, _, _ = self._dirs(data_dir, submission_id)
         manifest = self._load_versions(rwd)
-        if manifest.get(pid, {}).get("resolved_at"):
-            return manifest[pid]
-
         sub_date = self._submission_date(data_dir, submission_id)
         if not sub_date or not pid:
             return {}
+
+        # Same staleness rule as resolve_versions: a recorded verdict counts only while
+        # it answers the cutoff currently in force.
+        prev = manifest.get(pid) or {}
+        if (prev.get("resolved_at")
+                and prev.get("submission_date") == str(sub_date)
+                and int(prev.get("min_gap_days") or -1) == pv.DEFAULT_MIN_GAP_DAYS):
+            return prev
         pin = pv.resolve_version(record, sub_date)
         entry = pin.to_dict()
         entry["resolved_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -569,7 +611,10 @@ class FullTextFetcher:
             # a journal article, say -- is admissible and has no version-bound URL to
             # give, because its source publishes no version history; testing for a URL
             # skipped every one of those, which is most non-arXiv prior work.
-            if pin_versions and pin and pin.get("status") not in self.USABLE_STATUSES:
+            #
+            # A MISSING entry is not a pass either: with the check in force, a paper that
+            # resolution never reached is exactly the paper whose date nobody established.
+            if pin_versions and pin.get("status") not in self.USABLE_STATUSES:
                 # Pinning ran and could not settle on a version. Not an error to retry:
                 # a decision, and it stands until the record or the source changes.
                 results[pid] = False
@@ -652,16 +697,21 @@ class FullTextFetcher:
         if len(text) < 500:
             logger.info(f"[parse] {paper_id} -> parse_empty ({len(text)} chars)")
             return "parse_empty"
-        (ft_dir / f"{paper_id}.txt").write_text(text, encoding="utf-8")
-        # Bind the text to the exact PDF it came out of. Readers check this against the
-        # manifest's current hash, so a text cannot outlive the document it describes --
-        # which is what happened when a version change replaced the PDF underneath it.
+        out_path = ft_dir / f"{paper_id}.txt"
+        out_path.write_text(text, encoding="utf-8")
+        # Name the file, hash the file, and hash the PDF it came out of. All three,
+        # because "this paper's text is current" is not the same claim as "THIS FILE is
+        # the current text": several parsers write to different paths for one paper and
+        # the readers take whichever they find first, so a per-paper flag still let a
+        # stale nougat dump be served next to a freshly parsed grobid one.
         try:
             rwd, _, _ = self._dirs(data_dir, submission_id)
             manifest = self._load_versions(rwd)
             entry = manifest.get(paper_id)
             if entry is not None:
                 entry["parsed_from_sha256"] = self._sha256(pdf_path)
+                entry["parsed_text_path"] = out_path.relative_to(rwd).as_posix()
+                entry["parsed_text_sha256"] = self._sha256(out_path)
                 entry["parsed_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
                 manifest[paper_id] = entry
                 self._save_versions(rwd, manifest)

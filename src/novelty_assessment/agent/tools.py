@@ -18,6 +18,7 @@ honest:
 The gate policy itself (accept/reject + escalation messages) lives in
 claim_agent.py; the toolbox only supplies the signals.
 """
+import hashlib
 import json
 import threading
 from datetime import datetime
@@ -136,6 +137,13 @@ class ClaimToolbox:
             "retrievals": [],    # [{query, n_new, added_ids}]
             "trajectory": [],    # compact action log (no raw reasoning)
         }
+        # Papers the version gate kept out, recorded now that there is a ledger to record
+        # into: the pool is built before this point, so the gate buffers its reasons
+        # rather than logging into a structure that does not exist yet.
+        for note in getattr(self, "_version_gate_notes", []):
+            self._log("version_gate", note)
+        self._version_gate_notes = []
+
         # section-based understanding of what the SUBMISSION does for this claim
         # (verified-quote segments), built once and reused across every comparison
         self.claim_realization = []
@@ -165,6 +173,21 @@ class ClaimToolbox:
         return datetime.now().year
 
     def _load_intro(self, pid: str) -> str:
+        """The stored introduction, but only where it can be tied to the pinned document.
+
+        An intro file is a parsed extract like any other, written by an earlier step from
+        whatever PDF was on disk then -- and it is used as the stand-in whenever full text
+        is missing, which is exactly when it carries the most weight. Serving one of
+        unknown origin beside a version-pinned full text would reopen the hole at the
+        fallback: the review would quote an older or newer document than the one it
+        claims to be reading. With the check in force it is used only while the manifest
+        vouches for its source PDF, and re-extraction is preferred over a guess.
+        """
+        entry = self._versions_manifest().get(pid) or {}
+        if self._version_enforcement():
+            recorded = entry.get("intro_from_sha256")
+            if not recorded or recorded != entry.get("doc_sha256"):
+                return ""
         for rel in (f"introductions/{pid}_intro.txt", f"ours/related_papers/{pid}_intro.txt"):
             p = self.sub_dir / rel
             if p.exists():
@@ -174,27 +197,114 @@ class ClaimToolbox:
     def _versions_manifest(self) -> dict:
         """related_work_data/versions.json -- which version each paper is pinned to.
 
-        Read once and cached: every pool paper consults it, and it does not change while
-        a claim runs.
+        Read once and cached: every pool paper consults it, and it changes only where
+        this class itself resolves a pin (which drops the cache).
         """
         if getattr(self, "_versions_cache", None) is None:
             self._versions_cache = self._load_json(
                 self.sub_dir / "related_work_data" / "versions.json") or {}
         return self._versions_cache
 
-    def _load_fulltext_file(self, pid: str) -> str:
-        """The parsed text of the PINNED version, or nothing.
+    @staticmethod
+    def _version_enforcement() -> bool:
+        """Is the temporal check in force here? (NOVELTY_VERSION_PINNING, default on.)"""
+        try:
+            import sys
+            sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "retrieval"))
+            import paper_versions as pv
+            return pv.enforcement_enabled()
+        except Exception:
+            # The check cannot be performed, so it cannot be claimed. Enforcing is the
+            # safe direction: a paper stays out rather than entering unverified.
+            return True
 
-        A parsed text is only evidence about the document it was parsed from, so it is
-        accepted only while the manifest says that document is still the one on disk.
-        Without this check a text left over from an earlier version keeps being read
-        after the PDF under it was replaced -- and nougat's output is tried first, so the
-        stale file wins over the fresh one.
+    def _resolve_missing_pin(self, pid: str, record: dict) -> dict:
+        """Pin a paper that reaches the pool without a verdict, and remember the answer.
+
+        Costs one or two arXiv calls the first time a submission is opened and nothing
+        afterwards, since the manifest persists. Failing to reach the source returns an
+        empty verdict, which the caller treats as "not established" -- not as consent.
+        """
+        try:
+            import sys
+            sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+            from fetch_fulltext import FullTextFetcher
+
+            fetcher = FullTextFetcher(self.grobid_server)
+            entry = fetcher.pin_for_record(self.data_dir, self.submission_id, {
+                "paper_id": pid,
+                "title": record.get("title", ""),
+                "externalIds": record.get("externalIds", {}),
+                "doi": record.get("doi"),
+                "publication_date": record.get("publication_date", ""),
+                "year": record.get("year", ""),
+                "abstract": record.get("abstract", ""),
+            }) or {}
+            self._versions_cache = None      # manifest changed underneath us
+            return entry
+        except Exception as e:
+            self._note_version_gate(f"{pid}: could not resolve a version "
+                                    f"({type(e).__name__})")
+            return {}
+
+    def _note_version_gate(self, message: str) -> None:
+        """Record a gate decision, whether or not the ledger exists yet.
+
+        The pool is built inside __init__, before the ledger; writing straight to it
+        there raises, and swallowing that would lose exactly the decisions the gate is
+        supposed to make visible.
+        """
+        if getattr(self, "ledger", None) is not None:
+            self._log("version_gate", message)
+            return
+        if not hasattr(self, "_version_gate_notes"):
+            self._version_gate_notes = []
+        self._version_gate_notes.append(message)
+
+    def _load_fulltext_file(self, pid: str) -> str:
+        """The parsed text of the PINNED version, identified by name and hash, or nothing.
+
+        Three things have to line up, and each closes a different way of reading the
+        wrong document:
+          - the manifest NAMES the file (parsed_text_path), so the "try nougat, then
+            grobid, then mineru" search cannot serve a stale dump sitting beside the
+            fresh one -- a per-paper flag could not tell those apart, since it was true
+            of the paper while being false of that file;
+          - the file still hashes to what was recorded, so an edit or a half-written
+            file is not read as evidence;
+          - it was parsed from the PDF the manifest currently pins.
+        Anything missing means the provenance is not established, and the honest answer
+        is no text: the caller re-parses the verified PDF (ensure_fulltext), which
+        rebuilds all three. Only when no pinning has ever run does the old free search
+        apply, and that mode is explicit -- see paper_versions.enforcement_enabled.
         """
         entry = self._versions_manifest().get(pid) or {}
-        current, parsed_from = entry.get("doc_sha256"), entry.get("parsed_from_sha256")
-        if current and parsed_from and current != parsed_from:
+        if not entry and not self._version_enforcement():
+            return self._load_fulltext_unchecked(pid)
+
+        named = entry.get("parsed_text_path")
+        want_pdf = entry.get("doc_sha256")
+        parsed_from = entry.get("parsed_from_sha256")
+        want_text = entry.get("parsed_text_sha256")
+        if not (named and want_pdf and parsed_from and want_text):
+            return ""                      # provenance incomplete -> re-parse, don't guess
+        if parsed_from != want_pdf:
+            return ""                      # text predates the PDF now pinned
+        p = self.sub_dir / "related_work_data" / named
+        if not p.exists():
             return ""
+        text = p.read_text(encoding="utf-8")
+        if hashlib.sha256(text.encode("utf-8")).hexdigest() != want_text:
+            return ""                      # the named file is not the file that was recorded
+        return text
+
+    def _load_fulltext_unchecked(self, pid: str) -> str:
+        """The pre-pinning search: first parsed text found, whoever wrote it.
+
+        Only reachable with version enforcement switched off, which is a deliberate
+        operating mode (an offline rerun, a pool that predates any of this) rather than
+        something to fall into by accident.
+        """
         for rel in (
             f"related_work_data/nougat_output/{pid}.mmd",
             f"related_work_data/grobid_fulltext/{pid}.txt",
@@ -222,12 +332,25 @@ class ClaimToolbox:
         # Temporal admissibility, enforced where the paper becomes evidence rather than
         # only where its PDF is fetched. Skipping the download was not enough: a paper
         # ruled out as prior work still entered the pool here with its abstract -- the
-        # CURRENT abstract, which for a post-cutoff paper is post-cutoff text -- and with
-        # any full text left on disk from before pinning. An empty status means pinning
-        # never ran for this paper, which is not a finding either way, so it stays.
+        # CURRENT abstract, which for a post-cutoff paper is post-cutoff text.
+        #
+        # A MISSING verdict is not a pass. Letting an unpinned paper through was the
+        # same mistake one level up: the guarantee then covered only the papers whose
+        # resolution happened to succeed, which is the subset that needed it least.
+        # Unpinned papers are resolved here, once, and excluded if that still cannot
+        # establish them as prior work. Running without the check is a separate, stated
+        # mode (NOVELTY_VERSION_PINNING=0), not the default that silence falls back to.
         entry = self._versions_manifest().get(pid) or {}
         status = entry.get("status") or p.get("version_status") or ""
-        if status and status not in self._USABLE_VERSION_STATUSES:
+        if self._version_enforcement():
+            if not status:
+                entry = self._resolve_missing_pin(pid, p)
+                status = entry.get("status") or ""
+            if status not in self._USABLE_VERSION_STATUSES:
+                self._note_version_gate(f"{pid}: not usable as evidence "
+                                        f"({status or 'unresolved'}) | {title[:50]}")
+                return
+        elif status and status not in self._USABLE_VERSION_STATUSES:
             return
 
         self.pool[pid] = {
