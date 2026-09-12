@@ -259,7 +259,7 @@ function EvidencePairs({
       {renderGroups(main, "main")}
 
       {additional.length > 0 && (
-        <details className="ev-additional-pairs">
+        <details className="ev-additional-pairs" open>
           <summary>
             {additional.length} additional grounded candidate
             {additional.length === 1 ? "" : "s"} not used as material support
@@ -908,7 +908,7 @@ export default function ReviewWalkthrough({ submissionId, onFinish }) {
             </div>
           )}
           {(v.decision_trace || []).length > 0 && (
-            <details className="decision-trace">
+            <details className="decision-trace" open>
               <summary>Decision trace</summary>
 
               <div className="pt-summary">
@@ -929,7 +929,7 @@ export default function ReviewWalkthrough({ submissionId, onFinish }) {
                   </div>
                 ))}
 
-              <details className="raw-trace">
+              <details className="raw-trace" open>
                 <summary>Full audit trace</summary>
                 {(v.decision_trace || []).map((line, i) => (
                   <div key={i}>{line}</div>
