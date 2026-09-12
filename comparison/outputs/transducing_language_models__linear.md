@@ -51,36 +51,35 @@ Evidence in paper:
 
 24 papers were compared against the claims above.
 
-- Automata-based constraints for language model decoding — Koo et al. · 2024 — partial overlap
-- Differentiable Weighted Finite-State Transducers — 2020 — partial overlap
-- Efficient Guided Generation for Large Language Models — Willard et al. · 2023 — partial overlap
-- From Language Models over Tokens to Language Models over Characters — Vieira et al. · 2024 — substantial overlap
-- How to Compute the Probability of a Word — Pimentel et al. · 2024 — partial overlap
-- Language Models over Canonical Byte-Pair Encodings — Vieira et al. · 2025 — substantial overlap
-- Leading Whitespaces of Language Models’ Subword Vocabulary Pose a Confound for Calculating Word Probabilities — Oh et al. · 2024 — partial overlap
-- Neural Finite-State Transducers: Beyond Rational Relations — Lin et al. · 2019 — partial overlap
-- Neural Grammatical Error Correction with Finite State Transducers — Stahlberg et al. · 2019 — partial overlap
-- Sampling from Your Language Model One Byte at a Time — Hayase et al. · 2025 — substantial overlap
-- Sequential Monte Carlo Steering of Large Language Models using Probabilistic Programs — Lew et al. · 2023 — partial overlap
-- Understanding and Mitigating Tokenization Bias in Language Models — Phan et al. · 2024 — substantial overlap
-- Weighting Finite-State Transductions With Neural Context — Rastogi et al. · 2016 — partial overlap
-- Where is the signal in tokenization space? — Geh et al. · 2024 — partial overlap
-- Analyzing Cognitive Plausibility of Subword Tokenization — Beinborn et al. · 2023
-- Effect of tokenization on transformers for biological sequences — Dotan et al. · 2023
-- Effective Large Language Model Adaptation for Improved Grounding and Citation Generation — 2023
-- Formalizing BPE Tokenization — Berglund et al. · 2023
-- Improving Low-Resource Morphological Learning with Intermediate Forms from Finite State Transducers — 2019
-- Model Decides How to Tokenize: Adaptive DNA Sequence Tokenization with MxDNA — Qiao et al. · 2024
-- Neural Machine Translation of Rare Words with Subword Units — Sennrich et al. · 2015
-- Speech Recognition using Weighted Finite-State Transducers — 2022
-- SQL-PaLM: Improved Large Language Model Adaptation for Text-to-SQL (extended) — 2023
-- Syntactic Control of Language Models by Posterior Inference — Xefteri et al. · 2025
+| Paper | Claim 1 | Claim 2 | Claim 3 | Claim 4 |
+|---|---|---|---|---|
+| Automata-based constraints for language model decoding — Koo et al. · 2024 | partial overlap · material evidence | superficial · material evidence | superficial · insufficient evidence | superficial · nonmaterial |
+| From Language Models over Tokens to Language Models over Characters — Vieira et al. · 2024 | partial overlap · material evidence | partial overlap · material evidence | partial overlap · material evidence | partial overlap · material evidence |
+| How to Compute the Probability of a Word — Pimentel et al. · 2024 | partial overlap · material evidence | partial overlap · material evidence | none · insufficient evidence | partial overlap · material evidence |
+| Language Models over Canonical Byte-Pair Encodings — Vieira et al. · 2025 | partial overlap · material evidence | superficial · material evidence | none · insufficient evidence | superficial · material evidence |
+| Leading Whitespaces of Language Models’ Subword Vocabulary Pose a Confound for Calculating Word Probabilities — Oh et al. · 2024 | superficial · material evidence | superficial · insufficient evidence | none · insufficient evidence | partial overlap · insufficient evidence |
+| Sampling from Your Language Model One Byte at a Time — Hayase et al. · 2025 | partial overlap · material evidence | partial overlap · material evidence | partial overlap · material evidence | partial overlap · material evidence |
+| Syntactic Control of Language Models by Posterior Inference — Xefteri et al. · 2025 | none · insufficient evidence | none · insufficient evidence | none · insufficient evidence | partial overlap · material evidence |
+| Understanding and Mitigating Tokenization Bias in Language Models — Phan et al. · 2024 | superficial · material evidence | partial overlap · material evidence | superficial · insufficient evidence | partial overlap · material evidence |
+| Where is the signal in tokenization space? — Geh et al. · 2024 | superficial · nonmaterial | partial overlap · insufficient evidence | none · insufficient evidence | none · insufficient evidence |
+| Analyzing Cognitive Plausibility of Subword Tokenization — Beinborn et al. · 2023 | superficial · insufficient evidence | superficial · insufficient evidence | none · insufficient evidence | none · insufficient evidence |
+| Differentiable Weighted Finite-State Transducers — 2020 | superficial · insufficient evidence | superficial · material evidence | none · insufficient evidence | none · insufficient evidence |
+| Effect of tokenization on transformers for biological sequences — Dotan et al. · 2023 | superficial · insufficient evidence | none · insufficient evidence | none · insufficient evidence | superficial · nonmaterial |
+| Effective Large Language Model Adaptation for Improved Grounding and Citation Generation — 2023 | none · insufficient evidence | none · insufficient evidence | none · insufficient evidence | superficial · nonmaterial |
+| Efficient Guided Generation for Large Language Models — Willard et al. · 2023 | superficial · nonmaterial | superficial · nonmaterial | superficial · insufficient evidence | none · insufficient evidence |
+| Formalizing BPE Tokenization — Berglund et al. · 2023 | superficial · insufficient evidence | superficial · nonmaterial | superficial · material evidence | superficial · insufficient evidence |
+| Improving Low-Resource Morphological Learning with Intermediate Forms from Finite State Transducers — 2019 | superficial · material evidence | none · insufficient evidence | none · insufficient evidence | none · insufficient evidence |
+| Model Decides How to Tokenize: Adaptive DNA Sequence Tokenization with MxDNA — Qiao et al. · 2024 | none · insufficient evidence | none · insufficient evidence | none · insufficient evidence | superficial · material evidence |
+| Neural Finite-State Transducers: Beyond Rational Relations — Lin et al. · 2019 | superficial · nonmaterial | superficial · material evidence | superficial · insufficient evidence | superficial · insufficient evidence |
+| Neural Grammatical Error Correction with Finite State Transducers — Stahlberg et al. · 2019 | superficial · nonmaterial | superficial · nonmaterial | superficial · insufficient evidence | superficial · nonmaterial |
+| Neural Machine Translation of Rare Words with Subword Units — Sennrich et al. · 2015 | superficial · nonmaterial | none · insufficient evidence | none · insufficient evidence | superficial · nonmaterial |
+| Sequential Monte Carlo Steering of Large Language Models using Probabilistic Programs — Lew et al. · 2023 | none · insufficient evidence | superficial · nonmaterial | none · insufficient evidence | superficial · material evidence |
+| Speech Recognition using Weighted Finite-State Transducers — 2022 | superficial · insufficient evidence | superficial · insufficient evidence | none · insufficient evidence | superficial · insufficient evidence |
+| Weighting Finite-State Transductions With Neural Context — Rastogi et al. · 2016 | superficial · material evidence | superficial · material evidence | superficial · insufficient evidence | superficial · nonmaterial |
+| SQL-PaLM: Improved Large Language Model Adaptation for Text-to-SQL (extended) — 2023 | none · insufficient evidence | none · insufficient evidence | none · insufficient evidence | none · insufficient evidence |
+Legend: Cells show overlap degree and evidence status: material = meaningful shared contribution supported; nonmaterial = examined correspondences do not support meaningful contribution overlap; insufficient = inconclusive evidence; no evidence check = no check recorded. Missing support is not proof of no overlap. Conflicting assessments are identified under Evidence limits.
 
 ## Review
-
-### Overall assessment
-
-Within the examined literature, the submission presents a mix of genuinely novel and challenged contributions. The general framework for transduced language models (Claim 1) and the theoretical results on sufficient transducer-level conditions for finite prefix decompositions (Claim 3) are not challenged by any prior work, with the closest related papers only partially overlapping and lacking the submission's generality and theoretical depth. However, the core algorithmic contributions for composing language models with FSTs and marginalizing over source strings (Claim 2) are substantially present in prior works such as "Language Models over Canonical Byte-Pair Encodings," "From Language Models over Tokens to Language Models over Characters," and "Understanding and Mitigating Tokenization Bias in Language Models." The submission does extend these ideas to arbitrary FSTs and introduces new algorithmic techniques, but the main idea is not novel. Similarly, the demonstration of inference-time adaptation to new output units (Claim 4) is substantially covered for character/byte adaptation by "From Language Models over Tokens to Language Models over Characters," though the submission generalizes to additional domains like words and amino acids. Overall, the submission's primary novelty lies in its generalization to arbitrary FST-based transformations and the associated theoretical guarantees, while its core algorithmic and adaptation mechanisms are challenged by prior work in the context of tokenization and character-level adaptation.
 
 ---
 
@@ -88,9 +87,35 @@ Within the examined literature, the submission presents a mix of genuinely novel
 
 The paper introduces transduced language models as a general framework for transforming language models with deterministic string-to-string transformations represented by finite-state transducers.
 
-**Verdict:** not challenged in the examined literature
+#### Claim-level conclusion
 
-The claim is not challenged by any examined prior work. The closest examined prior works, such as "Automata-based constraints for language model decoding," "Neural Finite-State Transducers: Beyond Rational Relations," and "From Language Models over Tokens to Language Models over Characters," all share partial overlap with the submission in their use of finite-state transducers (FSTs) and composition with language models. However, each is limited in scope: for example, they focus on specific applications like detokenization, canonicalization, or neural scoring, and do not present a general framework for arbitrary deterministic string-to-string transformations or the associated algorithms for marginalization and autoregressive modeling as claimed by the submission. The evidence is strong, as it is based on full-text comparisons and detailed, verified overlap analysis. Therefore, the novelty of this general framework holds within the examined literature.
+**Assessment:** not challenged in the examined literature. No comparison in the examined candidate set was found to substantially or equivalently overlap this claim under material evidence. This does not establish novelty across the wider literature -- only that none was found here.
+
+**Main overlap:** Automata-based constraints for language model decoding (Both works use deterministic string-to-string finite-state transductions as a general computational mechanism around language models: the prior paper's detokenizing FST transforms token sequences into character strings and supports composition-based decoding.) [partial overlap · material]; From Language Models over Tokens to Language Models over Characters (Both papers construct a language model over transformed strings by applying a deterministic string-to-string mapping to a source language model, and both derive an autoregressive interface by decomposing or enumerating source prefixes that cover a target prefix.) [partial overlap · material]; Language Models over Canonical Byte-Pair Encodings (Both works transform a source language model using a deterministic finite-state representation of a string transformation or constraint, producing a new model over transformed or restricted strings.) [partial overlap · material]; Sampling from Your Language Model One Byte at a Time (Both works transform the interface of a language model through a deterministic string-to-string mapping and compute probabilities or next-symbol distributions conditioned on an output-string prefix by aggregating over compatible source/token strings.) [partial overlap · material]; How to Compute the Probability of a Word (Both works use deterministic string-to-string mappings to transform language-model probabilities and reason about the preimages or sets of source strings corresponding to a target word or sequence.) [partial overlap · material].
+
+**Remaining contribution relative to the strongest supported comparison(s):**
+
+- **Automata-based constraints for language model decoding:** The submission introduces transduced language models as a probabilistic framework in which an arbitrary deterministic FST transformation is applied to a source language model, together with prefix and conditional-prefix probability semantics, finite precover decompositions, algorithms for computing them, and conditions for finite computation.
+- **From Language Models over Tokens to Language Models over Characters:** The submission generalizes beyond token decoders and strict-prefix-monotone mappings to transformations represented by finite-state transducers, including non-prefix-monotone mappings, ε-transitions, remainders, quotient/remainder decompositions, finite-decomposition conditions, and general transducer-based algorithms.
+- **Language Models over Canonical Byte-Pair Encodings:** The submission generalizes beyond canonical BPE tokenization to arbitrary deterministic string-to-string finite-state transducers and develops the transduced-model probability, prefix-probability, precover decomposition, finite-decomposition conditions, and algorithms for autoregressive computation and generation.
+- **Sampling from Your Language Model One Byte at a Time:** The submission contributes a general transduced-language-model framework for arbitrary deterministic transformations represented by finite-state transducers, with formal prefix/precover probabilities, prefix decompositions into quotient and remainder, algorithms for computing them, correctness results, and conditions for finite computation.
+- **How to Compute the Probability of a Word:** The submission introduces the general transduced-language-model framework for arbitrary deterministic mappings represented by finite-state transducers.
+
+These are comparison-specific differences, not a synthesis across all prior work. Evidence supporting overlap does not automatically verify every stated difference or absence claim; see each comparison’s evidence assessment.
+
+**Evidence limits:** 10 of 24 comparisons have insufficient evidence. One comparison shows a conflict between the overlap assessment and evidence check: Weighting Finite-State Transductions With Neural Context was assessed as superficial while the evidence check found material overlap. This conflict remains unresolved. One comparison shows a conflict between the overlap assessment and evidence check: Improving Low-Resource Morphological Learning with Intermediate Forms from Finite State Transducers was assessed as superficial while the evidence check found material overlap. This conflict remains unresolved. One comparison shows a conflict between the overlap assessment and evidence check: Understanding and Mitigating Tokenization Bias in Language Models was assessed as superficial while the evidence check found material overlap. This conflict remains unresolved. One comparison shows a conflict between the overlap assessment and evidence check: Leading Whitespaces of Language Models’ Subword Vocabulary Pose a Confound for Calculating Word Probabilities was assessed as superficial while the evidence check found material overlap. This conflict remains unresolved. Insufficient evidence means the check could not settle the question, not that no overlap exists.
+
+**Coverage:** 24 comparisons processed, 24 with an evidence check: 9 material, 5 nonmaterial, 10 insufficient.
+
+#### What the submission does for this claim
+
+The submission defines a transduced language model by applying a deterministic string-to-string function represented by a finite-state transducer to a source language model. It provides the resulting probability and prefix-probability formulation, and explains that exact target probabilities require summing source strings in the target’s precover, while sampling remains efficient.
+
+“A transduced language model p Y arises from applying a string-to-string transformation f : X * → Y * , encoded by a transducer f, to a string drawn from a source language model p X . Formally, if X ∼ p X , then f (X) has the following probability mass function: where 2 ), we sum over the strings x such that f (x) = y.”
+
+It further supplies a general computational framework: decompose each precover into a finite prefix-free quotient and remainder when possible, then use this decomposition to compute prefix probabilities and enable left-to-right autoregressive generation. The result is exact under the stated finite-decomposition and exact-check conditions; sufficient transducer conditions include no ε-output cycles and safety of every state, while finite-state transducers remain limited to rational relations.
+
+“The conditions in Lemma 6.1 guarantee exact computation. In particular, these are satisfied by the transducers introduced in the experiments section ( §7): the token-to-byte transducer f α and the DNA-to-amino-acid transducer f dna2aa , whose quotients are finite and remainders empty, but not by the PTB transducer f ptb , whose quotients are infinite. The finiteness of decomposition is a property of the function f , not of any particular transducer encoding it.”
 
 #### Overlapping prior work
 
@@ -99,165 +124,190 @@ partial overlap · Koo et al. · 2024
 
 How this paper realizes the claim
 
-The paper presents a framework for constraining language model (LM) decoding to formal languages using automata theory, specifically finite-state automata (FSAs), finite-state transducers (FSTs), and push-down automata (PDAs).
+The paper constructs a deterministic finite-state transducer that maps token sequences to their detokenized character strings, and uses it to compose character-level constraints into token-level automata for constrained language-model decoding.
 
-“Our main contributions are primarily conceptual rather than empirical: 1. Identify an as-yet unnoticed connection between detokenization and transduction. 2. Solve the tokenization issues using this connection and operations on automata. 3. Define extensions that address practical problems of efficiency and convenience. ∗Equal contribution, alphabetical.”
+“Our first contribution is a reformulation of detokenization (i.e., the process of converting token sequences back into text) as an FST, using the following construction:”
 
-The paper introduces the use of FSTs to model detokenization as a string-to-string transformation, and composes these FSTs with FSAs or PDAs representing formal language constraints, enabling the LM to generate only valid outputs according to the constraints.
+“Our next contribution is a generic method for adapting any FSA from characters to tokens. Specifically, given a token vocabulary V and an FSA A that accepts character sequences, A′ = A ◦TV accepts essentially the same language as A, but in token form.”
 
-Quoted from the source but NOT confirmed verbatim:
-Our first contribution is a reformulation of detokenization (i.e., the process of converting token sequences back into text) as an FST, using the following construction: ... For compactness, common prefixes of the chains can be merged to form a trie-like structure, as in Figure 4; see Appendix B.1 for a proof of correctness.
+“Our key contribution is a reformulation of detokenization as an FST, which enables our other contributions by bringing the entire task of constrained decoding into the domain of automata. Although the problems raised by ambiguous and misaligned tokenizations are quite thorny, we derive simple, elegant, and highly-performant solutions by leveraging the considerable toolkit of automata theory.”
 
-The framework is general in that it allows any regular or deterministic context-free language constraint to be composed with the LM via FSTs, and the FSTs are used to bridge between token sequences and character-level constraints.
+Grounded evidence for the assessed overlap
 
-“This clean decomposition is only possible because FST-FSA composition provides a fast, automatic, and general method for joining the two halves. For example, alternative detokenization automata (see Section 4.3) can be slotted into TV without changing the rest of the system. Similarly, alternative constraint automata (see Section 3.1) can be substituted for AR and FST composition still works. 2.5 ## Extensions Our last contribution in this section is a set of regular expression extensions, written as specially-named capturing groups, that greatly increase the efficiency and expressiveness of the system.”
+Evidence check: material
+1 of 1 grounded candidates support the overlap
 
-However, the paper does not introduce a general framework for transforming arbitrary language models with arbitrary deterministic string-to-string transformations represented by FSTs. Rather, it focuses on using FSTs for detokenization and for adapting formal language constraints to the LM's tokenization.
+Pair 1 validly establishes substantive overlap in the current claim’s methodological contribution: both works apply a finite-state string-to-string transformation to language-model representations. The roles are compatible: the submission defines transformation of strings drawn from a source language model, while the prior paper formulates detokenization as an FST transformation of token sequences into text. This is a concrete shared mechanism, not merely a common topic or generic evaluation activity, and supports partial overlap. The pair does not establish equivalence of the broader contributions: it does not show that the prior paper defines the submission’s probabilistic transduced-language-model distribution, prefix or conditional-prefix semantics, finite precover theory, or corresponding probability-computation algorithms. Those distinctions qualify the proposed delta, but their absence from the pair is not a decision-blocking issue for the proposed partial degree. The pair is marked weaker, but it still directly supports the asserted narrower shared mechanism.
 
-Comparison with the submission
+Submission contribution span
+“A transduced language model p Y arises from applying a string-to-string transformation f : X * → Y * , encoded by a transducer f, to a string drawn from a source language model p X .”
 
-This paper introduces the use of FSTs to model detokenization and to adapt formal language constraints to the tokenization of language models, composing these with FSAs or PDAs to constrain LM outputs. While it shares the use of FSTs and composition with LMs, its scope is limited to detokenization and constraint adaptation, not to arbitrary deterministic string-to-string transformations of language models as a general framework. The submission's contribution is broader and more general, including algorithms for marginalization and autoregressive modeling, which are not present here. Thus, the overlap is partial, and the prior paper cannot refute the submission's claim.
+Pair 1: Both works contribute applying a finite-state string-to-string transformation to language-model representations, with the prior paper providing the narrower detokenization instance rather than a general transformed language-model framework.
 
-##### Neural Finite-State Transducers: Beyond Rational Relations
-partial overlap · Lin et al. · 2019
-
-How this paper realizes the claim
-
-The paper introduces neural finite state transducers (NFSTs), which are models that define joint and conditional probability distributions over pairs of strings using a finite-state transducer structure. The probability of a string pair is computed by marginalizing over all accepting paths in the FST, with each path scored by a neural network rather than fixed weights. The paper presents algorithms for training and inference for these models and demonstrates their effectiveness on transduction tasks.
-
-“We introduce neural finite state transducers (NFSTs), a family of string transduction models defining joint and conditional probability distributions over pairs of strings. The probability of a string pair is obtained by marginalizing over all its accepting paths in a finite state transducer. In contrast to ordinary weighted FSTs, however, each path is scored using an arbitrary function such as a recurrent neural network, which breaks the usual conditional independence assumption (Markov property).”
+The prior work states:
+“Our first contribution is a reformulation of detokenization (i.e., the process of converting token sequences back into text) as an FST, using the following construction:”
 
 Comparison with the submission
 
-The prior paper and the submission both use finite-state transducers to define probabilistic models over string pairs, and both involve marginalization over possible paths or source strings. However, the prior paper's main contribution is the introduction of neural finite-state transducers, where each path is scored by a neural network, and the focus is on joint and conditional modeling of string pairs. The submission, in contrast, introduces a general framework for transforming language models using deterministic FSTs, with a focus on composing a language model with a deterministic transformation and developing algorithms for efficient marginalization and autoregressive prediction. Thus, the overlap is partial: the prior paper covers some of the same ground in using FSTs for probabilistic modeling, but does not present the same framework or algorithms as the submission.
+The prior paper makes a meaningful concrete contribution involving deterministic FST-based transformation of language-model representations, so the relationship is more than topical or merely infrastructural. However, it does not introduce the submission's central probabilistic notion of a transduced language model or its methods for computing the transformed model's probabilities; those remain substantial distinct contributions.
 
 ##### From Language Models over Tokens to Language Models over Characters
 partial overlap · Vieira et al. · 2024
 
 How this paper realizes the claim
 
-The paper addresses the problem of converting token-level language models (LMs) into character-level LMs, motivated by practical issues such as the prompt boundary problem. It formalizes the process of generating character strings from a token-level LM using a decoding function (often deterministic) and provides algorithms for computing the probability of character strings and their prefixes under the induced character-level distribution.
+The paper develops a character-level language-model interface obtained by applying a token decoder κ to a token language model, with tokenization treated as a deterministic string transformation.
 
-“This paper presents algorithms for converting token-level language models to character-level ones. We present both exact and approximate algorithms. In the empirical portion of the paper, we benchmark the practical runtime and approximation quality.”
+“Strict-prefix monotonicity is the key structural property required by §3’s algorithms, as it allows us to replace an infinite sum with a finite sum in Proposition 1. We briefly mention an important special case.”
 
-The core technical contribution is the development of efficient algorithms to compute the probability of a character string (or prefix) under the induced character-level model, by summing over all token strings that decode to the given character string (or have it as a prefix). The paper introduces the notion of a 'covering' to efficiently enumerate these token strings and provides both exact and approximate methods for this computation.
+It defines a finite-style covering of a target character prefix and uses that covering to compute character-prefix probabilities and conditional generation.
 
-“Our method finds a set of token strings that form a covering, a key technical concept we introduce in this paper. We will provide the precise definition in due course; for now, we will illustrate the covering of Hello,␣worl: 5The misspelling is a testament to the extent to which the tokenized prompt is out-of-distribution.”
+“Next, we define the set of minimal prefix encodings of σ, which we call the covering of σ, C(σ) def= {ϕσ(δ) | δ ∈P(σ)}. A more convenient expression for the covering C(σ) of a 5 From Language Models over Tokens to Language Models over Characters string σ ∈Σ∗is equal to the following subset of ∆∗: C(σ) =      {ε} if σ = ε {δ1 ··· δM ∈∆+ :”
 
-The algorithms are developed for the case where the decoding function is strict-prefix monotone (e.g., BPE or WordPiece), which allows the infinite sum over token strings to be reduced to a finite computation. The paper does not generalize to arbitrary string-to-string transformations, but focuses on the specific case of tokenization/decoding functions used in language modeling.
+The paper then provides an enumeration algorithm, exact computation without pruning, and a beam-pruned approximation with stated complexity bounds. It does not itself present the broader finite-state-transducer framework for arbitrary deterministic string-to-string transformations; its transformation is a token decoder with stronger monotonicity assumptions.
 
-Comparison with the submission
+Grounded evidence for the assessed overlap
 
-This prior paper presents a specific instance of the claimed framework: composing a token-level language model with a deterministic decoding function to obtain a character-level model, and provides efficient algorithms for this case. However, it does not introduce a general framework for arbitrary deterministic string-to-string transformations via FSTs, nor does it provide algorithms for the general case. The submission extends the idea to a much broader class of transformations and formalizes the general framework, representing a significant delta beyond this prior work. The overlap is partial: the prior paper covers a special case, but not the general contribution claimed by the submission.
+Evidence check: material
+1 of 2 grounded candidates support the overlap
 
-##### Neural Grammatical Error Correction with Finite State Transducers
-partial overlap · Stahlberg et al. · 2019
+Pair 2 validly establishes a substantive shared component: both papers provide algorithms for computing transformed-model prefix probabilities and supporting autoregressive/conditional generation. This is more than a shared topic or generic activity and supports a partial overlap. It does not establish equivalence of the full frameworks or the submission’s general FST scope. Pair 1 is weaker and does not independently establish that the prior paper constructs a transformed language model: its prior-paper span only states that strict-prefix monotonicity is needed by its algorithms. Thus the specific assertion that both quoted spans directly establish the full source-model-plus-deterministic-mapping construction is not fully demonstrated by Pair 1, but that limitation does not block a partial-overlap determination based on Pair 2. The stated differences concerning non-prefix-monotone mappings, ε-transitions, remainders, and finite-decomposition conditions are not established by correspondence pairs and should remain qualified; they are not needed to support the partial degree.
 
-How this paper realizes the claim
+Submission contribution span
+“We develop a method in §4 that allows us to compute the sum in Eq. ( 3 ) in finite time for a general class of mappings, such as those mentioned in the introduction (i.e., normalizing text, inserting orthographic word boundaries, or converting DNA to amino-acid sequences).”
 
-This paper presents a method for grammatical error correction (GEC) that uses finite-state transducers (FSTs) to construct and constrain the hypothesis space of possible corrections. The FSTs are used to represent possible edits (confusion sets, edit operations) and to compose these with input sentences or SMT lattices, creating a structured search space for corrections.
+Pair 2: Both papers contribute algorithms for computing transformed-model prefix probabilities and thereby supporting an autoregressive interface, with the prior paper providing this computation specifically by enumerating token prefixes that cover a character prefix.
 
-“In this paper, we propose to construct a hypothesis space using standard FST operations like composition, and then constrain the output of a neural GEC system to that space. We study two different scenarios: In the ﬁrst scenario, we do not have access to annotated training data, and only use a small development set for tuning.”
-
-The paper further composes this FST-based hypothesis space with language models (both count-based and neural LMs), and uses the composed structure to rescore and constrain the outputs of neural models. The FSTs are used to encode possible string-to-string transformations (edits), but these are not arbitrary deterministic functions; rather, they are based on confusion sets and edit operations relevant to GEC.
-
-“We make extensive use of the FST operations available in OpenFST (Allauzen et al., 2007) like composition (denoted with the ◦-operator) and projection (denoted with Πinput(·) and Πoutput(·)) to build H. The process starts with an input lattice I.”
-
-The language model is composed with the FST to score hypotheses, but the framework is not presented as a general method for transforming arbitrary language models with arbitrary deterministic string-to-string FSTs. Instead, the FSTs are used to encode specific edit operations for GEC, and the language model is used to rescore the resulting hypotheses.
-
-Quoted from the source but NOT confirmed verbatim:
-To incorporate word-level language model scores we train a 5-gram count-based LM ... and convert it to an FST L using the OpenGrm NGram Library ... Our combined word-level scores can be expressed with the following transducer: Hword = B ◦P ◦L.
-
-The paper does not introduce a general framework for transduced language models as a composition of a language model with an arbitrary deterministic FST, nor does it provide algorithms for marginalizing over all source strings mapping to a given target prefix in the general sense. Its use of FSTs is specific to the GEC task and the structure of the edits/confusion sets.
+The prior work states:
+“This section gives algorithms for computing pΣ(σ), −→ pΣ(σ), −→ pΣ(σ′ | σ), −→ pΣ(EOS | σ), and conditional token generation.”
 
 Comparison with the submission
 
-This prior paper uses FSTs to encode edit operations and confusion sets for grammatical error correction, and composes these with language models to constrain and rescore hypotheses. However, its use of FSTs is specific to the GEC task and does not constitute a general framework for transforming language models with arbitrary deterministic FSTs. The submission's contribution is broader and more general, providing a framework and algorithms for composing any language model with any deterministic FST. Thus, the overlap is partial: the prior paper shares the idea of composing FSTs with LMs, but not the generality or the full framework of the submission.
+The prior paper makes a meaningful contribution overlapping with the submission: it already realizes transformed language modeling for token-to-character decoding and supplies algorithms for computing the resulting prefix probabilities. The overlap is partial rather than substantial because its decoder-specific, strict-prefix-monotone setting does not provide the submission's general FST framework or its treatment of non-monotone transformations and remainders. The submission retains a distinct central contribution by extending the construction to a substantially broader class of deterministic string-to-string transformations.
 
 ##### Language Models over Canonical Byte-Pair Encodings
 partial overlap · Vieira et al. · 2025
 
 How this paper realizes the claim
 
-The paper addresses the problem of language models assigning probability mass to noncanonical token strings under deterministic tokenization schemes such as byte-pair encoding (BPE). It proposes methods to ensure that only canonical token strings (those produced by the tokenizer) are assigned positive probability.
+The paper constructs canonicalized language models for byte-pair-encoded tokenizations, using the tokenizer's canonicality constraint to transform a base token language model into a distribution supported only on canonical token strings.
 
-“We present two approaches: (1) canonicality by conditioning, leveraging test-time inference strategies without additional training, and (2) canonicality by construction, a model parameterization that guarantees canonical outputs but requires training. We demonstrate that fixing canonicality mistakes improves the likelihood of held-out data for several models and corpora.”
+“The globally canonicalized language models gΣ and g are defined as the following probability distributions over Σ∗and ∆∗, respectively: gΣ(σ) def= g(τ(σ)) (6a) g(δ) def= Pr Y ∼p∆[Y = δ | Y ∈D] (6b) = PrY ∼p∆[Y = δ, Y ∈D] PrY ∼p∆[Y ∈D] (6c) = 1 Z p∆(δ)1{δ ∈D} (6d) where Z is the canonicality rate: Z def= Pr Y ∈p∆[Y ∈D] (6e) 6When the tokenization function τ is implemented as a finite-state transducer, we may derive an efficient finite-state automaton that describes the prefix language of its outputs.”
 
-The paper formalizes the tokenization process as a pair of deterministic functions (encoding and decoding), and defines the tokenized language model as the marginalization of a token-level model over all token strings that decode to a given character string.
+It also gives a locally constrained construction that modifies each next-token distribution according to whether the resulting prefix remains canonically tokenizable.
 
-“A tokenized language model is a language model pΣ over character strings Σ∗that is parameterized by a tokenlevel language model p∆over ∆∗and a decoding function κ: ∆∗→Σ∗. The tokenized language model defines the following probability distribution over Σ∗: pΣ(σ) def= X δ∈∆∗ 1{σ = κ(δ)} p∆(δ) (2) Notice that τ is conspicuously absent from this expression, as it is only part of the estimation process, which we characterize below.”
+“Our canonicalized architecture is a parametric family of language models {ℓθ}θ∈RD that is built on top of a base architecture {pθ}θ∈RD.”
 
-The paper develops algorithms for enforcing canonicality, including exact and approximate inference methods for sampling only canonical token strings, and analyzes their theoretical properties.
+“We define each ℓθ in terms of pθ in the following manner: ℓθ(δ) def= −→ ℓθ(EOS | δ) |δ| Y t=1 −→ ℓθ(δt | δ<t) (15a) where each −→ ℓθ(· | δ<t) is defined as one of the following distributions over ∆∪{EOS}: −→ ℓθ(δ′ | δ) def= −→ pθ(δ′ | δ) 1{δ·δ′ ∈−→ D} −→ ℓθ(δ) (15b) −→ ℓθ(EOS | δ) def= −→ pθ(EOS | δ) 1{δ ∈D} −→ ℓθ(δ) (15c) and −→ ℓθ(δ) ensures normalization: −→ ℓθ(δ) def= −→ pθ(EOS | δ) 1{δ ∈D} (15d) + X δ′′ −→ pθ(δ′′ | δ) 1{δ·δ′′ ∈−→ D} Much like the locally canonicalized model (Def.”
 
-“We describe two families of methods for doing so • Canonicality by conditioning: We explore efficient testtime inference methods for conditionally generating text that satisfies the canonicality constraint without retraining. • Canonicality by construction: We explore methods that impose canonicality constraints directly in the language model’s parameterized architecture and give a method to fine-tune its parameters. In addition to these novel methods, this paper presents the following contributions: • We prove that our methods can only improve the fit to the true distribution over tokens.”
+The paper represents canonical tokenizations with a finite-state automaton and discusses efficient canonicality checking, but it does not present a general framework for applying arbitrary deterministic string-to-string finite-state transformations to language models.
 
-The paper discusses the use of finite-state automata for efficient membership tests in the set of canonical token strings and their prefixes, but does not generalize to arbitrary string-to-string transductions beyond tokenization.
+Grounded evidence for the assessed overlap
 
-Comparison with the submission
+Evidence check: material
+1 of 1 grounded candidates support the overlap
 
-This prior paper presents a framework for composing language models with deterministic tokenization functions (such as BPE), and develops algorithms for enforcing canonicality by conditioning or construction. However, its scope is limited to tokenization and canonicalization, and does not introduce a general framework for arbitrary deterministic string-to-string transformations via finite-state transducers. The submission extends the idea to a broader class of transformations and provides a more general theoretical and algorithmic treatment. Thus, the overlap is partial: the prior paper covers a special case of the submission's framework, but not the general case.
+Pair 1 establishes substantive overlap in the current claim: both works construct a new language-model distribution by applying a string-level transformation or restriction to outputs of a source model. The submission explicitly uses deterministic finite-state string-to-string transformations, while the prior paper defines globally canonicalized distributions based on a canonical-tokenization mapping and finite-state canonicality machinery. These are compatible roles and show that the prior work supplies a meaningful, narrower instance of the claimed transformed-model construction, rather than merely sharing a topic or evaluation activity. The pair does not establish that the prior paper contains the submission's general transduced-language-model framework, preimage/prefix-decomposition algorithms, or broader transformation examples. Those submission-delta assertions are not independently evidenced here and should remain qualified, but their absence does not block the independently supported partial-overlap judgment.
 
-##### Understanding and Mitigating Tokenization Bias in Language Models
-partial overlap · Phan et al. · 2024
+Submission contribution span
+“A transduced language model p Y arises from applying a string-to-string transformation f : X * → Y * , encoded by a transducer f, to a string drawn from a source language model p X .”
 
-How this paper realizes the claim
+Pair 1: Both works define a new language model by transforming or restricting the outputs of a source language model through a string-level mapping; the prior paper provides a narrower canonical-tokenization instance rather than the submission’s general deterministic finite-state transducer framework.
 
-The paper studies the bias introduced by tokenization in language models and proposes algorithms to correct this bias, allowing a tokenized language model to simulate token-free behavior. The main technical contribution is the Maximum Prefix Correction (MPC) algorithm, which marginalizes over possible tokenizations to recover character-level probabilities from a model trained on tokenized data.
-
-“we propose a novel algorithm to obtain unbiased estimates from any language model trained on tokenized data. Our methods do not require finetuning the model, and the complexity, defined as the number of model runs, scales linearly with the sequence length in the case of MPE. As a result, we show that one can simulate token-free behavior from a tokenized language model. We empirically verify the correctness of our method through a Markov-chain setup, where it accurately recovers the transition probabilities, as opposed to the conventional method of directly prompting tokens into the language model.”
-
-“We present two novel algorithms to correct this bias for MPE and Byte-Pair-Encoding (BPE) respectively. Due to space limit, the analysis and algorithm for BPE are presented in Appendix H.”
-
-“We present the MPC algorithm in Algorithm 1, that allows us to compute the probabilities P(xN nk+1|tk 1) and P(xn nk+1|tk 1) in Equation (1). Note that this algorithm does not require tk∈V∗. Details on the algorithmic correctness are shown in Appendix E. 3Many current language models begins with a start token <start> in V∗, e.g.”
-
-“The idea is to marginalize out P(xN nk+1|tk 1) by considering two complementary events: when the next token tk+1 has a prefix xN nk+1 (bval in the Branch Step) versus when the next token tk+1 is contained within xN nk+1 (pval in the Pass Step). Formally, MPC computes the following probabilities: bval = P(xN nk+1, tk+1 ∈B(xN nk+1)) tk 1), (2) pval = P(xN nk+1, tk+1 /∈B(xN nk+1)) tk 1), (3) where B(xN nk+1)={t∈V|xN nk+1∈prefix(decode(t))} and we immediately see that P(xN nk+1|tk 1)=bval+pval.”
+The prior work states:
+“The globally canonicalized language models gΣ and g are defined as the following probability distributions over Σ∗and ∆∗, respectively: gΣ(σ) def= g(τ(σ)) (6a) g(δ) def= Pr Y ∼p∆[Y = δ | Y ∈D] (6b) = PrY ∼p∆[Y = δ, Y ∈D] PrY ∼p∆[Y ∈D] (6c) = 1 Z p∆(δ)1{δ ∈D} (6d) where Z is the canonicality rate: Z def= Pr Y ∈p∆[Y ∈D] (6e) 6When the tokenization function τ is implemented as a finite-state transducer, we may derive an efficient finite-state automaton that describes the prefix language of its outputs.”
 
 Comparison with the submission
 
-The prior paper and the claim both address the problem of transforming language models via deterministic string-to-string mappings and marginalizing over possible source strings. However, the prior paper is focused specifically on tokenization schemes (MPE/BPE) and provides algorithms tailored to those cases, whereas the submission claims a general framework for arbitrary deterministic FST-based transformations. Thus, the overlap is partial: the prior paper covers a special case of the submission's general framework but does not subsume it. The submission's generality and formalization of transduced language models as FST compositions is not present in the prior work.
+The prior paper makes a meaningful instance-level contribution related to transformed language models: it defines globally conditioned and locally constrained models for canonical BPE encodings and uses finite-state canonicality tests. However, it does not itself introduce the general transduced-language-model framework or the associated general preimage and prefix-decomposition algorithms. Thus the overlap is partial, with the submission retaining a distinct central contribution in generality and computational treatment.
 
 ##### Sampling from Your Language Model One Byte at a Time
 partial overlap · Hayase et al. · 2025
 
 How this paper realizes the claim
 
-The paper introduces ByteSampler, a method for converting any autoregressive language model with a BPE tokenizer into a character-level or byte-level language model at inference time. The core mechanism is the Valid Covering Tree (VCT), which represents all valid token sequences that cover a given byte prefix. This enables the computation of prefix probabilities, sampling completions, and next-byte distributions, all while preserving the original model's output distribution (up to invalid token sequences). The VCT is constructed and updated efficiently, allowing for practical byte-level sampling and solving the prompt boundary problem.
+The paper addresses a specific deterministic string transformation induced by BPE tokenization: it conditions a token-level language model on an arbitrary byte prefix and represents the compatible token sequences with a finite, compact covering tree.
 
-Quoted from the source but NOT confirmed verbatim:
-In this paper, we propose ByteSampler, a system that can condition LMs on arbitrary byte-prefixes. This can be used to solve the PBP and can also be applied to convert the (tokenized) LM into a byte-level LM.
+“We introduce an efficient procedure to condition a BPE tokenizer-based model on an arbitrary byte-prefix given only access to the tokenizer and log-probability queries to the model (Section 3). We demonstrate in experiments that this represents an exact solution to the Prompt Boundary Problem presented above (Section 4.2).”
 
-“The VCT T for a given a byte-string S can be used to efficiently perform various byte-level language modeling tasks. We use “ByteSampler” to refer to this collection of routines. prefix: h y p o t ?”
+“We show that our method can be used to convert the model into a byte-level language model and that this ability can be used to unify the vocabularies of different models. This enables exact byte-level ensembles of language models with different tokenizers (Section 4.3) and allows one to transfer the post-training of one model onto another model at inference time using proxy-tuning [33] (Section 4.4).”
 
-“To compute the probability of S (as a prefix) under the LM, we sum the cumulative probabilities the LM assigns to the sequences represented by all leaves of T. ## 2.”
+Its method uses pairwise BPE validation and streaming updates to maintain the tree, then sums language-model probabilities over compatible token-sequence leaves to compute prefix probabilities and byte-level next-symbol distributions.
 
-“To sample a completion of S while avoiding the PBP, we compute the probability (as above) of every leaf in T and sample one of them accordingly. We are then free to continue sampling a continuation from that leaf using normal token-level sampling because sampled tokens induce token boundaries selected by the model. This one-time operation can be used to solve the PBP without paying the cost of byte-level sampling.”
+“The fundamental structure of the algorithm is based on what we call the Valid Covering Tree, which is the tree of all possible valid token sequences that share a specific byte prefix and do not extend past the end of the prefix by more than one full token. We show the construction of the Valid Covering Tree in Fig.”
 
-“To compute the next byte distribution following S, we group the leaves of T by their corresponding next byte and sum the probabilities of the leaves in each group, as illustrated in Fig. 3. By repeatedly sampling from this distribution, we can generate text one byte at a time. Naturally, this will generate text more slowly than sampling at the token level.”
+“To compute the next byte distribution given a prefix, we group the leaves by the next byte they would entail and sum the probabilities (as above) of the leaves in each group. This can be combined with a sampling rule to generate text one byte at a time.”
+
+Grounded evidence for the assessed overlap
+
+Evidence check: material
+2 of 3 grounded candidates support the overlap
+
+Pairs 2 and 3 establish a substantive shared contribution within the current claim: both compute output-prefix or next-symbol probabilities by aggregating probabilities over source/token sequences compatible with an output prefix, and both support autoregressive generation from those conditioned distributions. This is more than a shared topic or generic evaluation activity and supports meaningful partial overlap. The evidence does not establish equivalence of the full contributions: the submission span presents a general transduced-language-model formulation, whereas the prior-paper spans describe the concrete tree/leaf-based byte-generation procedure. Pair 1 is weaker and does not, from the quoted prior-paper span alone, fully establish the deterministic BPE/FST relation; it is therefore not needed for the decision. The delta's assertions that the prior work is restricted to BPE and lacks the general FST framework are not fully established by the quoted spans, although pair 3 does support the byte-level/BPE-specific aspect. Those limitations do not block the partial-overlap decision, because the valid pairs independently establish a meaningful shared component. The unverified generality distinction should remain qualified rather than being treated as fully proven residual novelty.
+
+Submission contribution span
+“Like all language models, a transduced language model p Y has prefix and conditional prefix probability functions; its prefix probability is where P(y) is the precover of y, with respect to f , defined as P(y) def = {x ∈ X * : y ⪯ f (x)}. foot_0 Prefix probabilities yield a conditional factorization of string probability (see §2), enabling efficient left-to-right autoregressive generation.”
+
+Pair 2: Both works contribute output-prefix probability computation by aggregating source/token-sequence probabilities over representations compatible with the requested output prefix, with the prior paper specializing this to BPE covering trees.
+
+The prior work states:
+“To compute the probability of a prefix under the LM, we sum the cumulative probabilities the LM assigns to the sequences represented by all leaves of the tree.”
+
+Submission contribution span
+“Prefix probabilities yield a conditional factorization of string probability (see §2), enabling efficient left-to-right autoregressive generation.”
+
+Pair 3: Both works support autoregressive output generation from prefix-conditioned probabilities by aggregating probabilities over compatible source sequences; the prior paper implements this specifically for byte-level generation from BPE tokens.
+
+The prior work states:
+“To compute the next byte distribution given a prefix, we group the leaves by the next byte they would entail and sum the probabilities (as above) of the leaves in each group.”
 
 Comparison with the submission
 
-This prior paper introduces a method (ByteSampler) that transforms a token-level language model into a byte-level model by marginalizing over valid tokenizations using the Valid Covering Tree, which is a deterministic structure akin to a finite-state machine. However, the scope is limited to the specific case of BPE tokenization and byte-level outputs, and the framework is not presented as a general composition with arbitrary deterministic string-to-string functions or general FSTs. The submission's contribution is broader, providing a general and formal framework for composing language models with any deterministic FST, not just for tokenization. Thus, the overlap is partial: the prior paper covers a special case of the submission's general framework, but does not subsume it.
+The prior paper delivers a meaningful substantive instance of the claimed idea: it transforms a token-level language model through a deterministic tokenizer/decoder relation and supports exact conditioning and generation over output bytes. However, it does not itself introduce a general finite-state-transducer framework; its tree construction and validation algorithms are specialized to BPE. The submission therefore retains a distinct central contribution in generality, formalization, and algorithms for arbitrary transductions, so the overlap is partial rather than substantial or same.
 
 ##### How to Compute the Probability of a Word
 partial overlap · Pimentel et al. · 2024
 
 How this paper realizes the claim
 
-This paper addresses the problem of computing the probability of a word given a context using language models that operate over subwords, particularly focusing on the technicalities introduced by different tokenization schemes (end-of-word and beginning-of-word markers).
+The paper defines tokenisation and detokenisation mappings between subword sequences and character or word sequences, focusing on deterministic tokenisers and the fact that multiple subword sequences may represent the same character sequence.
 
-“This paper derives the correct methods for computing word probabilities, highlighting issues when relying on language models that use beginning-of-word (bow)-marking tokenisers, e.g., the GPT family. Empirically, we show that correcting the widespread bug in probability computations affects measured outcomes in sentence comprehension and lexical optimisation analyses.”
+“Notably, multiple subword sequences may map to the same character sequence. However, most tokenisers specify one of 6We are not concerned with most aspects of individual tokenisers, and will focus on general considerations here.”
 
-The paper formalizes the mapping between words and subwords, and shows how to marginalize over subword sequences to recover word-level probabilities, providing explicit formulas and theorems for both eow and bow tokenizers.
+It then uses these mappings to derive word probabilities from a language model over subwords, including summation over ambiguous subword sequences when necessary.
 
-“We can compute our desired conditional distribution as the quotient of two evaluations of PW: p(w | w<t) = PW(w<t ◦w ◦W∗) / PW(w<t ◦W∗)”
+“The contextual probability of a word can be computed using probability distributions over subwords as: p(w | w<t) = PS(Ψ′ S) (11) PS(Ψ′′ S) ∆= w<t ◦w ◦W∗and Ψ′′ ∆= w<t ◦W∗.”
 
-“Eq. (7) suggests a way to extract probabilities over words from a language model; we can simply use the equivalence: p(w) = p(s), for s = S_{W^*→S^*}(w)”
+The paper further develops tokeniser-dependent prefix-set constructions and practical corrections for computing these probabilities under different word-boundary conventions.
 
-The paper does not introduce a general framework for transforming language models with arbitrary deterministic string-to-string transformations represented by finite-state transducers. Rather, it focuses on the specific case of mapping between subword and word representations as determined by tokenizers, and how to correctly marginalize probabilities in this context.
+“We are left with the task of finding a set of subword prefixes which will allow us to compute the probabilities of Ψ′ and Ψ′′.”
+
+Grounded evidence for the assessed overlap
+
+Evidence check: material
+2 of 2 grounded candidates support the overlap
+
+Both pairs establish a substantive methodological overlap within the current claim: computing target-level language-model probabilities by aggregating probabilities over source strings or structured source sets induced by a deterministic mapping. Pair 1 directly aligns the submission’s precover-based prefix probabilities with the prior paper’s equivalent subword-set construction and summation. Pair 2 similarly supports structured computation of target probabilities, while also showing the prior method is tokenization-specific. This is more than a shared topic or generic evaluation activity and supports a meaningful special-case overlap, hence the proposed partial degree. The pairs do not establish that the prior paper introduced the submission’s general FST framework, arbitrary-mapping scope, precover/decomposition machinery, or finiteness theory; those delta assertions remain qualified rather than independently certified. The prior paper’s tokenization limitation is supported by the pair descriptions, but no absence of additional prior contributions should be inferred from the limited correspondences.
+
+Submission contribution span
+“Like all language models, a transduced language model p Y has prefix and conditional prefix probability functions; its prefix probability is where P(y) is the precover of y, with respect to f , defined as P(y) def = {x ∈ X * : y ⪯ f (x)}. foot_0 Prefix probabilities yield a conditional factorization of string probability (see §2), enabling efficient left-to-right autoregressive generation.”
+
+Pair 1: Both papers contribute probability computation for a target-level sequence by identifying the source sequences or source-set representation corresponding to that target and aggregating source language-model probabilities; the prior paper does so only for word-to-subword tokenization.
+
+The prior work states:
+“(8) is that if we can create a subword set ΨS that is “equivalent” to a chosen word set ΨW, we would be able to compute ΨW’s probability by summing over the subwords in ΨS. ∆= between Formally, we define the set equivalence two sets of sequences as:   ∆= ΨS =⇒ w∈ΨW ⇐⇒S W∗→S∗(w)∈ΨS ΨW (9) Now let PS be a probability function defined analogously to PW (in Defn.”
+
+Submission contribution span
+“The following two examples illustrate how we can often compute this infinite sum by exploiting structural properties of the transducer.”
+
+Pair 2: Both papers contribute a method for computing target-language probabilities from source subword or string probabilities through structured sets induced by a deterministic mapping, but the prior paper’s method is limited to tokenization-specific sets.
+
+The prior work states:
+“We are now in a position to define our quantity of interest p(w | w<t) in terms of subword probabilities: it is simply the quotient of PS(·) for two different sets ΨS. Lemma”
 
 Comparison with the submission
 
-The prior paper provides a rigorous treatment of how to compute word probabilities from subword-based language models, including marginalization over subword sequences and handling of different tokenization schemes. However, it is limited to the specific transformation induced by tokenization/detokenization, and does not propose a general framework for arbitrary FST-based transformations of language models. The submission extends this idea to a much broader class of deterministic string-to-string functions, providing a general and flexible framework. Thus, the overlap is partial: the prior paper covers a special case, but not the general contribution claimed by the submission.
+The prior paper delivers a meaningful special case of transforming a language model through a deterministic tokenization mapping, so the relationship is substantive rather than merely topical. However, it does not itself introduce the general FST-based framework, the general precover/decomposition machinery, or the associated algorithms and finiteness theory; those remain central contributions of the submission. Therefore the overlap is partial.
 
 ---
 
@@ -265,282 +315,231 @@ The prior paper provides a rigorous treatment of how to compute word probabiliti
 
 The paper develops algorithms that compose language models with finite-state transducers to marginalize source-string probabilities into target outputs, enable conditioning on transformed outputs, and support exact or approximate inference without changing model parameters.
 
-**Verdict:** challenged by prior work
+#### Claim-level conclusion
 
-This claim is challenged by several prior works, most notably "Language Models over Canonical Byte-Pair Encodings," "From Language Models over Tokens to Language Models over Characters," and "Understanding and Mitigating Tokenization Bias in Language Models." These papers, as verified by both-sides quotes, present algorithms for composing language models with finite-state transducers (typically tokenizers or decoders), marginalizing over source strings to compute probabilities for target outputs, enabling conditioning on transformed outputs, and supporting exact or approximate inference without changing model parameters. The overlap is substantial, as the core technical content of the claim is present in these prior works. However, the submission appears to generalize these algorithms to arbitrary FST-defined string transformations (not just tokenization), and introduces new algorithmic techniques such as the precover decomposition and breadth-first search for efficient computation, which are not present in the challenging papers. Thus, while the main idea is not novel, the submission's generalization and algorithmic refinements represent a delta beyond the prior work.
+**Assessment:** not challenged in the examined literature. No comparison in the examined candidate set was found to substantially or equivalently overlap this claim under material evidence. This does not establish novelty across the wider literature -- only that none was found here.
+
+**Main overlap:** Where is the signal in tokenization space? (Both works marginalize probabilities assigned by an autoregressive language model over multiple source sequences that correspond to one target string, while leaving the model parameters unchanged.) [partial overlap · insufficient]; From Language Models over Tokens to Language Models over Characters (The prior paper itself contributes exact marginalization of source token probabilities over a transformed target prefix and exact conditional generation given that transformed prefix.) [partial overlap · material]; Understanding and Mitigating Tokenization Bias in Language Models (Both papers develop algorithms that aggregate probabilities from a token-level language model over multiple source tokenizations or source strings consistent with a target character-level prefix.) [partial overlap · material]; How to Compute the Probability of a Word (Both works marginalize probabilities from a source language-model representation over sequences that realize a target linguistic output, and both support conditional probabilities by taking ratios of marginalized prefix or context probabilities.) [partial overlap · material]; Sampling from Your Language Model One Byte at a Time (Both papers compute autoregressive distributions after a deterministic finite-state-like transformation by aggregating source token-sequence probabilities consistent with a target prefix, and both support transformed next-symbol prediction and sampling without changing the underlying language-model parameters.) [partial overlap · material].
+
+**Remaining contribution relative to the strongest supported comparison(s):**
+
+- **From Language Models over Tokens to Language Models over Characters:** The submission develops a general transducer-based framework: prefix decompositions with both quotient and remainder sets, BFS algorithms and transducer-state checks, exact computation beyond strict-prefix-monotone mappings, sufficient conditions for finite decompositions, joint and optimized inference, and probability-mass pruning for approximate inference.
+- **Understanding and Mitigating Tokenization Bias in Language Models:** The submission generalizes beyond tokenization correction to arbitrary string-to-string transformations represented by finite-state transducers.
+- **How to Compute the Probability of a Word:** The submission generalizes the operation to arbitrary string-to-string functions represented by finite-state transducers.
+- **Sampling from Your Language Model One Byte at a Time:** The submission develops a general composition framework for language models with arbitrary string-to-string finite-state transducers.
+
+These are comparison-specific differences, not a synthesis across all prior work. Evidence supporting overlap does not automatically verify every stated difference or absence claim; see each comparison’s evidence assessment.
+
+**Evidence limits:** 11 of 24 comparisons have insufficient evidence. One comparison shows a conflict between the overlap assessment and evidence check: Neural Finite-State Transducers: Beyond Rational Relations was assessed as superficial while the evidence check found material overlap. This conflict remains unresolved. One comparison shows a conflict between the overlap assessment and evidence check: Differentiable Weighted Finite-State Transducers was assessed as superficial while the evidence check found material overlap. This conflict remains unresolved. One comparison shows a conflict between the overlap assessment and evidence check: Language Models over Canonical Byte-Pair Encodings was assessed as superficial while the evidence check found material overlap. This conflict remains unresolved. One comparison shows a conflict between the overlap assessment and evidence check: Automata-based constraints for language model decoding was assessed as superficial while the evidence check found material overlap. This conflict remains unresolved. One comparison shows a conflict between the overlap assessment and evidence check: Weighting Finite-State Transductions With Neural Context was assessed as superficial while the evidence check found material overlap. This conflict remains unresolved. Insufficient evidence means the check could not settle the question, not that no overlap exists.
+
+**Coverage:** 24 comparisons processed, 24 with an evidence check: 9 material, 4 nonmaterial, 11 insufficient.
+
+#### What the submission does for this claim
+
+The submission provides a transducer-based representation and exact BFS algorithm for decomposing each target prefix’s precover into a maximal cylindrical quotient and remainder, thereby summing source-model prefix probabilities and exposing an autoregressive interface. With exact checks and a finite decomposition, it guarantees termination and the optimal valid decomposition; the construction applies to general mappings represented by transducers, including transformations such as normalization, boundary insertion, and DNA-to-amino-acid conversion.
+
+“If P(y) admits a finite decomposition and the three checks exactly implement the conditions above with no pruning, then decompose(y) terminates and its output (Q, R) is the optimal prefix decomposition (Eq. ( 7 )). Proof.”
+
+The same framework supports conditioning on transformed prefixes through prefix probabilities, from which next-symbol distributions and string probabilities are derived, without altering the source language model. Exact computation requires finite decompositions (for example, no ε-output cycles plus the stated safety condition); when exhaustive enumeration is too large, probability-mass pruning gives an approximation that is a lower bound rather than a generally valid decomposition.
+
+“Prefix probabilities yield a conditional factorization of string probability (see §2), enabling efficient left-to-right autoregressive generation. We develop a method in §4 that allows us to compute the sum in Eq.”
+
+“Since pruning only removes candidates from the queue, every element found is correct-⟨Q⟩ ⊔ R ⊆ P(y)-but the decomposition is no longer valid in general (coverage may be incomplete), so the computed prefix probability is a lower bound on the true value. Our strategy is detailed in §C.3.”
 
 #### Overlapping prior work
-
-##### Neural Finite-State Transducers: Beyond Rational Relations
-partial overlap · Lin et al. · 2019
-
-How this paper realizes the claim
-
-The paper introduces neural finite state transducers (NFSTs), which are models that define joint and conditional probability distributions over string pairs by marginalizing over all accepting paths in a finite-state transducer. The scoring of each path can use an arbitrary function, such as a recurrent neural network, rather than being limited to Markovian weights. The paper presents training and inference algorithms for these models, including both locally and globally normalized variants.
-
-“We introduce neural finite state transducers (NFSTs), a family of string transduction models defining joint and conditional probability distributions over pairs of strings. The probability of a string pair is obtained by marginalizing over all its accepting paths in a finite state transducer. In contrast to ordinary weighted FSTs, however, each path is scored using an arbitrary function such as a recurrent neural network, which breaks the usual conditional independence assumption (Markov property).”
-
-“We present training and inference algorithms for locally and globally normalized variants of NFSTs. In experiments on different transduction tasks, they compete favorably against seq2seq models while offering interpretable paths that correspond to hard monotonic alignments.”
-
-Comparison with the submission
-
-The prior paper and the submission both address string transduction with finite-state transducers and marginalization over possible paths or string pairs. However, the prior paper's main contribution is the introduction of neural finite-state transducers as a new model class, with neural scoring of paths, and does not focus on composing with a fixed pretrained language model or on the specific algorithms for marginalizing source-string probabilities into target outputs as in the submission. Thus, there is partial overlap in the general area and some methods, but the submission's contribution is distinct and not refuted by this prior work.
-
-##### Sequential Monte Carlo Steering of Large Language Models using Probabilistic Programs
-partial overlap · Lew et al. · 2023
-
-How this paper realizes the claim
-
-The paper proposes Sequential Monte Carlo (SMC) steering as an inference-time method for enforcing constraints on large language models (LLMs) by framing generation as posterior inference in probabilistic programs. It introduces Feynman-Kac Transformer models, which allow the composition of LLMs with various constraints and transformations, and describes how to specify these as probabilistic programs using the LLaMPPL library.
-
-“The key idea is to specify language generation tasks as posterior inference problems in a class of discrete probabilistic sequence models, and replace standard decoding with sequential Monte Carlo inference. For a computational cost similar to that of beam search, SMC can steer LLMs to solve diverse tasks, including infilling, generation under syntactic constraints, and prompt intersection.”
-
-“We make three key contributions: 1. The class of Feynman-Kac Transformer models (§2), probabilistic models over Transformer token sequences that are amenable to SMC and can encode a variety of language generation tasks. 2. SMC Transformer steering (§3), a variant of SMC specialized for Feynman-Kac Transformer models. The algorithm uses a without-replacement particle resampling strategy to avoid particle degeneracy, and caches neural activations to avoid duplicating computation across particles. 3. The LLaMPPL library for building Feynman-Kac Transformer models as probabilistic programs that invoke LLaMA Transformers [Touvron et al., 2023], and automating SMC steering.”
-
-The paper gives several examples of constraints and transformations, such as hard constraints, infilling, and prompt intersection, all implemented as probabilistic programs that define a posterior over output strings. The SMC algorithm is used to sample from these posteriors, approximating the desired conditional distributions.
-
-“Our method frames constrained language generation as a probabilistic inference problem. This perspective is commonly adopted in the literature [see, e.g., Kumar et al., 2022, Poesia et al., 2022, Miao et al., 2019, Qin et al., 2022], and has several distinctive features compared to popular heuristic and optimization-based approaches to inference-time constrained generation: • Global vs.”
-
-Quoted from the source but NOT confirmed verbatim:
-A Feynman-Kac Transformer model is a tuple (s0, {Mt}t≥1, {Gt}t≥1), where: ... Mt(st | st−1, fθ) is a Markov kernel (i.e., conditional probability distribution) from st−1 ∈Fc to st ∈S, parameterized by a Transformer network fθ ... Gt(st−1, st, fθ) is a potential function, mapping a pair (st−1, st) ∈Fc × S to a real-valued non-negative score.
-
-The approach does not require changing the parameters of the underlying language model; instead, it composes the model with constraints or transformations at inference time.
-
-Quoted from the source but NOT confirmed verbatim:
-This perspective is commonly adopted in the literature ... and has several distinctive features compared to popular heuristic and optimization-based approaches to inference-time constrained generation: • Global vs. local constraint following. ... By contrast, conditioning the LLM on the constraint causes global reallocation of probability mass, yielding a posterior that upweights early tokens which make it easier to satisfy the constraint later. By targeting this posterior, SMC steering avoids greedy dead ends.
-
-The paper does not explicitly describe the use of finite-state transducers (FSTs) as the mechanism for string transformations, nor does it present algorithms for marginalizing source-string probabilities into target outputs via FST composition. Instead, it uses probabilistic programs and potential functions to encode constraints and transformations.
-
-Comparison with the submission
-
-This prior paper and the submission both address inference-time conditioning of language models on constraints or transformations, and both support approximate inference without changing model parameters. However, the prior paper does not use finite-state transducers or develop algorithms for marginalizing source-string probabilities into target outputs via FST composition. Instead, it uses a general probabilistic programming approach with SMC. Thus, the overlap is partial: the high-level goal is similar, but the technical approach and specific algorithms are different, and the submission's FST-based marginalization is not present in the prior work.
-
-##### Differentiable Weighted Finite-State Transducers
-partial overlap · 2020
-
-How this paper realizes the claim
-
-The paper introduces a framework for automatic differentiation with weighted finite-state transducers (WFSTs), enabling their use at training time within deep learning models. It provides a set of differentiable operations on WFSTs, including composition, intersection, and forward scoring, and demonstrates how these can be used to construct and optimize sequence-level loss functions such as ASG and CTC.
-
-“We develop a framework for automatic differentiation through operations on WFSTs. We show the utility of this framework by leveraging it to design and experiment with existing and novel learning algorithms. Automata are a more convenient structure than tensors to encode prior knowledge into a learning algorithm.”
-
-The framework allows for the composition of WFSTs representing different components (e.g., emissions, transitions, lexicons) and supports marginalization over latent structures, such as word piece decompositions, by composing a lexicon transducer with a label graph and marginalizing over all decompositions.
-
-Quoted from the source but NOT confirmed verbatim:
-The word piece decomposition for a given phrase is not important, serving only as a stepping stone to more accurate models. This assumption can be made explicit by marginalizing over the set of decompositions for a target label while training the task specific model. ... In the differentiable WFST framework this can be implemented in a plug-and-play fashion by incorporating a single lexicon graph. The lexicon transducer L, which maps sequences of sub-word tokens to graphemes, is the closure of the union of the individual sub-word-to-grapheme graphs. A composition with the label graph, L ◦Y, gives the decomposition graph for the label y.
-
-The framework is designed to allow gradients to flow through all WFST operations, so that model parameters can be updated via backpropagation. The paper demonstrates the use of these algorithms in handwriting and speech recognition tasks, including marginalization over latent decompositions and the use of WFSTs as neural network layers.
-
-Comparison with the submission
-
-The prior paper presents a differentiable WFST framework that enables composition and marginalization over latent structures, such as word piece decompositions, and supports learning with these structures in end-to-end models. However, it does not present the specific algorithms for marginalizing source-string probabilities into target outputs via FST composition, nor does it focus on conditioning on transformed outputs or provide the exact/approximate inference algorithms described in the submission. Thus, while there is partial overlap in the use of FST composition and marginalization, the submission provides a distinct and more specialized contribution.
-
-##### Automata-based constraints for language model decoding
-partial overlap · Koo et al. · 2024
-
-How this paper realizes the claim
-
-The paper presents a method for constraining language model (LM) decoding to outputs that conform to a formal language, such as those defined by regular expressions or context-free grammars. The core technical contribution is to represent detokenization as a finite-state transducer (FST), and then compose this FST with a finite-state automaton (FSA) or pushdown automaton (PDA) representing the constraint. This composition yields a new automaton that accepts only token sequences whose detokenized forms are in the target language.
-
-“Our main contributions are primarily conceptual rather than empirical: 1. Identify an as-yet unnoticed connection between detokenization and transduction. 2. Solve the tokenization issues using this connection and operations on automata. 3. Define extensions that address practical problems of efficiency and convenience. ∗Equal contribution, alphabetical.”
-
-“Algorithm 2 Constrains LM L with vocabulary V to generate the language of regex R TV ←BUILDDETOKENIZINGFST(V) ▷token-to-character FST, see Algorithm 1 AR ←BUILDREGEXFSA(R) ▷character-accepting FSA (Thompson, 1968) AR◦V ←DETERMINIZE(AR ◦TV) ▷token-accepting FSA q ←IR◦V ▷start from initial FSA state for t = 1 to T do ▷decoding steps ℓ←COMPUTELOGITS(L) A ←{eσ : e ∈ER◦V ∧es = q} ▷allowed next tokens for i = 1 to |V| do ▷penalize logits as in Deutsch et al. (2019) if vi ̸∈A then ℓi ←−∞ ˆv ←SAMPLENEXTTOKEN(L, ℓ) ˆe ←e s.t. e ∈ER◦V ∧es = q ∧eσ = ˆv ▷find the matching edge q ←ˆet ▷traverse the edge Note that AR◦V is a closed-form solution: it expresses R using all relevant tokens from V and can be executed independently from both.”
-
-“This clean decomposition is only possible because FST-FSA composition provides a fast, automatic, and general method for joining the two halves. For example, alternative detokenization automata (see Section 4.3) can be slotted into TV without changing the rest of the system. Similarly, alternative constraint automata (see Section 3.1) can be substituted for AR and FST composition still works. 2.5 ## Extensions Our last contribution in this section is a set of regular expression extensions, written as specially-named capturing groups, that greatly increase the efficiency and expressiveness of the system.”
-
-The paper does not describe marginalizing source-string probabilities into target outputs, nor does it provide algorithms for computing the probability of a target string by summing over all source strings that map to it under the FST. The focus is on constraining generation to valid outputs, not on marginalization or transformed-output conditioning. The algorithms described operate by masking logits during decoding, not by changing the probability computation or supporting exact/approximate inference over transformed outputs.
-
-Comparison with the submission
-
-This paper and the submission both use FST composition to connect language models with formal constraints or transformations. However, this paper focuses on constraining the output of the LM to a formal language by masking logits, not on marginalizing probabilities or conditioning on transformed outputs. The submission's contribution of marginalizing over source strings and supporting inference over transformed outputs is not present in this paper. Thus, the overlap is partial: the core idea of FST composition is shared, but the submission's probabilistic marginalization and inference algorithms are novel relative to this work.
-
-##### Language Models over Canonical Byte-Pair Encodings
-substantial overlap · Vieira et al. · 2025
-
-How this paper realizes the claim
-
-This paper addresses the problem of language models assigning probability mass to noncanonical tokenizations under deterministic tokenizers like BPE. It proposes methods to enforce that only canonical token strings are assigned positive probability, using both test-time conditioning and model parameterization.
-
-“We present two approaches: (1) canonicality by conditioning, leveraging test-time inference strategies without additional training, and (2) canonicality by construction, a model parameterization that guarantees canonical outputs but requires training. We demonstrate that fixing canonicality mistakes improves the likelihood of held-out data for several models and corpora.”
-
-The 'canonicality by conditioning' approach involves conditioning the language model's output on the event that the generated token string is canonical, which is implemented via probabilistic conditioning and does not require changing model parameters.
-
-“Our first approach to this problem defines a language model g that is the result of probabilistic conditioning on the event that the generated token string is in D. Definition 1.”
-
-The paper develops both exact (rejection sampling) and approximate (local canonicalization, importance sampling) inference algorithms to sample or compute probabilities under this conditioned model, all without modifying the underlying language model parameters.
-
-Quoted from the source but NOT confirmed verbatim:
-The simplest exact conditioning algorithm for sampling from g is rejection sampling: ... if δ ∈D: return δ ... Another correct sampling algorithm is ancestral sampling ... Unfortunately, computing −→g exactly is intractable as it requires summing over infinitely many future strings. Thus, −→g must be approximated. In §3.2.2, we will provide a cheap, local approximation and, in §3.2.3, we will devise a strategy for improving the short-sightedness of the local approximation by using more computation.
-
-The methods are described for the specific case of enforcing canonicality under a deterministic tokenizer (such as BPE), where the transformation from source (character) strings to target (token) strings is deterministic and invertible. The algorithms marginalize over token strings that decode to a given character string, and enable conditioning on canonical outputs.
-
-Comparison with the submission
-
-This prior paper presents algorithms for composing language models with deterministic tokenizers (viewed as FSTs), conditioning on canonical outputs, and performing exact or approximate inference without changing model parameters. The overlap is substantial, as the core idea of marginalizing over source strings that map to a target via an FST and conditioning on transformed outputs is present. However, the submission extends these ideas to arbitrary FST-defined transformations and introduces new algorithmic techniques for efficiently representing and computing the relevant sets, which are not covered in this paper. Thus, while the contributions are closely related, the submission has a clear delta in generality and algorithmic novelty.
 
 ##### Where is the signal in tokenization space?
 partial overlap · Geh et al. · 2024
 
 How this paper realizes the claim
 
-This paper investigates the problem of non-canonical tokenizations in language models, specifically focusing on the fact that a string can be tokenized in multiple ways, and that the probability of a string under a language model is the sum (marginalization) over all possible tokenizations.
+The paper models a string as having many possible tokenizations and defines the string probability by summing the language model probabilities of all token sequences that produce that string.
 
-“We prove that, given a string, it is computationally hard to find the most likely tokenization for an autoregressive LLM, as well as to compute the marginal probability over all possible tokenizations. We then show how the marginal is, in most cases, indistinguishable from the canonical probability.”
+“Thus, an LLM induces a distribution over tokenizations of a given string. Definition 3.1 (Induced Tokenization Distribution).”
 
-The paper formalizes the marginalization problem, proves it is #P-hard, and develops an importance sampling estimator to approximate the marginal probability of a string by aggregating over all tokenizations.
+“Evaluating the probability of a string requires marginalizing over all its possible tokenizations. We now formally define this task and show it to be 5 computationally hard.”
 
-“Hence, we implement an importance sampling estimator for the marginal probability. Surprisingly, despite the extremely large number of non-canonical tokenizations, we empirically find that the estimated marginal probability is usually very close to the canonical tokenization’s probability.”
+It represents the compatible tokenizations with an MDD and estimates the resulting marginal using sequential importance sampling with a look-ahead proposal, rather than composing the language model with a general finite-state transducer or providing exact transducer-based inference.
 
-The paper empirically evaluates the difference between canonical and marginal probabilities, and shows that in most cases, the canonical probability is very close to the marginal. It also explores whether aggregating over tokenizations provides additional signal for downstream tasks.
-
-“Specifically, we show that for Gemma-2B (Gemma Team et al., 2024), Llama2-7B (Touvron et al., 2023) and Mamba-130M (Gu and Dao, 2024), by employing ensemble strategies for weighting different tokenizations at inference time, we achieve significant performance improvements on challenging LLM evaluation benchmarks. Contributions.”
-
-The algorithms developed operate over the space of tokenizations (as defined by the vocabulary and merge rules), and use data structures like Multi-valued Decision Diagrams (MDDs) to represent all tokenizations of a string. The focus is on marginalizing over tokenizations for a fixed string, not on arbitrary FST-defined string transformations.
+“To address this issue, we use a modified proposal distribution: the 1-step look-ahead proposal distribution, first proposed in Chirkova et al. (2023). This distribution adjusts the LLM’s next-token distribution at each step by checking whether the 80 −6 −8 40 −10 −12 0 −14 20 26 211 20 26 211 Number of samples (b) Log probability difference between approximate marginal and canonical probability (a) String probability estimates Figure 6: Convergence of approximate marginal.”
 
 Comparison with the submission
 
-This prior paper addresses the problem of marginalizing language model probabilities over all possible tokenizations of a string, which is a special case of composing a language model with a finite-state transducer (the tokenizer). It develops both theoretical results and practical algorithms for this marginalization, but only for the case where the FST represents tokenization ambiguity. The submission claims a more general framework for arbitrary FST-defined transformations, enabling conditioning on transformed outputs and supporting both exact and approximate inference. Thus, the overlap is partial: the prior paper covers a special case, but not the full generality or algorithmic contributions of the submission.
-
-##### Weighting Finite-State Transductions With Neural Context
-partial overlap · Rastogi et al. · 2016
-
-How this paper realizes the claim
-
-The paper proposes a hybrid model that combines finite-state transducers (FSTs) with neural network-based context features for sequence-to-sequence tasks such as morphological reinflection and lemmatization. The approach begins with a hand-specified FST that defines possible edits from input to output strings. The FST is composed with an input string to produce a lattice (G) representing all possible output strings and their alignments.
-
-“Our novel architecture allows efﬁcient modeling of globally normalized probability distributions over string-valued output spaces, simultaneously with automatic feature extraction. We evaluate on morphological reinﬂection and lemmatization tasks, showing that our approach strongly outperforms a standard WFST baseline as well as neural sequence-tosequence models with attention.”
-
-The model assigns weights to arcs in the composed FST G using features extracted by a stack of bidirectional LSTMs over the input string. The probability of an output string y given input x, p(y|x), is defined as the sum over all paths in G that align x to y, with path weights determined by the neural features and FST structure.
-
-“Recall that p(y∗| x) sums over all alignments. As explained by Eisner (2002), it can be computed as the pathsum of the composition G ◦y∗(Figure 4), divided by the pathsum of G (which gives the normalizing constant for the distribution p(y | x)). The pathsum of a weighted FST is the total weight of all paths from the initial state to a ﬁnal state, and can be computed by the forward algorithm.4 3Our present implementation handles INS edits (for which j = i) a bit differently, using (exi+1, γi:i+1, exi, exi+2) rather than (eε, γi:i, exi, exi+1).”
-
-Inference is performed by constructing the weighted FST G for a given input x, and then either finding the most probable path (Viterbi) or summing over all paths for marginal probabilities. The model supports exact inference via dynamic programming, and the FST structure is not changed during inference; only the arc weights are parameterized by the neural network.
-
-Comparison with the submission
-
-This prior paper presents a hybrid neural-FST model for sequence transduction, where a neural network provides context-sensitive weights for FST arcs, and inference is performed by composing the FST with the input string and summing over all alignments to compute p(y|x). While both works use FST composition and marginalization over paths, this paper does not address the problem of marginalizing source-string probabilities into target outputs or conditioning on transformed outputs. The submission's algorithms for target-side conditioning and efficient marginalization are not present here. Thus, the overlap is partial: the prior paper covers FST composition and marginalization for p(y|x), but not the specific contributions of the submission regarding target-side conditioning and marginalization.
+The prior paper delivers a meaningful instance of the claimed marginalization contribution: it sums or estimates language-model probability across tokenizations yielding the same string. However, its MDD and importance-sampling methods are specialized to tokenization and do not themselves provide the submission's general transducer-composition framework, exact decomposition algorithm, or transformed-output conditioning interface. The overlap is therefore partial rather than substantial.
 
 ##### From Language Models over Tokens to Language Models over Characters
-substantial overlap · Vieira et al. · 2024
+partial overlap · Vieira et al. · 2024
 
 How this paper realizes the claim
 
-This paper develops algorithms to convert token-level language models into character-level models by marginalizing over all tokenizations that decode to a given character string. The core technical contribution is to efficiently compute the probability of a character string under a token-level language model, by summing over all token strings that decode to that character string via a finite-state decoder (the tokenizer). The paper presents both exact and approximate algorithms for this marginalization, leveraging properties of the tokenizer as a finite-state transducer (FST).
+The paper restricts the transformation κ to be strict-prefix monotone and uses this structure to replace the infinite set of source strings covering a target prefix with a finite set of minimal prefix encodings.
 
-“This paper presents algorithms for converting token-level language models to character-level ones. We present both exact and approximate algorithms. In the empirical portion of the paper, we benchmark the practical runtime and approximation quality.”
+“Monotonicity ensures that for all δ ∈P(σ), we have that ∀δ′ ∈∆∗: κ(δ·δ′) ⪰σ. In other words, any δ that decodes to an extension of σ (i.e., κ(δ) ⪰σ) will continue to do so if we append tokens to it. Thus, we may additionally qualify the relationship as δ minimally covers σ if additionally κ(δ1 ··· δM−1) ≺σ.”
 
-“pΣ(σ) def= P Y ∼p∆ [κ(Y ) = σ] (6) Note that pΣ(σ) accounts for the fact that many token strings may be associated with a given character string through κ.9 To describe that association, we define E(σ) def= {δ ∈∆∗: σ = κ(δ)}, the set of encodings for any character string σ ∈Σ∗.10 ## What about τ?”
+“Next, we define the set of minimal prefix encodings of σ, which we call the covering of σ, C(σ) def= {ϕσ(δ) | δ ∈P(σ)}. A more convenient expression for the covering C(σ) of a 5 From Language Models over Tokens to Language Models over Characters string σ ∈Σ∗is equal to the following subset of ∆∗: C(σ) =      {ε} if σ = ε {δ1 ··· δM ∈∆+ :”
 
-“A character-level interface to the token-level language model p∆is available in the following equations, which hold ∀σ, σ′ ∈Σ∗: −→ pΣ(σ) = P Y ∼p∆ [κ(Y ) ⪰σ] (7) −→ pΣ(σ′ | σ) = −→ pΣ(σ·σ′) / −→ pΣ(σ) (8) −→ pΣ(EOS | σ) = pΣ(σ) / −→ pΣ(σ) (9) These equations show that we can have a complete characterlevel language model derived from the tokenized language model if we can compute—or approximate—the necessary summations implied by Eq. (6) and (7); specifically, pΣ(σ) = ∑_{δ∈∆∗} 1{κ(δ) = σ} p∆(δ) (10) −→ pΣ(σ) = ∑_{δ∈∆∗} 1{κ(δ) ⪰σ} p∆(δ) (11) We will develop effective methods for these summations for the family of strict-prefix monotone decoders κ (described in §2.4) where Eq. (10) and Eq. (11) admit a finite summation.”
+It then uses the covering to perform exact marginalization of prefix probability and to condition token generation on a character-level prefix, without changing the underlying token model.
 
-“This section gives algorithms for computing pΣ(σ), −→ pΣ(σ), −→ pΣ(σ′ | σ), −→ pΣ(EOS | σ), and conditional token generation. We assume throughout that κ is strict-prefix monotone. ## 3.1.”
+“The algorithm works by enumerating the covering C(σ), drawing a token string from it in proportion to its prefix probability, and finishing the token string by sampling a completion, which can be done from the token-level model. 43 def conditional_token_generation(σ): 44 δ′ ∼Categorical({δ′ : p′/−→ pΣ(σ) 45 for (p′, _, δ′) in enum_cover(σ)}) 46 return sample_completion(δ′) 47 def sample_completion(δ′): 48 δ′′ ←ε 49 while True: 50 δ ∼−→ p∆(· | δ′·δ′′) 51 if δ = EOS: break 52 δ′′ ←δ′′·δ 53 return δ′·δ′′ 7 From Language Models over Tokens to Language Models over Characters (a) Error (JSD/byte) vs.”
+
+“Proposition 2. conditional_token_generation(σ) generates samples according to p∆|Σ(· | σ) for all σ ∈Σ∗. Proof.”
+
+Grounded evidence for the assessed overlap
+
+Evidence check: material
+2 of 2 grounded candidates support the overlap
+
+Pair 1 establishes a substantive shared methodological contribution: both works sum or marginalize source-language probability mass over strings associated with a transformed target string. The quoted submission span explicitly describes transduction-based marginalization, while the prior-paper span describes exploiting its prefix-monotone structure to perform the summation over a finite set. Pair 2 establishes a second shared contribution: conditional left-to-right generation from prefix probabilities in the submission and correct token generation conditioned on a character-level prompt in the prior paper. These are compatible instances of transformed-output conditioning, although the prior paper's quoted method is narrower. Together, the pairs support meaningful partial overlap in the current claim, not merely a shared topic or generic evaluation activity. They do not establish equivalence of the full claimed contribution or independently substantiate all listed delta details, such as quotient/remainder decompositions, BFS and transducer-state checks, finite-decomposition conditions, joint or optimized inference, or probability-mass pruning. Those limitations do not block a partial-overlap decision, but the submission delta should not present each unpaired distinction as established solely from the absence of correspondence pairs.
+
+Submission contribution span
+“A core property of transduced language models is the marginalization: the transduction sums source-string probabilities to compute target-string probabilities, aggregating mass across all source strings that map to the same target.”
+
+Pair 1: Both papers contribute exact marginalization of source-language probability mass into probabilities for transformed target strings, although the prior paper restricts this to strict-prefix-monotone token-to-character mappings.
+
+The prior work states:
+“Although P(σ) is infinitely large, we can exploit the prefix monotone structure of κ to find a different way to perform the summation by summing over a finite set.”
+
+Submission contribution span
+“Prefix probabilities yield a conditional factorization of string probability (see §2), enabling efficient left-to-right autoregressive generation.”
+
+Pair 2: Both papers contribute conditional generation under a transformed-output prefix, with the prior paper providing the narrower token-generation procedure for a character-level prompt.
+
+The prior work states:
+“This section gives a simple algorithm for correctly generating a token string Y that has a given character-level prompt σ as its prefix.”
 
 Comparison with the submission
 
-This prior paper presents algorithms that compose a language model with a finite-state transducer (the tokenizer/decoder) to marginalize over all tokenizations that map to a given character string, enabling exact and approximate inference of character-level probabilities from a token-level model. This matches the core technical content of the claim, including conditioning on transformed outputs and not altering model parameters. However, the submission appears to generalize the approach to arbitrary FSTs and introduces new algorithmic techniques (such as the precover decomposition and BFS quotient/remainder sets) that are not present in this paper. Thus, the overlap is substantial but not identical: the prior paper covers the main idea for the special case of tokenization, while the submission extends and refines it for broader FSTs and with new algorithms.
+The prior paper delivers a meaningful special case of the claimed contribution: exact transformed-prefix marginalization and conditional generation under a strict-prefix-monotone token-to-character transformation. The submission retains a distinct central contribution by generalizing the algorithms to finite-state transducers, handling non-monotone mappings through remainders, and supporting exact or approximate inference with explicit transducer-based decomposition procedures. The overlap is therefore partial rather than substantial or same.
 
 ##### Understanding and Mitigating Tokenization Bias in Language Models
-substantial overlap · Phan et al. · 2024
+partial overlap · Phan et al. · 2024
 
 How this paper realizes the claim
 
-The paper identifies and analyzes the sampling bias introduced by tokenization in language models, specifically focusing on maximum prefix encoding (MPE) and byte-pair encoding (BPE). It shows that this bias persists even with more data and proposes algorithms to correct the bias and recover unbiased character-level probabilities from a tokenized language model.
+The paper corrects tokenization bias by recovering character-level probabilities from a tokenized language model, without changing the language model parameters. It does this by recursively enumerating token continuations that cover a queried character string and summing their probabilities.
 
-“we propose a novel algorithm to obtain unbiased estimates from any language model trained on tokenized data. Our methods do not require finetuning the model, and the complexity, defined as the number of model runs, scales linearly with the sequence length in the case of MPE. As a result, we show that one can simulate token-free behavior from a tokenized language model. We empirically verify the correctness of our method through a Markov-chain setup, where it accurately recovers the transition probabilities, as opposed to the conventional method of directly prompting tokens into the language model.”
+“Our method consists of two stages. In the first stage, the idea is to identify the condition when P(xN n+1|ti 1) = P(xN n+1|xn 1) where ti 1 = encode(xn 1). Once identified, we can refactor the conditional probability to match the conditioning events.”
 
-“We present two novel algorithms to correct this bias for MPE and Byte-Pair-Encoding (BPE) respectively. Due to space limit, the analysis and algorithm for BPE are presented in Appendix H.”
-
-“We present the MPC algorithm in Algorithm 1, that allows us to compute the probabilities P(xN nk+1|tk 1) and P(xn nk+1|tk 1) in Equation (1). Note that this algorithm does not require tk∈V∗. Details on the algorithmic correctness are shown in Appendix E. 3Many current language models begins with a start token <start> in V∗, e.g.”
+Its MPC algorithm provides exact marginalization over tokenizations that cover a character prefix, including recursive branching and passing cases.
 
 “The idea is to marginalize out P(xN nk+1|tk 1) by considering two complementary events: when the next token tk+1 has a prefix xN nk+1 (bval in the Branch Step) versus when the next token tk+1 is contained within xN nk+1 (pval in the Pass Step). Formally, MPC computes the following probabilities: bval = P(xN nk+1, tk+1 ∈B(xN nk+1)) tk 1), (2) pval = P(xN nk+1, tk+1 /∈B(xN nk+1)) tk 1), (3) where B(xN nk+1)={t∈V|xN nk+1∈prefix(decode(t))} and we immediately see that P(xN nk+1|tk 1)=bval+pval.”
 
+For BPE and MPE, the appendix generalizes this into BPC, which searches valid cover encodings and aggregates their token-language-model probabilities.
+
+“Having established these two definitions, we will later show that for BPE (and MPE), the probability P(xn 1) can be represented using a tokenized LM P(ti+1|ti 1) as follows: P(xn 1) = X ⃗t∈cover(xn 1 ) P(⃗t), (49), and the main goal of the BPC algorithm is to search through all cover encodings of xn”
+
+“The Byte-Pair Correction (BPC) algorithm, shown in Algorithm 2 and visualized in Figure 5 (right), which is an efficient algorithm that can search all valid encodings covering xn 1. The idea is that, for each cover encoding ⃗t, once the starting position of the last token is determined (say xi+1), we are guaranteed the prior tokens is unique and must be encode(xi 1).”
+
+Grounded evidence for the assessed overlap
+
+Evidence check: material
+2 of 3 grounded candidates support the overlap
+
+Pairs 1 and 2 establish a substantive shared component of the current claim: both use an autoregressive language model and algorithms that aggregate probability across multiple source encodings or strings yielding the same target character/string outcome. Pair 1 directly supports exact marginalization, while pair 2 supports the corresponding algorithmic search or decomposition over alternative encodings. This is more than a shared topic or generic evaluation activity and constitutes a meaningful part of the claimed contribution, so the proposed partial degree is supported. Pair 3 is weaker and does not independently establish the same conditioning contribution: the prior span conditions on a source token history, whereas the submission span only states that prefix and string probabilities are sought. It is therefore not counted as a supporting pair for conditioning on transformed outputs. The delta's assertions that the prior lacks arbitrary FST transformations, remainder handling, finiteness analysis, or approximate inference are not established merely by these pairs; they should remain qualified. Those limitations do not block the partial-overlap determination because the independently supported exact marginalization and alternative-encoding component is sufficient.
+
+Submission contribution span
+“A core property of transduced language models is the marginalization: the transduction sums source-string probabilities to compute target-string probabilities, aggregating mass across all source strings that map to the same target.”
+
+Pair 1: Both papers contribute exact probability marginalization by summing language-model probabilities over multiple source token encodings or strings that cover the same target character string; the prior paper delivers the narrower tokenization case.
+
+The prior work states:
+“Having established these two definitions, we will later show that for BPE (and MPE), the probability P(xn 1) can be represented using a tokenized LM P(ti+1|ti 1) as follows: P(xn 1) = X ⃗t∈cover(xn 1 ) P(⃗t), (49), and the main goal of the BPC algorithm is to search through all cover encodings of xn”
+
+Submission contribution span
+“The following two examples illustrate how we can often compute this infinite sum by exploiting structural properties of the transducer.”
+
+Pair 2: Both papers contribute an algorithm for efficiently searching or decomposing alternative source encodings so their probabilities can be aggregated, although the prior paper restricts this to valid BPE/MPE token encodings rather than general transducer precovers.
+
+The prior work states:
+“The Byte-Pair Correction (BPC) algorithm, shown in Algorithm 2 and visualized in Figure 5 (right), which is an efficient algorithm that can search all valid encodings covering xn 1.”
+
 Comparison with the submission
 
-This prior paper presents algorithms that marginalize over possible tokenizations to recover unbiased character-level probabilities from a tokenized language model, without changing model parameters. It provides both theoretical analysis and practical algorithms (including an exact algorithm) for this marginalization, which is highly similar in kind and scope to the claimed contribution. The main difference may be in the generality of the transformation (arbitrary FSTs vs. tokenization) and the specific algorithmic details. Thus, the overlap is substantial, and this paper can refute the claim if the submission does not go beyond tokenization or does not introduce fundamentally new algorithmic ideas.
+The prior paper delivers a meaningful substantive part of the claimed contribution: exact probability marginalization over alternative token encodings, together with algorithms that operate through the existing language model probabilities. The overlap is nevertheless partial because the submission's central contribution is a general finite-state-transducer composition and inference framework, including non-tokenization transformations, remainder handling, transducer-level correctness and finiteness analysis, and approximate inference; these capabilities remain beyond the prior paper.
 
 ##### How to Compute the Probability of a Word
 partial overlap · Pimentel et al. · 2024
 
 How this paper realizes the claim
 
-This paper addresses the problem of computing the probability of a word (or string) given a language model that operates over subwords, particularly focusing on the complications introduced by different tokenization schemes (end-of-word vs. beginning-of-word markers). It formalizes the mapping between words and subwords, and shows how to marginalize over all subword sequences that correspond to a given word or word sequence.
+The paper derives word probabilities from a subword language model by representing the set of subword sequences corresponding to a word or word context and summing their probabilities.
 
-“This paper derives the correct methods for computing word probabilities, highlighting issues when relying on language models that use beginning-of-word (bow)-marking tokenisers, e.g., the GPT family. Empirically, we show that correcting the widespread bug in probability computations affects measured outcomes in sentence comprehension and lexical optimisation analyses.”
+“The implication of eq. (8) is that if we can create a subword set ΨS that is “equivalent” to a chosen word set ΨW, we would be able to compute ΨW’s probability by summing over the subwords in ΨS. ∆= between Formally, we define the set equivalence two sets of sequences as:   ∆= ΨS =⇒ w∈ΨW ⇐⇒S W∗→S∗(w)∈ΨS ΨW (9) Now let PS be a probability function defined analogously to PW (in Defn.”
 
-The paper develops efficient algorithms for computing the probability of a word in context by summing over all subword sequences that map to that word, and provides theoretical justification for these methods. It discusses how to perform this marginalization efficiently by leveraging the autoregressive property of language models and the structure of the tokenization.
+“The contextual probability of a word can be computed using probability distributions over subwords as: p(w | w<t) = PS(Ψ′ S) (11) PS(Ψ′′ S) ∆= w<t ◦w ◦W∗and Ψ′′ ∆= w<t ◦W∗.”
 
-“This paper is concerned with the proper method for computing the probability of a word in context, i.e., p(wt | w<t), using a pretrained language model. To this end, we first discuss its equivalence to other quantities, which will ultimately reveal a flaw in prior approaches to its computation.”
+It then develops tokeniser-dependent strategies for constructing the relevant subword prefix sets, including corrections for boundary cases. The paper notes that exact computation can require handling infinite sets, and discusses marginalising finite sets of ambiguous subword sequences, but it does not present a general finite-state-transducer composition algorithm or an approximate inference procedure of the submission's kind.
 
-Quoted from the source but NOT confirmed verbatim:
-Eq. (7) suggests a way to extract probabilities over words from a language model; we can simply use the equivalence:8 p(w) = p(s), for s = S W∗→S∗(w) (8) ... The implication of eq. (8) is that if we can create a subword set ΨS that is “equivalent” to a chosen word set ΨW, we would be able to compute ΨW’s probability by summing over the subwords in ΨS.
+Grounded evidence for the assessed overlap
 
-The paper does not use general finite-state transducers (FSTs) for arbitrary string transformations, but rather focuses on the specific transformation defined by the tokenization process (mapping between words and subwords). It does not present algorithms for composing language models with arbitrary FSTs, nor does it discuss conditioning on arbitrary transformed outputs or supporting exact/approximate inference for general FSTs.
+Evidence check: material
+1 of 2 grounded candidates support the overlap
+
+Pair 1 establishes a substantive shared methodological contribution: both works marginalize probabilities over multiple source sequences induced by a mapping to compute the probability of a target output. The prior work is a narrower tokenisation/subword-to-word special case, while the submission applies the construction to general finite-state transductions. This is more than a shared topic or generic evaluation activity and supports partial overlap.
+
+Pair 2 does not independently establish the full asserted correspondence concerning conditional probabilities obtained as ratios of marginalized prefix or context probabilities. The submission span states that prefix probabilities enable conditional factorization, but does not itself state the ratio construction or explicitly connect those prefixes to marginalized probabilities; the prior span does state such a ratio. Thus, the conditioning component of the proposed rationale should remain qualified. This limitation does not block the partial-overlap decision because Pair 1 independently establishes a meaningful shared component. The submission's broader FST generality, decomposition machinery, finiteness analysis, exact interfaces, and pruning-based inference are not established by these pairs; nor should their absence from the pairs be treated as proven residual novelty.
+
+Submission contribution span
+“A core property of transduced language models is the marginalization: the transduction sums source-string probabilities to compute target-string probabilities, aggregating mass across all source strings that map to the same target.”
+
+Pair 1: Both papers contribute marginalizing a source language-model distribution over multiple source sequences induced by a mapping so as to obtain the probability of a target linguistic output.
+
+The prior work states:
+“(8) is that if we can create a subword set ΨS that is “equivalent” to a chosen word set ΨW, we would be able to compute ΨW’s probability by summing over the subwords in ΨS. ∆= between Formally, we define the set equivalence two sets of sequences as:   ∆= ΨS =⇒ w∈ΨW ⇐⇒S W∗→S∗(w)∈ΨS ΨW (9) Now let PS be a probability function defined analogously to PW (in Defn.”
 
 Comparison with the submission
 
-The prior paper develops efficient and theoretically justified algorithms for marginalizing language model probabilities over all subword sequences that correspond to a given word, focusing on the complications of different tokenization schemes. However, it does not address the more general problem of composing language models with arbitrary finite-state transducers for general string transformations. The submission extends the marginalization approach to arbitrary FSTs, enabling a broader class of transformations and conditioning scenarios. Thus, the overlap is partial: the prior paper covers a special case (tokenization), while the submission generalizes and extends the approach.
+The prior paper delivers a meaningful special case of the claimed marginalization and conditioning contribution: computing word probabilities by summing subword probabilities for tokeniser-induced mappings. However, it does not itself provide the submission's general FST-based algorithms, decomposition machinery, finiteness analysis, or pruning-based approximate inference. The overlap is therefore partial rather than substantial or same.
 
 ##### Sampling from Your Language Model One Byte at a Time
-substantial overlap · Hayase et al. · 2025
+partial overlap · Hayase et al. · 2025
 
 How this paper realizes the claim
 
-The paper introduces ByteSampler, a method for composing a pretrained language model (LM) with a byte-level interface, allowing the LM to be conditioned on arbitrary byte prefixes. This is achieved by constructing a Valid Covering Tree (VCT) that represents all valid token sequences whose decoding covers a given byte prefix. The VCT enables efficient computation of prefix probabilities, sampling completions, and next-byte distributions, all while preserving the original LM's output distribution (up to probability mass on invalid token sequences). The method does not require any changes to the LM's parameters and works at inference time.
+The prior paper constructs a Valid Covering Tree over token sequences consistent with a byte prefix, using pairwise validation and bounded-depth streaming updates. It then sums the language model probabilities of tree leaves to compute prefix and next-byte distributions, and samples bytewise while preserving the original token-level distribution.
 
-Quoted from the source but NOT confirmed verbatim:
-In this paper, we propose ByteSampler, a system that can condition LMs on arbitrary byte-prefixes. This can be used to solve the PBP and can also be applied to convert the (tokenized) LM into a byte-level LM. Compared to prior work (Table 1), our method is the first to simultaneously achieve the following objectives: 1. Exact. Our method preserves the model’s output distribution, up to probability mass on invalid token sequences. We empirically show that our method preserves language modeling loss in Section 4.2 and preserves utility in downstream tasks (Sections E.5 and F). 2. Efficient. Our method is faster and uses fewer inference tokens than all methods of comparable quality (Sections 4.1, E.1 and E.2) 3. Compatible. Our method supports BPE tokenizers with future-dependent pretokenization, making it applicable to the vast majority of current open-weight LMs. (Table 1 and Section C.7)
+“The tree is composed of a “trunk” of tokens that are fully determined (starting at the root, every node has only one child) plus a finite number of “branching” nodes at the end of the trunk. (The number is bounded by a constant which depends only on the tokenizer, see Section 3.2.)”
 
-Quoted from the source but NOT confirmed verbatim:
-The VCT T for a given a byte-string S can be used to efficiently perform various byte-level language modeling tasks. We use “ByteSampler” to refer to this collection of routines. ... 1. To compute the probability of S (as a prefix) under the LM, we sum the cumulative probabilities the LM assigns to the sequences represented by all leaves of T. 2. To sample a completion of S while avoiding the PBP, we compute the probability (as above) of every leaf in T and sample one of them accordingly. We are then free to continue sampling a continuation from that leaf using normal token-level sampling because sampled tokens induce token boundaries selected by the model. This one-time operation can be used to solve the PBP without paying the cost of byte-level sampling. 3. To compute the next byte distribution following S, we group the leaves of T by their corresponding next byte and sum the probabilities of the leaves in each group, as illustrated in Fig. 3. By repeatedly sampling from this distribution, we can generate text one byte at a time.
+“To compute the probability of a prefix under the LM, we sum the cumulative probabilities the LM assigns to the sequences represented by all leaves of the tree. To sample a continuation of a prefix, we compute the probability (as above) of every leaf and sample one of them accordingly.”
 
-“Our method preserves the model’s output distribution, up to probability mass on invalid token sequences.”
+“To compute the next byte distribution given a prefix, we group the leaves by the next byte they would entail and sum the probabilities (as above) of the leaves in each group. This can be combined with a sampling rule to generate text one byte at a time.”
 
-“In our experiments, we apply ByteSampler at inference time to off-the-shelf language models. In Section 4.1 we show that our method has less computational overhead compared to other exact methods.”
+“To sample a continuation of a prefix, we compute the probability (as above) of every leaf and sample one of them accordingly. We are then free to continue sampling a continuation from that leaf using normal token-level sampling.”
 
-Comparison with the submission
+Grounded evidence for the assessed overlap
 
-[downgraded: no both-sides-verified evidence quote pair] This paper presents ByteSampler, which composes a language model with the tokenizer (viewed as a finite-state transducer) to marginalize over token sequences that decode to a given byte string, enabling conditioning on arbitrary byte prefixes and supporting exact inference without modifying the model. This matches the core technical contribution of the claim, as both involve composing an LM with an FST to marginalize source-string probabilities into target outputs and enable transformed-output conditioning. However, the submission may go further by supporting arbitrary FSTs, not just tokenizers, and by providing a more general decomposition and theoretical analysis. Thus, the overlap is substantial but not identical.
+Evidence check: material
+3 of 4 grounded candidates support the overlap
 
-##### Neural Grammatical Error Correction with Finite State Transducers
-partial overlap · Stahlberg et al. · 2019
+Pairs 1, 3, and 4 establish substantive overlap within the current claim: both papers aggregate language-model probability over source sequences compatible with a transformed output prefix, use prefix probabilities for autoregressive transformed-space generation, and employ finite structured enumeration of compatible source sequences. These are meaningful components of the submission's transformed autoregressive inference, not merely a shared topic or generic evaluation activity. Pair 2 supports that both papers produce transformed next-symbol distributions, but its submission span only states that next-symbol distributions are computed; it does not itself establish the asserted grouping of compatible source sequences, so it is not counted as support for the full stated relation. The evidence supports partial overlap, while the cited pairs do not establish equivalence with the submission's broader general finite-state-transducer framework. The delta's specific claims about quotient/remainder sets, exact guarantees, pruning-based approximation, non-prefix-monotone mappings, and the precise scope of the prior paper are not all independently established by these pairs. Those limitations should remain qualified and do not block the partial-overlap decision, because the meaningful shared transformed-inference component is directly supported.
 
-How this paper realizes the claim
+Submission contribution span
+“In §3, we saw that if we can sum over the precover of y, we can calculate -→ p Y (y) (Eq. ( 3 )), unlocking an autoregressive interface to the transduced language model.”
 
-This paper develops a grammatical error correction (GEC) system that constructs a hypothesis space using finite-state transducers (FSTs) and then constrains the output of neural models to this space. The FSTs are used to represent possible corrections (via confusion sets and edit transducers), and the hypothesis space is scored using a combination of symbolic (n-gram) and neural language models.
+Pair 1: Both papers contribute computation of a transformed or constrained output-prefix probability by aggregating language-model probabilities over compatible source token sequences; the prior paper delivers this as a narrower byte-prefix covering-tree construction.
 
-“We make extensive use of the FST operations available in OpenFST (Allauzen et al., 2007) like composition (denoted with the ◦-operator) and projection (denoted with Πinput(·) and Πoutput(·)) to build H. The process starts with an input lattice I.”
+The prior work states:
+“To compute the probability of a prefix under the LM, we sum the cumulative probabilities the LM assigns to the sequences represented by all leaves of the tree.”
 
-Quoted from the source but NOT confirmed verbatim:
-To incorporate word-level language model scores we train a 5-gram count-based LM ... and convert it to an FST L using the OpenGrm NGram Library ... Our combined word-level scores can be expressed with the following transducer: Hword = B ◦P ◦L.
+Submission contribution span
+“Prefix probabilities yield a conditional factorization of string probability (see §2), enabling efficient left-to-right autoregressive generation.”
 
-“Note that exact inference in Hword is possible using FST shortest path search. This is an improvement over the work of Bryant and Briscoe (2018) who selected correction options greedily.”
+Pair 3: Both papers contribute autoregressive generation in the transformed output space using probabilities conditioned on the already generated target prefix; the prior paper provides the narrower bytewise version.
 
-The paper composes FSTs representing possible edits with FSTs representing language models, and uses the composed FST to constrain and score candidate outputs. The composition is used to efficiently search for the best correction, and exact inference is possible in the composed FST. The neural language model is used for rescoring, but is not itself composed as an FST.
+The prior work states:
+“This can be combined with a sampling rule to generate text one byte at a time.”
 
-The paper does not describe algorithms for marginalizing source string probabilities into target outputs, nor does it enable conditioning on transformed outputs in the sense of propagating probabilities through the transducer from a pretrained language model without changing its parameters. Instead, it uses FSTs to define a constrained search space and then applies language models (symbolic and neural) for scoring.
+Submission contribution span
+“We develop a method in §4 that allows us to compute the sum in Eq. ( 3 ) in finite time for a general class of mappings, such as those mentioned in the introduction (i.e., normalizing text, inserting orthographic word boundaries, or converting DNA to amino-acid sequences).”
 
-Comparison with the submission
+Pair 4: Both papers contribute a finite structured enumeration of source sequences compatible with a target prefix for transformed inference, but the prior paper's enumeration is limited to BPE token sequences covering a byte prefix.
 
-This prior paper uses FST composition to build a hypothesis space for grammatical error correction and composes it with an n-gram language model FST for scoring, supporting exact inference in the composed space. However, it does not develop algorithms for marginalizing source string probabilities into target outputs or for conditioning on transformed outputs by propagating probabilities through the FST from a pretrained language model. The submission's contribution is more general and algorithmic, enabling new forms of inference and conditioning not present in this work. Thus, the overlap is partial: the prior paper shares the use of FST-LM composition and exact inference, but not the core marginalization and conditioning algorithms of the submission.
-
-##### Leading Whitespaces of Language Models’ Subword Vocabulary Pose a Confound for Calculating Word Probabilities
-partial overlap · Oh et al. · 2024
-
-How this paper realizes the claim
-
-This paper identifies a confound in how word probabilities are calculated from language models (LMs) that use subword tokenization with leading whitespaces. It proves that the standard method of aggregating subword probabilities can violate probability axioms and proposes a correction called whitespace-trailing (WT) decoding. WT decoding reallocates the probability of the trailing whitespace to the current word, resulting in consistent word probabilities without modifying the LM parameters. The paper provides a mathematical proof of this correction, demonstrates its effect on psycholinguistic modeling, and shows that it can be implemented efficiently as a post-processing step.
-
-“We propose a simple and efficient decoding method that reaccounts the probability of the trailing whitespace into that of the current word, which resolves this confound. Regression results show that this correction reveals significantly lower surprisal-based estimates of garden-path effects in transitive/intransitive sentences and poorer fits of LM surprisal to naturalistic reading times.”
-
-“WT decoding simply involves the factorization of whitespace probabilities by marginalizing over tokens in VB and rearranging them, it requires no modifications to the LM and minimal overhead. Additionally, the joint probability of the entire sequence, and therefore metrics like perplexity, changes minimally by a factor of the probability of the final trailing whitespace with WT decoding.”
-
-“we note that WT decoding does not resolve other issues with subword units that may be addressed by re-training LMs with different tokenization schemes (e.g. Nair and Resnik, 2023), which can nonetheless be expensive. Concurrent work by Pimentel and Meister (2024) points out this same issue and also proposes WT decoding.”
-
-“As WT decoding simply involves the factorization of whitespace probabilities by marginalizing over tokens in VB and rearranging them, it requires no modifications to the LM and minimal overhead. Additionally, the joint probability of the entire sequence, and therefore metrics like perplexity, changes minimally by a factor of the probability of the final trailing whitespace with WT decoding.”
+The prior work states:
+“The fundamental structure of the algorithm is based on what we call the Valid Covering Tree, which is the tree of all possible valid token sequences that share a specific byte prefix and do not extend past the end of the prefix by more than one full token.”
 
 Comparison with the submission
 
-The prior paper addresses a specific case of marginalizing over subword tokenizations to correct word probability calculations in LMs with leading whitespace tokens, using a simple post-processing algorithm (WT decoding). However, it does not develop general algorithms for composing LMs with arbitrary FSTs, nor does it address conditioning on transformed outputs or provide the theoretical and algorithmic generalizations found in the submission. Thus, the overlap is partial: the prior paper shares the high-level idea of marginalizing over latent structures for output probabilities without changing model parameters, but the submission is broader and more general in scope and technical contribution.
+The prior paper makes a meaningful substantive contribution overlapping the submission's transformed autoregressive inference: it aggregates language-model mass over token sequences compatible with a byte prefix and derives exact next-byte distributions and sampling. However, its method is specialized to BPE tokenization and bytewise sampling, whereas the submission contributes a broader finite-state-transducer composition algorithm, including general marginalization, conditioning, exact/approximate prefix inference, and handling of remainders and non-prefix-monotone functions. Thus important central novelty remains, so the overlap is partial rather than substantial or same.
 
 ---
 
@@ -548,9 +547,32 @@ The prior paper addresses a specific case of marginalizing over subword tokeniza
 
 The paper gives sufficient transducer-level conditions guaranteeing finite prefix decompositions for every target string, including transformations that are not prefix monotone.
 
-**Verdict:** not challenged in the examined literature
+#### Claim-level conclusion
 
-This claim is not challenged by any examined prior work. The closest related works, such as "From Language Models over Tokens to Language Models over Characters" and "Sampling from Your Language Model One Byte at a Time," only address prefix decompositions in the context of strict-prefix monotone transformations or specific cases like BPE tokenizers. They do not provide general transducer-level conditions for finiteness, especially for non-prefix-monotone transformations. The submission extends these results by providing sufficient transducer-level conditions (e.g., absence of ε-output cycles and inductive safety) for finite prefix decompositions in a much broader setting. The evidence is strong, as it is based on full-text comparisons and explicit statements of the submission's broader scope. Therefore, the novelty of this theoretical contribution holds within the examined literature.
+**Assessment:** not challenged in the examined literature. No comparison in the examined candidate set was found to substantially or equivalently overlap this claim under material evidence. This does not establish novelty across the wider literature -- only that none was found here.
+
+**Main overlap:** From Language Models over Tokens to Language Models over Characters (Both works guarantee a finite prefix-based decomposition or summation for every target string under structural conditions on the transformation.) [partial overlap · material]; Sampling from Your Language Model One Byte at a Time (The prior paper itself provides a finite, bounded representation of all source tokenizations compatible with every target byte prefix, using tokenizer-specific bounded lookahead.) [partial overlap · material].
+
+**Remaining contribution relative to the strongest supported comparison(s):**
+
+- **From Language Models over Tokens to Language Models over Characters:** The submission contributes transducer-level sufficient conditions—no ε-output cycles and inductive state safety—that guarantee finite decompositions even when the realized function is not prefix monotone. It also introduces the remainder needed for non-prefix-monotone transformations and distinguishes sufficient conditions from necessary ones.
+- **Sampling from Your Language Model One Byte at a Time:** The submission gives general transducer-level sufficient conditions—absence of ε-output cycles and inductive state safety—that guarantee finite quotient and remainder for every target string.
+
+These are comparison-specific differences, not a synthesis across all prior work. Evidence supporting overlap does not automatically verify every stated difference or absence claim; see each comparison’s evidence assessment.
+
+**Evidence limits:** 21 of 24 comparisons have insufficient evidence. One comparison shows a conflict between the overlap assessment and evidence check: Formalizing BPE Tokenization was assessed as superficial while the evidence check found material overlap. This conflict remains unresolved. Insufficient evidence means the check could not settle the question, not that no overlap exists.
+
+**Coverage:** 24 comparisons processed, 24 with an evidence check: 3 material, 21 insufficient.
+
+#### What the submission does for this claim
+
+The submission gives a sufficient, transducer-level termination criterion for finite prefix decompositions for every target string, and explicitly covers functions that are not prefix monotone. The criterion has two parts: no cycle whose transitions all emit ε, and inductive safety of every state, where safety arises from input-projection universality, finite closure, or safety of all successor states.
+
+“Lemma 6.1. Let f : X * → Y * be a function realized by a transducer f. The decomposition (Q(y), R(y)) is finite for every y ∈ Y * if: (i) No ε-output cycles: f contains no cycle in which every arc outputs ε.”
+
+The stated scope is sufficient rather than necessary: the conditions guarantee exact computation, but some decompositions may still be finite when individual states fail the safety test. The submission also reports their application to specific transducers: token-to-byte and DNA-to-amino-acid have finite quotients and empty remainders, whereas the PTB transducer has infinite quotients.
+
+“The conditions in Lemma 6.1 guarantee exact computation. In particular, these are satisfied by the transducers introduced in the experiments section ( §7): the token-to-byte transducer f α and the DNA-to-amino-acid transducer f dna2aa , whose quotients are finite and remainders empty, but not by the PTB transducer f ptb , whose quotients are infinite. The lemma's conditions are sufficient but not necessary”
 
 #### Overlapping prior work
 
@@ -559,45 +581,78 @@ partial overlap · Vieira et al. · 2024
 
 How this paper realizes the claim
 
-The paper addresses the problem of converting token-level language models to character-level ones, focusing on the computation of prefix probabilities for character strings given a token-level model and a decoding function. It introduces the notion of a 'covering' set of token strings whose decoded outputs cover a given character prefix, and provides algorithms for efficiently computing prefix probabilities by summing over this covering set.
+The paper gives a decoder-level sufficient condition: strict-prefix monotonicity of κ. Under this condition, its covering construction yields a finite set of minimal token prefixes for every target string and replaces the corresponding infinite sum with a finite sum.
 
-“We will develop effective methods for these summations for the family of strict-prefix monotone decoders κ (described in §2.4) where Eq. (10) and Eq. (11) admit a finite summation. ## 2.4.”
+“Strict-prefix monotonicity is the key structural property required by §3’s algorithms, as it allows us to replace an infinite sum with a finite sum in Proposition 1. We briefly mention an important special case.”
 
-The paper explicitly states that its algorithms and finite covering constructions rely on the decoder κ being strict-prefix monotone (a property stronger than prefix monotonicity). It does not provide constructions or sufficient conditions for finite prefix decompositions in the absence of prefix monotonicity, nor does it address the case of general transducers or non-monotone transformations.
+“Proposition 1. Suppose (Σ, ∆, τ, κ) is a tokenization model where κ is strict-prefix monotone and p∆is a token-level language model. Then, the prefix probability −→ pΣ(σ) for the character-level model Eq. (6) is given by −→ pΣ(σ) = X δ∈C(σ) −→ p∆(δ), ∀σ ∈Σ∗ (13) Proof.”
+
+“Specifically, we now have a finite sum, as |C(σ)| is finite for all σ ∈Σ∗. Bear in mind that the covering’s size is likely too large to be practical, as there may still be a large number of summands; however, the set of high-prefix-probability elements of the covering tends to be reasonably small, an observation that we verify in §4, and leverage to develop practical algorithms in §3.”
+
+The paper does not provide transducer-level conditions, and it does not handle transformations that are not prefix monotone; its guarantee is limited to strict-prefix-monotone decoders.
+
+Grounded evidence for the assessed overlap
+
+Evidence check: material
+1 of 1 grounded candidates support the overlap
+
+Pair 1 validly establishes a shared substantive empirical/methodological contribution: both works provide a finite prefix-based decomposition or summation for every target string. The quoted submission span specifies transducer-level sufficient conditions and explicitly includes non-prefix-monotone functions; the prior-paper span establishes finiteness of the covering/sum for every target, supporting the narrower special case described in the comparison. This is more than a shared topic or generic activity, so the overlap is material and supports a partial degree. The pair does not establish that the prior paper itself has transducer-level conditions, handles non-prefix-monotone transformations, or introduces a remainder; those are appropriately presented as submission-specific differences. The decoder-level versus transducer-level characterization and exclusion of non-prefix-monotone cases are asserted in the comparison but are not fully established by the quoted prior span, so those delta details should remain qualified; they do not block the independently supported partial-overlap determination.
+
+Submission contribution span
+“Lemma 6.1 gives sufficient conditions on a transducer that guarantee a finite decomposition for every target string, even when the underlying function is not prefix monotone.”
+
+Pair 1: Both works provide a finite prefix-based decomposition or summation for every target string; the prior paper supplies the narrower strict-prefix-monotone covering case, while the submission generalizes the guarantee to transducer-level conditions and non-prefix-monotone functions.
+
+The prior work states:
+“Specifically, we now have a finite sum, as |C(σ)| is finite for all σ ∈Σ∗.”
 
 Comparison with the submission
 
-This prior paper develops algorithms for computing prefix probabilities for character strings given a token-level model, but its constructions and guarantees are limited to the case where the decoder is strict-prefix monotone. It does not address the more general case of non-monotone transformations or provide transducer-level conditions for finiteness in that setting. The submission extends this line of work by giving sufficient conditions for finite decompositions even when prefix monotonicity does not hold, thus going beyond the contributions of this paper. The overlap is therefore partial: the prior paper covers the monotone case, but not the general case addressed by the submission.
+The prior paper delivers a meaningful special case of the claimed contribution: strict-prefix monotonicity guarantees a finite covering for every target. The overlap is partial rather than substantial because the prior guarantee is decoder-level and excludes non-prefix-monotone transformations, whereas the submission’s central novelty is a transducer-level guarantee covering those cases through safety and a finite remainder.
 
 ##### Sampling from Your Language Model One Byte at a Time
 partial overlap · Hayase et al. · 2025
 
 How this paper realizes the claim
 
-The paper introduces ByteSampler, a method for sampling from a language model conditioned on arbitrary byte prefixes, addressing the prompt boundary problem caused by tokenization. The core technical object is the Valid Covering Tree (VCT), which represents all valid token sequences whose decoding covers a given byte prefix. The VCT is constructed to be finite and efficiently computable for any prefix, with its size bounded by a constant depending on the tokenizer. The paper provides a formal definition of the VCT, proves its compactness (Proposition 3.2), and describes algorithms for constructing and incrementally updating it as new bytes are generated. The VCT enables efficient computation of prefix probabilities and next-byte distributions, and the paper proves that the VCT is always finite for BPE tokenizers with certain properties (constant lookahead, no merges crossing pretoken boundaries). The paper does not explicitly discuss general transducers or provide transducer-level conditions for finite prefix decompositions beyond the BPE/tokenizer setting.
+The paper constructs a Valid Covering Tree for each byte prefix: a finite representation of all valid token sequences compatible with that prefix, with branches limited to a bounded amount of lookahead.
+
+“The fundamental structure of the algorithm is based on what we call the Valid Covering Tree, which is the tree of all possible valid token sequences that share a specific byte prefix and do not extend past the end of the prefix by more than one full token. We show the construction of the Valid Covering Tree in Fig.”
+
+“Compactness: The tree is composed of a “trunk” of tokens that are fully determined (starting at the root, every node has only one child) plus a finite number of “branching” nodes at the end of the trunk. (The number is bounded by a constant which depends only on the tokenizer, see Section 3.2.)”
+
+It then establishes that bounded lookahead makes the tree constant-sized and supports constant-time updates as bytes arrive, yielding a finite, efficiently maintainable cover for the specific BPE-tokenization setting.
+
+“This implies that the branching tree T will have bounded depth, since any token that is fully determined will be removed from the tree and written to the output stream. The branching factor of the tree is also bounded by a constant depending on the tokenizer. Thus, the number of edges of T is bounded by a constant, which also means the pruning described in Fig.”
+
+“Thus, the number of edges of T is bounded by a constant, which also means the pruning described in Fig. 2 can be carried out in constant time. For more concrete performance numbers see Section 4.1, where we show that the tree has only 0.72 extra non-leaf nodes on average.”
+
+Grounded evidence for the assessed overlap
+
+Evidence check: material
+2 of 2 grounded candidates support the overlap
+
+Pair 1 establishes a substantive shared component: both works represent the source-side decompositions compatible with a target prefix using a finite structure, although the submission expresses this as quotient-and-remainder finiteness under transducer conditions and the prior paper as a tokenizer-specific Valid Covering Tree. Pair 2 independently supports that the prior representation is bounded and finite, rather than merely sharing a generic topic or evaluation activity. Together, these pairs support meaningful partial overlap with the finite prefix-covering/decomposition aspect of the claim. They do not establish that the prior paper supplies general transducer-level sufficient conditions, handles non-prefix-monotone transformations, permits nonempty remainders, or distinguishes sufficient from necessary conditions. Those submission-delta assertions must therefore remain qualified and cannot be certified as novelty solely from the quoted pairs, but proving all such residual differences is not necessary to support the proposed partial-overlap degree.
+
+Submission contribution span
+“The decomposition (Q(y), R(y)) is finite for every y ∈ Y * if: (i) No ε-output cycles: f contains no cycle in which every arc outputs ε.”
+
+Pair 1: Both papers contribute a finite prefix-covering representation for every target prefix: the submission guarantees finite quotient-and-remainder decompositions under transducer conditions, while the prior paper constructs a tokenizer-specific tree of tokenizations covering a byte prefix.
+
+The prior work states:
+“The fundamental structure of the algorithm is based on what we call the Valid Covering Tree, which is the tree of all possible valid token sequences that share a specific byte prefix and do not extend past the end of the prefix by more than one full token.”
+
+Submission contribution span
+“In particular, these are satisfied by the transducers introduced in the experiments section (§7): the token-to-byte transducer f α and the DNA-to-amino-acid transducer f dna2aa, whose quotients are finite and remainders empty”
+
+Pair 2: Both papers provide a bounded finite representation of the source decompositions compatible with a target prefix: the submission proves finite quotients and remainders for qualifying transducers, whereas the prior paper bounds the Valid Covering Tree to a determined trunk plus finitely many branching nodes.
+
+The prior work states:
+“Compactness: The tree is composed of a “trunk” of tokens that are fully determined (starting at the root, every node has only one child) plus a finite number of “branching” nodes at the end of the trunk.”
 
 Comparison with the submission
 
-This prior paper delivers a finite, efficiently computable representation (the Valid Covering Tree) for all token sequences covering a given prefix, enabling prefix probability computation and sampling for BPE tokenizers. However, it does not address arbitrary transducers or provide general transducer-level conditions for finiteness, nor does it handle non-prefix-monotone transformations in the general sense. The submission extends these ideas to a broader class of transformations and provides explicit transducer-level guarantees, representing a significant generalization. Thus, the overlap is partial: the prior paper covers the BPE/tokenizer case, but not the full generality or the transducer-level conditions of the submission.
-
-##### How to Compute the Probability of a Word
-partial overlap · Pimentel et al. · 2024
-
-How this paper realizes the claim
-
-The paper addresses the problem of computing the probability of a word given a subword-based language model, focusing on the correct computation of prefix probabilities and the mapping between words and subwords under different tokenization schemes (end-of-word and beginning-of-word marking).
-
-“We are now in a position to define our quantity of interest p(w | w<t) in terms of subword probabilities: it is simply the quotient of PS(·) for two different sets ΨS. Lemma 1. The contextual probability of a word can be computed using probability distributions over subwords as: p(w | w<t) = PS(Ψ′ S) / PS(Ψ′′ S) where Ψ′ S ∆= w<t ◦w ◦W∗ and Ψ′′ S ∆= w<t ◦W∗.”
-
-The paper provides efficient strategies for computing these probabilities by leveraging the autoregressive property of language models and the structure of the tokenization scheme. It gives explicit constructions for the sets of subword prefixes needed to compute prefix probabilities, and shows how these can be used to compute word probabilities for both eow- and bow-marking tokenizers.
-
-“It follows that if we can find a set of subword sequences ΨS = {s(k)}K k=1 for which we have the equivalence w ◦W∗ ∆= ⨆_{s∈ΨS} s ◦S∗, then we can compute prefix probabilities as: PS[⨆_{s∈ΨS} s ◦S∗] = ∑_{s∈ΨS} PS(s ◦S∗)”
-
-The paper's constructions are based on properties of the tokenization function and the language model, not on general transducers. It does not provide general transducer-level sufficient conditions for the finiteness of prefix decompositions for arbitrary string transformations, nor does it address transformations that are not prefix monotone in the general sense.
-
-Comparison with the submission
-
-This prior paper provides a detailed and rigorous treatment of prefix decompositions and probability computations for word and subword mappings in language models, including efficient algorithms for the specific case of tokenization functions. However, it does not address the more general problem of arbitrary transducer-based string transformations, nor does it provide transducer-level sufficient conditions for finite decompositions, especially for non-prefix-monotone cases. Thus, the submission's contribution is only partially overlapped: it generalizes the results to a broader class of transformations and provides new sufficient conditions at the transducer level.
+The contributions partially overlap because the prior paper already delivers a finite prefix-covering structure for every byte prefix in the BPE setting, with bounded lookahead and constant-size maintenance. However, its result is a tokenizer-specific construction and does not provide general transducer-level guarantees or address non-prefix-monotone transformations and nonempty remainders. The submission therefore retains a distinct central contribution: a broader sufficient-condition theorem for finite decompositions of arbitrary transducer-realized functions.
 
 ---
 
@@ -605,9 +660,38 @@ This prior paper provides a detailed and rigorous treatment of prefix decomposit
 
 The paper demonstrates inference-time adaptation of pretrained language models to bytes, words, and amino acids without retraining.
 
-**Verdict:** challenged by prior work
+#### Claim-level conclusion
 
-This claim is challenged by the prior work "From Language Models over Tokens to Language Models over Characters," which, as verified by both-sides quotes, presents algorithms for inference-time adaptation of pretrained token-level language models to character/byte-level outputs without retraining, by marginalizing over tokenizations. The overlap is substantial for the case of byte/character adaptation. However, the submission claims to generalize this approach to arbitrary string transformations via finite-state transducers, enabling adaptation not only to bytes/characters but also to words and amino acids, and introduces new algorithms and demonstrations in these additional domains. Thus, while the core idea of inference-time adaptation to new units is not novel, the submission's broader generalization and application to new domains represent a meaningful extension beyond the prior work.
+**Assessment:** not challenged in the examined literature. No comparison in the examined candidate set was found to substantially or equivalently overlap this claim under material evidence. This does not establish novelty across the wider literature -- only that none was found here.
+
+**Main overlap:** Sampling from Your Language Model One Byte at a Time (Both papers use an existing tokenizer-based language model at inference time to obtain predictions over a finer-grained unit—bytes or characters—without retraining the model.) [partial overlap · material]; Understanding and Mitigating Tokenization Bias in Language Models (Both works perform inference-time transformation of an existing token-level language model into a model over a finer-grained sequence representation, computing probabilities by marginalizing or correcting over alternative tokenizations/encodings rather than retraining the model.) [partial overlap · material]; How to Compute the Probability of a Word (Both papers adapt an existing pretrained language model at inference time to produce probabilities over orthographic words rather than the model's native subword units, without retraining.) [partial overlap · material]; Syntactic Control of Language Models by Posterior Inference (Both papers contribute an inference-time framework that repurposes an existing pretrained language model without retraining it, using probabilistic inference to obtain a model or generation process adapted to a desired output representation or constraint.) [partial overlap · material]; From Language Models over Tokens to Language Models over Characters (Both works substantively adapt pretrained token-level language models to produce distributions over bytes without retraining the underlying language model.) [partial overlap · material]; Leading Whitespaces of Language Models’ Subword Vocabulary Pose a Confound for Calculating Word Probabilities (Both works adapt the output unit of an existing pretrained language model at inference time without retraining.) [partial overlap · insufficient].
+
+**Remaining contribution relative to the strongest supported comparison(s):**
+
+- **Sampling from Your Language Model One Byte at a Time:** The submission generalizes inference-time transduction through finite-state transducers and demonstrates it across bytes, orthographic words, and amino acids, including transformations not addressed by the prior paper.
+- **Understanding and Mitigating Tokenization Bias in Language Models:** The submission contributes a general transducer-based framework and algorithms for composing pretrained language models with arbitrary string-to-string transformations, including token-to-byte, token-to-orthographic-word, and DNA-to-amino-acid mappings.
+- **How to Compute the Probability of a Word:** The submission presents a broader transducer-based framework and inference algorithms for arbitrary string-to-string mappings, together with an efficient approximation and experiments covering token-to-byte, token-to-orthographic-word, and DNA-to-amino-acid transformations.
+- **Syntactic Control of Language Models by Posterior Inference:** The submission's distinct central contribution is a general transducer-based framework for composing pretrained language models with string-to-string transformations and computing or approximating the resulting distributions.
+- **From Language Models over Tokens to Language Models over Characters:** The submission contributes a general transducer-based framework that supports arbitrary finite-state transformations and extends beyond bytes to orthographic word boundaries and amino-acid sequences.
+
+These are comparison-specific differences, not a synthesis across all prior work. Evidence supporting overlap does not automatically verify every stated difference or absence claim; see each comparison’s evidence assessment.
+
+**Evidence limits:** 10 of 24 comparisons have insufficient evidence. One comparison shows a conflict between the overlap assessment and evidence check: Model Decides How to Tokenize: Adaptive DNA Sequence Tokenization with MxDNA was assessed as superficial while the evidence check found material overlap. This conflict remains unresolved. One comparison shows a conflict between the overlap assessment and evidence check: Language Models over Canonical Byte-Pair Encodings was assessed as superficial while the evidence check found material overlap. This conflict remains unresolved. One comparison shows a conflict between the overlap assessment and evidence check: Sequential Monte Carlo Steering of Large Language Models using Probabilistic Programs was assessed as superficial while the evidence check found material overlap. This conflict remains unresolved. Insufficient evidence means the check could not settle the question, not that no overlap exists.
+
+**Coverage:** 24 comparisons processed, 24 with an evidence check: 8 material, 6 nonmaterial, 10 insufficient.
+
+#### What the submission does for this claim
+
+The submission delivers a general transducer-based framework for inference-time transformation of pretrained language models, with an autoregressive interface that computes target-unit probabilities without retraining. It applies this framework to bytes, orthographic words, and amino acids, using token-to-byte conversion, an FST encoding the PTB tokenizer, and a DNA-to-amino-acid transducer.
+
+“Empirically, we have shown that our beam-summing approximation efficiently transduces tokenbased LLMs into models over bytes, words, and even amino acids, without requiring retraining. Our theoretical analysis characterizes the conditions under which such mappings can be performed exactly.”
+
+The empirical scope is specific: token-to-byte experiments use GPT-2 Large, LLaMA 3.2-1B, LLaMA 3.1-8B, and Phi-4 on the first ten paragraphs of WikiText-2; word-boundary experiments use the PTB tokenizer on the same dataset; and amino-acid experiments evaluate a DNA model on 65 human proteins. Accuracy-throughput behavior is measured with JSD and cross-entropy under probability-mass pruning, with lower thresholds generally improving agreement at the cost of throughput; the DNA case additionally requires candidate-set caps because its decomposition grows exponentially.
+
+“Across all three settings-token-to-byte, PTB tokenization, and DNA-to-amino-acid-JSD decreases as τ decreases, at the cost of throughput (bytes/sec). Tab.”
+
+Quoted from the source but NOT confirmed verbatim:
+To evaluate our approach, we sample 65 human proteins.
 
 #### Overlapping prior work
 
@@ -616,239 +700,178 @@ partial overlap · Hayase et al. · 2025
 
 How this paper realizes the claim
 
-The paper introduces ByteSampler, a method for inference-time adaptation of pretrained language models (LMs) with BPE tokenizers to operate at the byte level, without retraining the model. The method constructs a Valid Covering Tree (VCT) for a given byte prefix, representing all valid token sequences that cover the prefix, and uses this to compute next-byte distributions and sample completions at the byte level. The approach is exact (up to probability mass on invalid token sequences), efficient, and compatible with BPE tokenizers. The paper demonstrates ByteSampler on off-the-shelf LMs, showing applications to byte-level language modeling, ensembling models with different tokenizers, and proxy-tuning. However, the method is specifically designed for byte-level adaptation and does not address adaptation to words or amino acids.
+The prior paper develops ByteSampler, a method for using a tokenizer-based pretrained language model to compute next-byte distributions and sample continuations one byte at a time, without changing or retraining the underlying model.
 
-“In this work, we present an inference-time method to convert any autoregressive LM with a BPE tokenizer into a character-level or byte-level LM. Our method efficiently solves the PBP and is also able to unify the vocabularies of language models with different tokenizers, allowing one to ensemble LMs with different tokenizers at inference time or transfer the post-training from one model to another using proxy-tuning.”
+“To compute the next byte distribution given a prefix, we group the leaves by the next byte they would entail and sum the probabilities (as above) of the leaves in each group. This can be combined with a sampling rule to generate text one byte at a time. Naturally, this will generate text more slowly than sampling at the token level.”
 
-Quoted from the source but NOT confirmed verbatim:
-Contributions. In this paper, we propose ByteSampler, a system that can condition LMs on arbitrary byte-prefixes. This can be used to solve the PBP and can also be applied to convert the (tokenized) LM into a byte-level LM.
+It also evaluates the resulting inference-time conversion from off-the-shelf token-level models to character-level prediction, but it does not itself provide adaptation to orthographic words or amino acids.
 
-“Our method preserves the model’s output distribution, up to probability mass on invalid token sequences. We empirically show that our method preserves language modeling loss in Section 4.2 and preserves utility in downstream tasks (Sections E.5 and F).”
+Grounded evidence for the assessed overlap
 
-“Our method supports BPE tokenizers with future-dependent pretokenization, making it applicable to the vast majority of current open-weight LMs. (Table 1 and Section C.7) 2 ## Background In this section we give essential background regarding tokenization as well a prior work addressing the Prompt Boundary Problem.”
+Evidence check: material
+1 of 1 grounded candidates support the overlap
 
-“In our experiments, we apply ByteSampler at inference time to off-the-shelf language models. In Section 4.1 we show that our method has less computational overhead compared to other exact methods.”
+Pair 1 validly supports a substantive overlap in the current claim's byte-level inference-time adaptation: the submission explicitly transduces pretrained token-based language models to bytes without retraining, while the prior paper states that its method can generate text one byte at a time. These spans support compatible conversion/use of an existing token-based model for byte-level prediction or generation, though they do not establish equivalence of methods or the full claimed scope. The pair does not support overlap for word- or amino-acid-level adaptation, nor does it establish that the prior paper lacks those capabilities; those delta assertions must remain qualified unless separately evidenced. It also does not independently substantiate the submission's broader finite-state-transducer, probability-decomposition, or beam-summing framework, but those limitations do not block the proposed partial degree because the byte-level component is a meaningful part of the current claim and the assessment treats the broader framework as residual scope.
+
+Submission contribution span
+“Empirically, we have shown that our beam-summing approximation efficiently transduces tokenbased LLMs into models over bytes, words, and even amino acids, without requiring retraining.”
+
+Pair 1: Both papers contribute inference-time conversion of a pretrained token-based language model into a byte-level predictor by computing distributions over bytes without retraining the underlying model; the prior paper covers the byte case but not the submission’s word- and amino-acid adaptations or general transducer framework.
+
+The prior work states:
+“This can be combined with a sampling rule to generate text one byte at a time.”
 
 Comparison with the submission
 
-This paper presents a method for inference-time adaptation of pretrained language models to the byte level, without retraining, using a Valid Covering Tree construction. This overlaps with the submission's claim regarding byte-level adaptation, but the paper does not address adaptation to words or amino acids, nor does it use a general FST framework. The submission's broader scope and generalization to arbitrary string transformations (including words and amino acids) represent a significant delta beyond this paper. Therefore, the overlap is partial: the prior work covers byte-level adaptation, but not the full generality or the additional domains claimed by the submission.
+The overlap is substantive for byte-level inference-time adaptation: the prior paper already demonstrates converting a pretrained token model into a byte/character predictor and sampler without retraining. However, it does not deliver the claimed word- and amino-acid-level adaptations, and the submission's general transducer framework remains a distinct central contribution. Thus the overlap is partial rather than substantial or same.
 
 ##### Understanding and Mitigating Tokenization Bias in Language Models
 partial overlap · Phan et al. · 2024
 
 How this paper realizes the claim
 
-The paper identifies and analyzes the sampling bias introduced by tokenization in language models, specifically showing that the next-character distribution is not faithfully represented by the next-token distribution due to the structure of tokenization schemes like MPE and BPE.
+The prior paper addresses inference-time adaptation only between token and character/string representations: it proposes correcting tokenization bias so a tokenized language model can recover the probabilities of a token-free autoregressive model, without retraining the language model.
 
-“we propose a novel algorithm to obtain unbiased estimates from any language model trained on tokenized data. Our methods do not require finetuning the model, and the complexity, defined as the number of model runs, scales linearly with the sequence length in the case of MPE. As a result, we show that one can simulate token-free behavior from a tokenized language model. We empirically verify the correctness of our method through a Markov-chain setup, where it accurately recovers the transition probabilities, as opposed to the conventional method of directly prompting tokens into the language model.”
+“We propose a method to remove the described bias and recover the original token-free autoregressive model, i.e. expressing the implicitly learned P(xN n+1|xn 1) using the tokenized LM that outputs the conditional probability P(ti+1|ti 1). For N=n+1, this captures the behavior of a token-free model, i.e.”
 
-The core contribution is the Maximum Prefix Correction (MPC) algorithm, which computes the probability of a string (e.g., a character sequence) given a tokenized language model by marginalizing over possible tokenizations, thus recovering unbiased character-level probabilities at inference time without retraining.
+“Our method consists of two stages. In the first stage, the idea is to identify the condition when P(xN n+1|ti 1) = P(xN n+1|xn 1) where ti 1 = encode(xn 1). Once identified, we can refactor the conditional probability to match the conditioning events.”
 
-“We present two novel algorithms to correct this bias for MPE and Byte-Pair-Encoding (BPE) respectively. Due to space limit, the analysis and algorithm for BPE are presented in Appendix H. • We verify the correctness of our algorithms on learning the transition matrix of a k-th order Markov chain.”
+Its BPC extension similarly computes probabilities of strings by enumerating valid token encodings that cover the queried string, but the paper does not itself provide adaptation of pretrained models to orthographic words or amino-acid sequences.
 
-Quoted from the source but NOT confirmed verbatim:
-This algorithm recursively computes P(xN_nk+1|tk_1). ... The idea is to marginalize out P(xN_nk+1|tk_1) by considering two complementary events: when the next token tk+1 has a prefix xN_nk+1 (bval in the Branch Step) versus when the next token tk+1 is contained within xN_nk+1 (pval in the Pass Step).
+“The Byte-Pair Correction (BPC) algorithm, shown in Algorithm 2 and visualized in Figure 5 (right), which is an efficient algorithm that can search all valid encodings covering xn 1. The idea is that, for each cover encoding ⃗t, once the starting position of the last token is determined (say xi+1), we are guaranteed the prior tokens is unique and must be encode(xi 1).”
 
-The method is validated on synthetic Markov chain data, showing that the algorithm can recover unbiased character-level transition probabilities from a tokenized LM.
+Grounded evidence for the assessed overlap
 
-The paper does not demonstrate adaptation to bytes or amino acids, nor does it use finite-state transducers for general string transformations. Its focus is on character-level inference from tokenized LMs, specifically for text (characters/tokens), and does not address adaptation to other modalities or arbitrary string transformations.
+Evidence check: material
+1 of 2 grounded candidates support the overlap
 
-Comparison with the submission
+Pair 2 establishes a substantive shared component: the prior paper computes finer-grained string probabilities from a tokenized language model by summing over alternative token encodings, and the submission claims inference-time transduction of a pretrained token-based model into finer-grained units without retraining. This supports overlap in tokenization/probability correction, although it does not establish that the prior paper provides the submission's general transducer framework or all three target domains. Pair 1 is not independently sufficient because the quoted prior span only states that a construction captures token-free-model behavior; it does not itself establish the claimed inference-time transformation or the narrower correction relation. The unsupported assertions that the prior paper lacks word- and amino-acid adaptations or the general framework should remain qualified, since absence cannot be inferred from these pairs. Those limitations do not block a partial-overlap judgment: the valid evidence establishes a meaningful shared byte/string-level component without establishing equivalence of the broader claimed contribution.
 
-This prior paper presents a method for inference-time adaptation of tokenized language models to character-level outputs, correcting for tokenization bias without retraining. However, it is limited to character-level adaptation in text and does not address adaptation to bytes, words, or amino acids, nor does it use finite-state transducers for general string transformations. The submission extends the idea to a broader class of string transformations and modalities, including bytes and amino acids, using FSTs. Thus, the overlap is partial: the prior paper covers part of the claimed contribution (character-level adaptation without retraining), but not the full generality or the specific mechanisms and domains of the submission.
+Submission contribution span
+“Empirically, we have shown that our beam-summing approximation efficiently transduces tokenbased LLMs into models over bytes, words, and even amino acids, without requiring retraining.”
 
-##### Language Models over Canonical Byte-Pair Encodings
-partial overlap · Vieira et al. · 2025
+Pair 2: Both papers contribute inference-time recovery of finer-grained string or byte-level probabilities from a tokenized language model by aggregating probabilities over alternative token encodings; the prior paper delivers the narrower byte-pair correction component of the submission's broader bytes/words/amino-acids adaptation.
 
-How this paper realizes the claim
-
-This paper addresses the problem of pretrained language models assigning probability mass to noncanonical tokenizations (e.g., noncanonical BPE segmentations) and proposes methods to enforce canonicality at inference time, without retraining the model.
-
-“We present two approaches: (1) canonicality by conditioning, leveraging test-time inference strategies without additional training, and (2) canonicality by construction, a model parameterization that guarantees canonical outputs but requires training. We demonstrate that fixing canonicality mistakes improves the likelihood of held-out data for several models and corpora.”
-
-“Canonicality by conditioning: We explore efficient testtime inference methods for conditionally generating text that satisfies the canonicality constraint without retraining. • Canonicality by construction: We explore methods that impose canonicality constraints directly in the language model’s parameterized architecture and give a method to fine-tune its parameters.”
-
-The main technical contribution is a set of algorithms for conditioning the output of a pretrained token-level language model so that it only generates canonical tokenizations (i.e., those that would be produced by the deterministic tokenizer), using only inference-time modifications. This includes exact and approximate algorithms for sampling and computing probabilities under the constrained model.
-
-Quoted from the source but NOT confirmed verbatim:
-We describe two families of methods for doing so • Canonicality by conditioning, leveraging test-time inference strategies without additional training, and (2) canonicality by construction, a model parameterization that guarantees canonical outputs but requires training.
-
-“Our first approach to this problem defines a language model g that is the result of probabilistic conditioning on the event that the generated token string is in D. Definition 1.”
-
-“We will discuss the details of how to approximately and exactly generate samples from g. ## Why do we condition?”
-
-“The simplest exact conditioning algorithm for sampling from g is rejection sampling: 1 def rejection_sampling(): 2 while True: 3 δ ∼p∆ 4 ## if δ ∈D: return δ However, the rejection sampling algorithm can be inefficient if Z is small, as its expected running time per sample is O(1/Z).”
-
-Quoted from the source but NOT confirmed verbatim:
-Another correct sampling algorithm is ancestral sampling:
-
-“Unfortunately, computing −→g exactly is intractable as it requires summing over infinitely many future strings. Thus, −→g must be approximated. In §3.2.2, we will provide a cheap, local approximation and, in §3.2.3, we will devise a strategy for improving the short-sightedness of the local approximation by using more computation.”
-
-The algorithms are demonstrated on BPE tokenizations, and the focus is on enforcing canonicality for token-level language models over character strings (e.g., bytes or characters).
+The prior work states:
+“Having established these two definitions, we will later show that for BPE (and MPE), the probability P(xn 1) can be represented using a tokenized LM P(ti+1|ti 1) as follows: P(xn 1) = X ⃗t∈cover(xn 1 ) P(⃗t), (49), and the main goal of the BPC algorithm is to search through all cover encodings of xn”
 
 Comparison with the submission
 
-This paper presents inference-time algorithms for adapting pretrained language models to only generate canonical BPE tokenizations, without retraining. The overlap with the submission is partial: both use inference-time composition to constrain or adapt the output of a fixed language model, but this paper is limited to canonical BPE tokenizations, while the submission generalizes to arbitrary FST-based transformations and demonstrates adaptation to bytes, words, and amino acids. Thus, the submission has a broader scope and a more general mechanism, and is not refuted by this prior work.
+The overlap is substantive but limited to the shared idea of inference-time conversion from token-level models to character/byte-like string units without retraining. The prior paper already provides a meaningful tokenization-correction realization of that part of the claimed contribution, but the submission generalizes the operation to arbitrary transducers and demonstrates distinct word- and amino-acid-level adaptations with a broader computational framework. Therefore, important central novelty remains beyond the prior paper, warranting a partial rather than substantial overlap judgment.
 
 ##### How to Compute the Probability of a Word
 partial overlap · Pimentel et al. · 2024
 
 How this paper realizes the claim
 
-This paper addresses the problem of computing word probabilities from pretrained language models that operate over subwords, specifically focusing on the correct computation of word-level probabilities given subword-level outputs. It derives the correct mathematical methods for marginalizing over subword sequences that correspond to a given word, with special attention to the differences between end-of-word and beginning-of-word tokenization schemes.
+The paper derives a method for obtaining word-level and contextual word probabilities from a pretrained language model whose outputs are subword sequences, by constructing sets of subword sequences equivalent to word-level events and marginalizing their probabilities.
 
-“This paper derives the correct methods for computing word probabilities, highlighting issues when relying on language models that use beginning-of-word (bow)-marking tokenisers, e.g., the GPT family. Empirically, we show that correcting the widespread bug in probability computations affects measured outcomes in sentence comprehension and lexical optimisation analyses.”
+“The implication of eq. (8) is that if we can create a subword set ΨS that is “equivalent” to a chosen word set ΨW, we would be able to compute ΨW’s probability by summing over the subwords in ΨS. ∆= between Formally, we define the set equivalence two sets of sequences as:   ∆= ΨS =⇒ w∈ΨW ⇐⇒S W∗→S∗(w)∈ΨS ΨW (9) Now let PS be a probability function defined analogously to PW (in Defn.”
 
-“We derive methods for these tokenisation schemes, which we present in Fig. 1.”
+It then uses autoregressive conditional probabilities to compute the required prefix probabilities efficiently, and gives separate corrections for end-of-word and beginning-of-word tokenizers.
 
-“Empirically, we evaluate how correcting this computation affects the results of two prior empirical analyses: one on sentence comprehension and another on the lexicon’s communicative efficiency. While these studies’ conclusions do not change, we do observe statistically significant differences between the measured quantities when using the correct vs.”
+“In turn, these let us compute p(w | w<t) efficiently through eq. (11). For most tokenisers, finding a set ΨS for which the equivalence w ◦W∗ ∆= s∈ΨS s ◦S∗holds is not actually possible due to S the existence of unmapped sequences in s ◦S∗; unmapped sequences, however, have zero probability and including them in Ψ′ S or Ψ′′ S does not affect the equality in eq.”
 
-The paper provides theoretical derivations and practical algorithms for computing the probability of a word in context from a subword-based language model, including how to sum over all subword segmentations that map to a word. It does not propose or demonstrate inference-time adaptation to new unit types (such as bytes or amino acids) beyond words, nor does it use finite-state transducers for general string transformations.
+Grounded evidence for the assessed overlap
+
+Evidence check: material
+1 of 1 grounded candidates support the overlap
+
+Pair 1 validly establishes a substantive overlap in the word-level contribution: both papers perform inference-time conversion from a pretrained model’s native subword probabilities to probabilities over orthographic words by aggregating or summing compatible subword sequences, without retraining. This matches the proposed shared rationale and constitutes a meaningful component of the current claim, while the pair explicitly limits the prior paper to the word case. The evidence does not establish overlap for the submission’s byte or amino-acid adaptations, its broader arbitrary string-to-string transducer framework, or its approximation and unified treatment of mappings; those residual distinctions support a partial rather than substantial or same relation. The delta’s assertion that the prior paper does not deliver those other components is not independently established by the single pair, but that limitation is non-blocking because the pair itself supports partial overlap and does not need to prove every remaining difference absent.
+
+Submission contribution span
+“Empirically, we have shown that our beam-summing approximation efficiently transduces tokenbased LLMs into models over bytes, words, and even amino acids, without requiring retraining.”
+
+Pair 1: Both papers contribute inference-time conversion of subword language-model probabilities into probabilities over orthographic words by aggregating compatible subword sequences, but the prior paper covers only the word case.
+
+The prior work states:
+“(8) is that if we can create a subword set ΨS that is “equivalent” to a chosen word set ΨW, we would be able to compute ΨW’s probability by summing over the subwords in ΨS. ∆= between Formally, we define the set equivalence two sets of sequences as:   ∆= ΨS =⇒ w∈ΨW ⇐⇒S W∗→S∗(w)∈ΨS ΨW (9) Now let PS be a probability function defined analogously to PW (in Defn.”
 
 Comparison with the submission
 
-The prior paper provides a rigorous treatment of how to compute word probabilities from subword-based language models, including the necessary marginalization over subword segmentations and the handling of different tokenization schemes. However, it is limited to the word/subword setting and does not address adaptation to other unit types (such as bytes or amino acids), nor does it use finite-state transducers for general string transformations. The submission extends the idea to a much broader class of transformations and unit types, making its contribution more general and technically distinct. Thus, the overlap is partial: the prior paper covers part of the claim (word-level inference-time adaptation), but not the full generality or mechanism of the submission.
+The prior paper delivers a meaningful substantive part of the claimed contribution for the word case: inference-time conversion from subword language-model probabilities to word probabilities without retraining. It does not itself deliver the claimed byte or amino-acid adaptations or the submission's general transducer framework, so important central novelty remains beyond the shared word-level realization. The overlap is therefore partial rather than substantial or same.
 
-##### Automata-based constraints for language model decoding
-partial overlap · Koo et al. · 2024
+##### Syntactic Control of Language Models by Posterior Inference
+partial overlap · Xefteri et al. · 2025
 
 How this paper realizes the claim
 
-The paper presents a method for constraining the output of a pretrained language model (LM) to conform to a regular or context-free language, using automata theory. The core technique is to compose a finite-state transducer (FST) that maps tokens to characters (detokenization) with a finite-state automaton (FSA) or pushdown automaton (PDA) that encodes the desired output constraint (e.g., a regular expression or grammar). This composition yields a new automaton that operates over the LM's tokens and can be used to mask the LM's logits at each decoding step, ensuring only valid outputs are generated.
+The prior paper performs inference-time adaptation of pretrained language models to a target syntactic structure by treating the language model as a prior and applying posterior inference during generation. Its method uses importance sampling and sequential Monte Carlo, with a learned autoregressive Tetratagger providing left-to-right shaping guidance; the base language models are not retrained for each target syntax.
 
-“Our main contributions are primarily conceptual rather than empirical: 1. Identify an as-yet unnoticed connection between detokenization and transduction. 2. Solve the tokenization issues using this connection and operations on automata. 3. Define extensions that address practical problems of efficiency and convenience. ∗Equal contribution, alphabetical.”
+“To improve syntactically controlled generation at inference time, we propose a sampling method that approximates the posterior distribution over strings generated by a language model under a target syntactic structure. Our approach is based on sequential Monte Carlo, an algorithm that estimates the posterior by drawing samples from a proposal distribution and weighting them by the likelihood that the given string follows a specific attribute, in our case, a syntax tree.”
 
-Quoted from the source but NOT confirmed verbatim:
-Our first contribution is a reformulation of detokenization (i.e., the process of converting token sequences back into text) as an FST, using the following construction: ... For compactness, common prefixes of the chains can be merged to form a trie-like structure, as in Figure 4; see Appendix B.1 for a proof of correctness.
+“Our approach is based on sequential Monte Carlo, an algorithm that estimates the posterior by drawing samples from a proposal distribution and weighting them by the likelihood that the given string follows a specific attribute, in our case, a syntax tree. In this paper, we use parsers-as-taggers3 to further guide the generation towards samples with higher likelihood.”
 
-“Our next contribution is a generic method for adapting any FSA from characters to tokens. Specifically, given a token vocabulary V and an FSA A that accepts character sequences, A′ = A ◦TV accepts essentially the same language as A, but in token form. More precisely, for each token sequence w ∈LA′, the detokenization of w is in LA.”
+“These results demonstrate that controlled generation by posterior inference can make smaller models competitive with larger ones, like GPT4.”
 
-“We now present our method for constraining an LM to a regular language: Algorithm 2 Constrains LM L with vocabulary V to generate the language of regex R TV ←BUILDDETOKENIZINGFST(V) ▷token-to-character FST, see Algorithm 1 AR ←BUILDREGEXFSA(R) ▷character-accepting FSA (Thompson, 1968) AR◦V ←DETERMINIZE(AR ◦TV) ▷token-accepting FSA ... for t = 1 to T do ▷decoding steps ℓ←COMPUTELOGITS(L) A ←{eσ : e ∈ER◦V ∧es = q} ▷allowed next tokens for i = 1 to |V| do ▷penalize logits as in Deutsch et al. (2019) if vi ̸∈A then ℓi ←−∞ ˆv ←SAMPLENEXTTOKEN(L, ℓ) ˆe ←e s.t. e ∈ER◦V ∧es = q ∧eσ = ˆv ▷find the matching edge q ←ˆet ▷traverse the edge”
+Grounded evidence for the assessed overlap
 
-The method is inference-time only: the LM is not retrained or fine-tuned, but is instead constrained at decoding time by masking logits according to the automaton state. The paper discusses the generality of this approach for regular and context-free languages, and the ability to adapt constraints to the LM's tokenization via FST composition.
+Evidence check: material
+1 of 1 grounded candidates support the overlap
 
-However, the paper does not demonstrate adaptation to bytes, words, or amino acids specifically, nor does it present experiments or algorithms for marginalizing over source strings whose transducer outputs cover a target prefix, as in the claim. The focus is on constraining output to formal languages, not on adapting the LM to new output units or alphabets (such as bytes or amino acids) at inference time.
+Pair 1 establishes a substantive methodological overlap: both use inference-time probabilistic procedures involving a language model to produce outputs conditioned on a desired target. This supports the shared inference-time adaptation component and is more than merely sharing a topic or conducting the same generic evaluation. The overlap is limited, however: the prior paper applies posterior sampling to syntactic constraints, while the current claim concerns transforming a pretrained model across byte, word, and amino-acid representations. The pair does not establish that the prior paper supports those representations, nor does the quoted prior span explicitly establish the no-retraining property. Those limitations prevent substantial or same overlap but do not block the proposed partial degree. The assertion that the listed transformation capabilities are not delivered by the prior paper should remain qualified, since the single pair does not prove the prior paper lacks other related capabilities; that delta limitation is not necessary to establish the independently supported partial overlap.
 
-Comparison with the submission
+Submission contribution span
+“Empirically, we have shown that our beam-summing approximation efficiently transduces tokenbased LLMs into models over bytes, words, and even amino acids, without requiring retraining.”
 
-This prior paper presents a general method for constraining the output of a pretrained LM at inference time using automata, specifically by composing a detokenization FST with a constraint FSA or PDA. While this is conceptually related to the claim, the paper does not address adaptation to new output units (such as bytes or amino acids), nor does it provide algorithms for marginalizing over source strings for next-symbol prediction in a transformed space. The overlap is partial: both use FST composition at inference time, but the submission's focus on adaptation to new alphabets and marginalization for next-symbol prediction is not covered here.
+Pair 1: Both papers contribute inference-time probabilistic procedures that adapt the outputs or generation distribution of a language model to a desired target; the prior paper delivers a narrower syntactic-control version rather than adaptation across byte, word, and amino-acid representations.
 
-##### Efficient Guided Generation for Large Language Models
-partial overlap · Willard et al. · 2023
-
-How this paper realizes the claim
-
-The paper presents a method for efficiently guiding the generation of sequences from a pretrained language model so that the outputs conform to regular expressions or context-free grammars, using finite-state machines (FSMs) and pushdown automata (PDAs) to represent constraints.
-
-“This framework leads to an efficient approach to guiding text generation with regular expressions and context-free grammars by allowing the construction of an index over a language model’s vocabulary. The approach is model agnostic, allows one to enforce domain-specific knowledge and constraints, and enables the construction of reliable interfaces by guaranteeing the structure of the generated text. It adds little overhead to the token sequence generation process and significantly outperforms existing solutions.”
-
-The approach is inference-time only: it does not require retraining or modifying the parameters of the pretrained language model. Instead, it constructs an index mapping FSM (or parser) states to valid next tokens in the vocabulary, enabling efficient masking of invalid tokens during generation.
-
-“Our approach does not require the complete transducer abstraction and can be used to more easily extend existing, efficient regular expression libraries without modifying the underlying automatons and their implementations. More importantly, our indexing approach can also be extended to CFGs and LALR(1) parsers to allow for efficient guided generation according to popular data formats and programming languages (e.g.”
-
-The method is demonstrated for regular expressions and context-free grammars, including examples such as generating valid Python identifiers or IP addresses, but all demonstrations are at the token level (i.e., the model's native vocabulary).
-
-The paper does not demonstrate adaptation to different unit granularities (such as bytes or amino acids), nor does it describe marginalizing over source strings via FST composition to expose next-symbol probabilities in a transformed space.
+The prior work states:
+“To improve syntactically controlled generation at inference time, we propose a sampling method that approximates the posterior distribution over strings generated by a language model under a target syntactic structure.”
 
 Comparison with the submission
 
-This prior paper presents an efficient inference-time method for guiding language model generation using FSMs and PDAs, enforcing constraints such as regular expressions or grammars, but only at the model's native token level. It does not address adaptation to different unit granularities (e.g., bytes, words, amino acids) or the use of FST composition to marginalize over source strings for transformed outputs. Thus, while both works share the idea of inference-time composition with finite-state machinery, the submission's contribution is broader and more general, enabling adaptation to arbitrary output units and transformations, which is not realized in this prior work. The overlap is partial, as the prior paper covers only a subset (token-level constraints) of the submission's broader mechanism.
-
-##### Neural Grammatical Error Correction with Finite State Transducers
-partial overlap · Stahlberg et al. · 2019
-
-How this paper realizes the claim
-
-This paper focuses on grammatical error correction (GEC) using a combination of finite-state transducers (FSTs) and neural language models (NLMs). The main contribution is to construct a hypothesis space of possible corrections using FSTs, and then rescore these hypotheses with neural models, including neural LMs and neural machine translation (NMT) models.
-
-“we propose to construct a hypothesis space using standard FST operations like composition, and then constrain the output of a neural GEC system to that space. We study two different scenarios: In the ﬁrst scenario, we do not have access to annotated training data, and only use a small development set for tuning.”
-
-“We report further gains by rescoring with neural language models. We show that our methods developed for LM-GEC can also be used with SMT systems if annotated training data is available.”
-
-The neural language models used are pretrained and are applied at inference time to rescore the hypotheses generated by the FSTs. The paper describes the use of a Transformer-based neural LM trained on a large corpus, and the composition with FSTs is used to constrain the search space for decoding.
-
-“Our ultimate goal, however, is to rescore Hword with neural models such as an NLM and – if annotated training data is available – an NMT model. Since our neural models use subword units (Sennrich et al., 2016, BPEs), we compose Hword with a transducer T which maps word sequences to BPE sequences. Our final transducer HBPE which we use to constrain the neural beam decoder can be written as: HBPE = Πoutput(Hword ◦T) = Πoutput(I ◦E ◦P ◦L ◦T).”
-
-The approach does not retrain the neural language model; it uses the pretrained model as-is for rescoring. The FSTs are used to define the set of possible outputs, and the neural LM provides probabilities for these outputs during inference.
-
-Comparison with the submission
-
-This prior paper demonstrates inference-time composition of FSTs with a pretrained neural language model for grammatical error correction, without retraining the LM. However, its use of FSTs is to constrain the output space for GEC, and the neural LM is used for rescoring, not for adapting the model to new units or arbitrary string transformations. The submission's contribution is broader and more general, providing algorithms for exact and approximate inference over arbitrary FSTs and demonstrating adaptation to bytes, words, and amino acids. Thus, the overlap is partial: the prior paper shares the idea of inference-time FST composition with a fixed LM, but not the generality, algorithms, or breadth of demonstrations of the submission.
-
-##### Sequential Monte Carlo Steering of Large Language Models using Probabilistic Programs
-partial overlap · Lew et al. · 2023
-
-How this paper realizes the claim
-
-The paper proposes an inference-time method for steering large language models (LLMs) using sequential Monte Carlo (SMC) applied to probabilistic programs. The approach allows the imposition of syntactic and semantic constraints, infilling, and prompt intersection by specifying these tasks as posterior inference in a class of discrete probabilistic sequence models (Feynman-Kac Transformer models). The LLM itself is kept fixed, and the constraints or transformations are imposed at inference time via the probabilistic program and SMC algorithm.
-
-“We propose a new inference-time approach to enforcing syntactic and semantic constraints on the outputs of LLMs, called sequential Monte Carlo (SMC) steering. The key idea is to specify language generation tasks as posterior inference problems in a class of discrete probabilistic sequence models, and replace standard decoding with sequential Monte Carlo inference. For a computational cost similar to that of beam search, SMC can steer LLMs to solve diverse tasks, including infilling, generation under syntactic constraints, and prompt intersection.”
-
-“To facilitate experimentation with SMC steering, we present a probabilistic programming library, LLaMPPL, for concisely specifying new generation tasks as language model probabilistic programs, and automating steering of LLaMA-family Transformers. 1 ## Introduction Despite significant advances in recent years, it remains unclear if and how large language models (LLMs) can be made reliable and controllable enough to meet the functional requirements of many applications.”
-
-“Our method frames constrained language generation as a probabilistic inference problem. This perspective is commonly adopted in the literature [see, e.g., Kumar et al., 2022, Poesia et al., 2022, Miao et al., 2019, Qin et al., 2022], and has several distinctive features compared to popular heuristic and optimization-based approaches to inference-time constrained generation: • Global vs.”
-
-“this workshop abstract proposes sequential Monte Carlo (SMC) steering, an alternative to standard decoding procedures that works by approximating the posteriors of language model probabilistic programs [Lew et al., 2020, Dohan et al., 2022, Zhi-Xuan, 2022]: models that mix LLMs, probabilistic conditioning, and symbolic programming to encode semantic and syntactic constraints. By varying the probabilistic program, SMC can steer LLMs to solve diverse tasks, including infilling [Qian and Levy, 2022, Donahue et al., 2020, Bavarian et al., 2022], constrained generation [Zhang et al., 2023a, Pascual et al., 2020, Roush et al., 2022], and prompt intersection (Figure 1), all at a cost similar to that of beam search.”
-
-The paper demonstrates this approach on tasks such as infilling, hard constraints (e.g., word length), and prompt intersection, but does not specifically demonstrate adaptation to bytes, words, or amino acids as output units, nor does it describe the use of finite-state transducers (FSTs) for string transformations.
-
-Comparison with the submission
-
-The prior paper and the submission both address inference-time adaptation of pretrained language models by composing them with external mechanisms, without retraining. However, the prior paper focuses on steering generation with constraints and probabilistic programs, not on adapting the model to new output units or using FSTs for string transformations. The submission's contribution of adapting to bytes, words, and amino acids via FST composition is not present in the prior work. Thus, the overlap is partial: the general idea of inference-time adaptation is shared, but the specific mechanism and demonstrations in the submission are new.
-
-##### Where is the signal in tokenization space?
-partial overlap · Geh et al. · 2024
-
-How this paper realizes the claim
-
-This paper investigates the effect of non-canonical tokenizations in pretrained language models (LLMs) at inference time, focusing on the marginalization over all possible tokenizations of a string (i.e., summing probabilities over all token sequences that yield the same string). It proves that finding the most likely tokenization and computing the marginal probability are computationally hard, and proposes approximate algorithms (e.g., importance sampling) to estimate the marginal probability. The paper empirically evaluates whether using marginal probabilities or aggregating over non-canonical tokenizations can improve downstream tasks, such as question answering, without retraining the model.
-
-“by simply aggregating the probabilities of noncanonical tokenizations, we achieve improvements across a range of LLM evaluation benchmarks for a variety of architectures, including transformers and state space models. 1 ## Introduction Autoregressive large language models (LLMs) generate text by predicting the next word sequentially.”
-
-“we analyze modern LLMs and consider multiple strategies for extracting information from tokenization space; finding that, contrary to prior belief, the signal is present not in the most-likely tokenization or (approximated) marginals, but rather in a mixture of canonical and non-canonical tokenizations. 3 ## Tokenizations Let x = (x1, x2, .”
-
-“we implement an importance sampling estimator for the marginal probability. Surprisingly, despite the extremely large number of non-canonical tokenizations, we empirically find that the estimated marginal probability is usually very close to the canonical tokenization’s probability. This raises our last question: does the complete tokenization space add any meaningful signal at all, in addition to the canonical tokenization alone?”
-
-Comparison with the submission
-
-This paper partially overlaps with the claimed contribution by demonstrating inference-time adaptation of pretrained language models to alternative tokenizations (words/subwords) without retraining, via marginalization over tokenization space. However, it is limited to tokenization variants within the same language and does not address adaptation to fundamentally different representations (such as bytes or amino acids) or arbitrary FST-based transformations. The submission extends the idea to a much broader class of string transformations, provides new algorithms for efficient inference in this setting, and demonstrates applications in multiple domains. Thus, the overlap is partial, and the submission presents a significant delta in generality and scope.
+The prior paper itself meaningfully overlaps with the inference-time, no-retraining adaptation aspect, since it samples from a posterior induced by a pretrained language model and a target constraint. However, its substantive target is syntactic control through posterior sampling, while the submission's central contribution is transducer-based distributional transformation across representations and biological sequences. Thus, the overlap is partial rather than substantial: an important methodological idea is shared, but the submission retains a distinct central contribution and broader transformation framework.
 
 ##### From Language Models over Tokens to Language Models over Characters
-substantial overlap · Vieira et al. · 2024
+partial overlap · Vieira et al. · 2024
 
 How this paper realizes the claim
 
-The paper presents algorithms for converting token-level language models to character-level ones, enabling inference-time adaptation of pretrained token-based language models to operate over character strings without retraining. The core contribution is an exact and approximate algorithm for computing the conditional distribution over characters (bytes) given a character prefix, by summing over all token strings whose decoded output covers the character prefix. This allows the computation of next-character probabilities and enables character-level generation and scoring from a fixed, pretrained token-level model.
+The paper develops exact and approximate algorithms that convert token-level language models into character-level models, enabling inference over character units rather than only canonical tokenizations.
 
-“This paper presents algorithms for converting token-level language models to character-level ones. We present both exact and approximate algorithms. In the empirical portion of the paper, we benchmark the practical runtime and approximation quality.”
+“This paper presents algorithms for converting token-level language models to character-level ones. We present both exact and approximate algorithms.”
 
 Quoted from the source but NOT confirmed verbatim:
-Our method finds a set of token strings that form a covering, a key technical concept we introduce in this paper. ... The computation of this conditional probability is simply the total probability of the covering of Hello,␣world divided by the total probability of the covering of Hello,␣worl. These quantities are derived from our concept of covering, which directly leads to an algorithm for determining the distribution over possible next characters.
+We present both exact and approximate algorithms.
 
-“We provide an algorithm for correctly conditioning a token-level model on a character string in §3.4. Character-level model.”
+Its experiments evaluate the runtime and approximation quality of these converted models, using bytes as the character alphabet for compatibility with byte-pair encoding.
 
-“In the experimental portion of our paper (§4), we report the empirical runtime of our algorithm for converting token-level language models to character-level ones and quantify its accuracy in estimating the conditional distribution over characters. We find that even with a limited computational budget, our method provides an accurate estimate of the conditional distribution over the next character under four publicly available language models.6 We also find that the compression rate (bits/byte) is significantly improved by estimating the probability of the corpus as a character string rather than a canonical token string.”
+“We measure the approximation error as the average Jensen–Shannon distance (JSD) to a reference model’s conditional distribution over the next byte (Fig. 1a). We use a large beam K =128 as a reference model.”
+
+Grounded evidence for the assessed overlap
+
+Evidence check: material
+1 of 1 grounded candidates support the overlap
+
+Pair 1 validly establishes a substantive methodological overlap within the current claim: both works perform inference-time conversion/adaptation of pretrained token-level language models to lower-level output units without retraining, and the prior paper specifically covers the character-level instance, which includes the byte-level case asserted in the claim. This supports the proposed partial degree because the byte/token-to-byte component is a meaningful part of the current contribution, while the pair also explicitly characterizes the submission as extending beyond that narrower case to words and amino acids. The evidence does not establish overlap in the broader transducer framework, general finite-state transformations, theoretical results, or non-byte adaptations. The delta's assertions that the prior paper lacks those components are not independently proven by the absence of additional pairs and should remain qualified, but resolving them is not necessary to establish the supported partial overlap.】【。ેણalc?}、】【 菲律宾申博 Adhering to schema, no extra.
+
+Submission contribution span
+“Empirically, we have shown that our beam-summing approximation efficiently transduces tokenbased LLMs into models over bytes, words, and even amino acids, without requiring retraining.”
+
+Pair 1: Both papers contribute inference-time conversion of token-level language models into models over lower-level character/byte outputs; the prior paper delivers the narrower character-level (including byte-compatible) instance, while the submission extends this to bytes, words, and amino acids without retraining.
+
+The prior work states:
+“This paper presents algorithms for converting token-level language models to character-level ones.”
 
 Comparison with the submission
 
-This prior paper presents a substantial overlap with the claimed contribution in the domain of adapting pretrained token-level language models to character/byte-level inference without retraining, using exact and approximate algorithms for marginalizing over tokenizations. However, it does not address adaptation to words or amino acids, nor does it generalize the approach to arbitrary FST-based string transformations. The submission's main delta is the generalization to broader classes of string transformations and additional domains beyond characters/bytes. Thus, the overlap is substantial but not identical.
+The prior paper already provides a meaningful substantive part of the claim: adapting pretrained token models to byte-level inference without retraining. However, it is focused on character/byte outputs and does not itself deliver the submission's word-boundary or DNA-to-amino-acid adaptations, nor its general transducer framework. The overlap is therefore partial rather than substantial or same.
 
 ##### Leading Whitespaces of Language Models’ Subword Vocabulary Pose a Confound for Calculating Word Probabilities
 partial overlap · Oh et al. · 2024
 
 How this paper realizes the claim
 
-This paper identifies a confound in how word probabilities are computed from subword-tokenized language models, specifically due to leading whitespaces in the token vocabulary. It proves that the standard method of aggregating subword probabilities can violate probability axioms and proposes a new decoding method, whitespace-trailing (WT) decoding, to correct this. WT decoding reallocates the probability of the trailing whitespace to the current word, resulting in consistent word probabilities without modifying the language model parameters or retraining. The paper demonstrates this method on English text and evaluates its impact on psycholinguistic measures, such as garden-path effects and reading time predictions.
+The paper identifies an inconsistency in word probabilities caused by leading-whitespace subword tokenization and proposes an inference-time reallocation of whitespace probability, without modifying or retraining the language model.
 
-“we propose whitespace-trailing (WT) decoding. Given a word wt+1 that consists of subword tokens xnt+1..nt+1, where nt is the total number of subword tokens in the word sequence w1..t, and xnt+1∈VB, and xnt+2..nt+1∈VI, WT decoding reallocates the probability of the leading whitespace of each word to its previous word:3 P(w′ t+1 | w′ 1..t) = P(wt+1 | w1..t) · P(xnt+1+1∈VB | w1..t+1) P(xnt+1∈VB | w1..t) . (5) 3See Appendix A for the proof that WT decoding results in consistent word probabilities.”
+“We propose a simple and efficient decoding method that reaccounts the probability of the trailing whitespace into that of the current word, which resolves this confound. Regression results show that this correction reveals significantly lower surprisal-based estimates of garden-path effects in transitive/intransitive sentences and poorer fits of LM surprisal to naturalistic reading times.”
 
 “As WT decoding simply involves the factorization of whitespace probabilities by marginalizing over tokens in VB and rearranging them, it requires no modifications to the LM and minimal overhead. Additionally, the joint probability of the entire sequence, and therefore metrics like perplexity, changes minimally by a factor of the probability of the final trailing whitespace with WT decoding.”
 
-“WT decoding does not resolve other issues with subword units that may be addressed by re-training LMs with different tokenization schemes (e.g. Nair and Resnik, 2023), which can nonetheless be expensive. Concurrent work by Pimentel and Meister (2024) points out this same issue and also proposes WT decoding.”
-
 Comparison with the submission
 
-This paper presents a method for inference-time adaptation of language models to word-level probabilities from subword tokenizations, without retraining, by introducing whitespace-trailing decoding. This overlaps with the submission's claim in the specific case of word-level adaptation, but does not address adaptation to bytes or amino acids, nor does it provide a general FST-based framework. The submission is broader in scope, offering a general mechanism for arbitrary string transformations and supporting multiple domains. Therefore, the overlap is partial: the prior paper covers one instance of the general problem addressed by the submission, but not its full generality or algorithmic contributions.
+The overlap is substantive for the word-level, no-retraining aspect: the prior paper already proposes an inference-time transformation that produces more consistent word probabilities from a subword LM. However, it does not deliver the submission's central general-purpose transducer framework or its byte- and amino-acid adaptations, so important novelty remains beyond the prior paper.
 
 ---
 
