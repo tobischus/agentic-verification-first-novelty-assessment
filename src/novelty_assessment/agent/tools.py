@@ -218,6 +218,49 @@ class ClaimToolbox:
             # safe direction: a paper stays out rather than entering unverified.
             return True
 
+    def _cutoff_date(self) -> str:
+        """The date pins are measured against -- read exactly as the fetcher reads it.
+
+        Deriving it differently on the two sides (publication_date, else year; not
+        publication_date, else today) would make every recorded pin look stale to the
+        other, and resolution would repeat on every pool build forever.
+        """
+        return str(self._meta.get("publication_date") or self._meta.get("year") or "")
+
+    def _pin_is_stale(self, entry: dict) -> bool:
+        """Was this verdict reached against a different cutoff than the one in force?"""
+        if not entry:
+            return True
+        try:
+            import sys
+            sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "retrieval"))
+            import paper_versions as pv
+            gap = pv.DEFAULT_MIN_GAP_DAYS
+        except Exception:
+            return False       # cannot tell -> do not churn; the fetcher checks too
+        return (entry.get("submission_date") != self._cutoff_date()
+                or int(entry.get("min_gap_days") or -1) != gap)
+
+    @staticmethod
+    def _version_abstract(entry: dict, record: dict) -> tuple:
+        """(abstract, source) for the PINNED document.
+
+        Three cases, and only the first two may show an abstract:
+          the pin carries the version's own text  -> use it;
+          the source has one document ("single")  -> the record's abstract IS that
+                                                     document's;
+          pinned to a version with no abstract of
+          its own                                 -> the record's abstract belongs to a
+                                                     different version, so it is withheld
+                                                     rather than presented as this one's.
+        """
+        if entry.get("abstract_source") == "version" and entry.get("abstract"):
+            return entry["abstract"], "version"
+        status = entry.get("status") or ""
+        if status in ("", "single"):
+            return (record.get("abstract", "") or ""), (entry.get("abstract_source") or "record")
+        return "", "unavailable_for_pinned_version"
+
     def _resolve_missing_pin(self, pid: str, record: dict) -> dict:
         """Pin a paper that reaches the pool without a verdict, and remember the answer.
 
@@ -343,7 +386,12 @@ class ClaimToolbox:
         entry = self._versions_manifest().get(pid) or {}
         status = entry.get("status") or p.get("version_status") or ""
         if self._version_enforcement():
-            if not status:
+            # A recorded verdict counts only while it answers the cutoff in force. It is
+            # a statement about (paper, submission date, required gap), and the fetcher's
+            # staleness check -- which knows this -- only runs when the fetcher runs. The
+            # pool is built without it, so a pin computed for a different submission date
+            # was accepted here unexamined.
+            if not status or self._pin_is_stale(entry):
                 entry = self._resolve_missing_pin(pid, p)
                 status = entry.get("status") or ""
             if status not in self._USABLE_VERSION_STATUSES:
@@ -353,10 +401,17 @@ class ClaimToolbox:
         elif status and status not in self._USABLE_VERSION_STATUSES:
             return
 
+        # The abstract of the document that was PINNED, not of whatever the source holds
+        # today. Where resolution happened during this pool build, ranked_papers.json was
+        # never rewritten, so the record still carries the current abstract while the pin
+        # points at an older version -- the exact mismatch the pinning exists to prevent,
+        # reintroduced one layer up.
+        abstract, abstract_source = self._version_abstract(entry, p)
+
         self.pool[pid] = {
             "paper_id": pid,
             "title": p.get("title", "") or "",
-            "abstract": p.get("abstract", "") or "",
+            "abstract": abstract,
             "authors": p.get("authors", "") or "",
             "year": p.get("year", "") or "",
             "venue": p.get("venue", "") or "",
@@ -371,7 +426,7 @@ class ClaimToolbox:
             "pinned_version_date": entry.get("version_date") or p.get("pinned_version_date", ""),
             "pinned_url": entry.get("url", ""),
             "doc_sha256": entry.get("doc_sha256", ""),
-            "abstract_source": p.get("abstract_source", "") or entry.get("abstract_source", ""),
+            "abstract_source": abstract_source,
         }
 
     def _load_pool(self):
@@ -433,19 +488,69 @@ class ClaimToolbox:
             sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
             from fetch_fulltext import FullTextFetcher
 
-            status = FullTextFetcher(self.grobid_server).parse_one(
-                self.data_dir, self.submission_id, pid
-            )
+            fetcher = FullTextFetcher(self.grobid_server)
+            pdf_path = self.sub_dir / "related_work_data" / "pdfs" / f"{pid}.pdf"
+
+            # The guarded loader only guards texts that already exist. This path creates
+            # one, and parse_one asks only whether the PDF is readable -- not whether it
+            # is the pinned document. An old file left on disk would be parsed here and
+            # its text handed straight to the pool, with the hash check that would have
+            # caught it running only on the next load. So the check happens BEFORE the
+            # parse, where it can still prevent the text rather than merely disown it.
+            status = self._prepare_pinned_pdf(fetcher, pid, pdf_path)
+            if status:
+                self._log("ensure_fulltext", f"{pid} -> {status}")
+                return status
+
+            status = fetcher.parse_one(self.data_dir, self.submission_id, pid)
         except Exception:
             status = "parse_error"
         if status == "ok":
-            ft_path = self.sub_dir / "related_work_data" / "grobid_fulltext" / f"{pid}.txt"
-            text = ft_path.read_text(encoding="utf-8")
+            # parse_one wrote the provenance; re-read the manifest and take the text back
+            # through the same check every other reader goes through, rather than trusting
+            # the file because we just made it.
+            self._versions_cache = None
+            text = self._load_fulltext_file(pid)
+            if not text:
+                self._log("ensure_fulltext", f"{pid} -> parsed text failed its own check")
+                return "parse_error"
             self.pool[pid]["fulltext"] = text
             self._paper_index.pop(pid, None)  # rebuild the section/passage index from full text
             self._paper_text.pop(pid, None)
         self._log("ensure_fulltext", f"{pid} -> {status}")
         return status
+
+    def _prepare_pinned_pdf(self, fetcher, pid: str, pdf_path: Path) -> str:
+        """Make sure the PDF about to be parsed is the pinned one. "" when it is.
+
+        Returns a status string to abort with otherwise, so the caller reports why no
+        full text appeared instead of quietly producing one from the wrong document.
+        """
+        if not self._version_enforcement():
+            return ""
+        pin = self._versions_manifest().get(pid) or {}
+        if not pin.get("status"):
+            pin = self._resolve_missing_pin(pid, self.pool.get(pid, {})) or {}
+        if pin.get("status") not in self._USABLE_VERSION_STATUSES:
+            return "no_version"
+
+        recorded = pin.get("doc_sha256")
+        if pdf_path.exists() and recorded and fetcher._sha256(pdf_path) == recorded:
+            return ""
+
+        # Either nothing is on disk, or what is there is not the pinned document. Both
+        # are the same fix: fetch the pinned version (ensure_pdf discards a mismatching
+        # cache itself) and record what landed.
+        p = self.pool.get(pid, {})
+        ok = fetcher.ensure_pdf(
+            {"paper_id": pid, "title": p.get("title", ""), "doi": p.get("doi"),
+             "externalIds": p.get("externalIds", {})},
+            pdf_path.parent, pin=pin)
+        if not ok:
+            return "no_pdf"
+        fetcher.record_pdf_hash(self.data_dir, self.submission_id, pid, pdf_path)
+        self._versions_cache = None
+        return ""
 
     def _paper_source_text(self, pid: str) -> str:
         """Full source text of a paper for quote verification (fulltext or abstract+intro)."""
