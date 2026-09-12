@@ -137,13 +137,6 @@ class ClaimToolbox:
             "retrievals": [],    # [{query, n_new, added_ids}]
             "trajectory": [],    # compact action log (no raw reasoning)
         }
-        # Papers the version gate kept out, recorded now that there is a ledger to record
-        # into: the pool is built before this point, so the gate buffers its reasons
-        # rather than logging into a structure that does not exist yet.
-        for note in getattr(self, "_version_gate_notes", []):
-            self._log("version_gate", note)
-        self._version_gate_notes = []
-
         # section-based understanding of what the SUBMISSION does for this claim
         # (verified-quote segments), built once and reused across every comparison
         self.claim_realization = []
@@ -151,6 +144,15 @@ class ClaimToolbox:
         # so the review can show "sections used for the comparison" instead of "full text"
         self._sections_read = {}
         self._steps_since_progress = 0
+
+        # Papers the version gate kept out, recorded now that there is a ledger to record
+        # into: the pool is built before this point, so the gate buffers its reasons
+        # rather than logging into a structure that does not exist yet. Flushed LAST --
+        # _log touches _steps_since_progress, so anything logged before that line exists
+        # dies in the constructor.
+        for note in getattr(self, "_version_gate_notes", []):
+            self._log("version_gate", note)
+        self._version_gate_notes = []
 
     # ------------------------------ loading ------------------------------ #
 
@@ -193,6 +195,31 @@ class ClaimToolbox:
             if p.exists():
                 return p.read_text(encoding="utf-8")
         return ""
+
+    def paper_provenance(self, pid: str) -> dict:
+        """Where this paper's text came from, as it stands NOW.
+
+        The pool record is a snapshot taken while the pool was built; a paper parsed
+        later in the run has its manifest updated but that snapshot does not move, so
+        reading the snapshot alone reported no parsed text for exactly the papers that
+        were deep-dived. The manifest is the authority and wins where the two overlap.
+        """
+        p = dict(self.pool.get(pid) or {})
+        self._versions_cache = None          # re-read: parse_one may have just written
+        e = self._versions_manifest().get(pid) or {}
+        if e:
+            p.update({
+                "version_status": e.get("status", p.get("version_status", "")),
+                "pinned_version": e.get("version", p.get("pinned_version", "")),
+                "pinned_version_date": e.get("version_date", p.get("pinned_version_date", "")),
+                "pinned_url": e.get("url", p.get("pinned_url", "")),
+                "doc_sha256": e.get("doc_sha256", p.get("doc_sha256", "")),
+                "parsed_text_path": e.get("parsed_text_path", ""),
+                "parsed_text_sha256": e.get("parsed_text_sha256", ""),
+                "history_complete": e.get("history_complete", None),
+                "missing_versions": e.get("missing_versions", []),
+            })
+        return p
 
     def _versions_manifest(self) -> dict:
         """related_work_data/versions.json -- which version each paper is pinned to.
@@ -431,6 +458,15 @@ class ClaimToolbox:
             "pinned_url": entry.get("url", ""),
             "doc_sha256": entry.get("doc_sha256", ""),
             "abstract_source": abstract_source,
+            # Which text file the comparison will actually read, and whether the version
+            # history behind the pin was complete. Both live in the manifest; without
+            # carrying them here the run log reported empty paths and an unconditional
+            # history_complete=True -- so a pin made from a partial history looked exactly
+            # like one made from a full one.
+            "parsed_text_path": entry.get("parsed_text_path", ""),
+            "parsed_text_sha256": entry.get("parsed_text_sha256", ""),
+            "history_complete": entry.get("history_complete", None),
+            "missing_versions": entry.get("missing_versions", []),
         }
 
     def _load_pool(self):
