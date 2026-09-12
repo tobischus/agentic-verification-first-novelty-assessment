@@ -148,6 +148,33 @@ def main():
             lines.append(f"| {s} | " + " | ".join(row) + f" | {sum(wins[s].values())} |")
         lines.append("")
 
+    # Position check. The both-orders design catches instability per pair, but it cannot
+    # say whether the judge has a general pull towards whichever report came first. That
+    # is one number: the share of A-verdicts over all judgements. Near 50% means the
+    # unstable cells above are genuinely close pairs; well above it would mean the whole
+    # table is partly a reading of presentation order.
+    pos = defaultdict(int)
+    per_crit = defaultdict(lambda: defaultdict(int))
+    for r in ok:
+        for c, v in r["parsed_result"]["criteria"].items():
+            pos[v["winner"]] += 1
+            per_crit[c][v["winner"]] += 1
+    tot = sum(pos.values()) or 1
+    lines += ["## Position check", "",
+              f"Over all {tot} judgements: A {pos['A']}, B {pos['B']}, tie {pos['tie']}, "
+              f"unclear {pos['unclear']} — **{100 * pos['A'] / tot:.1f}% chose the report "
+              f"shown first**.", "",
+              "| criterion | A | B | tie | unclear | A share |", "|---|---|---|---|---|---|"]
+    for c in CRITERIA:
+        d = per_crit[c]
+        n = sum(d.values()) or 1
+        lines.append(f"| {c} | {d['A']} | {d['B']} | {d['tie']} | {d['unclear']} | "
+                     f"{100 * d['A'] / n:.0f}% |")
+    locs = sum(len(v["locators"]) for r in ok for v in r["parsed_result"]["criteria"].values())
+    withloc = sum(1 for r in ok for v in r["parsed_result"]["criteria"].values() if v["locators"])
+    lines += ["", f"Locators: {locs} cited, {withloc}/{tot} judgements carry at least one "
+                  f"(all validated against the supplied line ids).", ""]
+
     # cost and context, reported next to the outcomes as the protocol requires
     tin = sum(r.get("input_tokens", 0) for r in ok)
     tout = sum(r.get("output_tokens", 0) for r in ok)
