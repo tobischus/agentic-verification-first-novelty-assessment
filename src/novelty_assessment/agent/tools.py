@@ -695,11 +695,18 @@ class ClaimToolbox:
                 if not p or (ft_dir / f"{pid}.txt").exists():
                     continue
                 try:
-                    if fetcher.ensure_pdf(
-                        {"paper_id": pid, "title": p["title"], "doi": p.get("doi"),
-                         "externalIds": p.get("externalIds", {})},
-                        pdfs_dir,
-                    ):
+                    record = {"paper_id": pid, "title": p["title"], "doi": p.get("doi"),
+                              "externalIds": p.get("externalIds", {}),
+                              "publication_date": p.get("publication_date", ""),
+                              "year": p.get("year", ""),
+                              "abstract": p.get("abstract", "")}
+                    # Same version pinning as the batch download: a paper the agent
+                    # retrieved mid-run must not be read at whatever version the
+                    # unversioned URL serves today, any more than a pool paper must.
+                    pin = fetcher.pin_for_record(self.data_dir, self.submission_id, record)
+                    if pin and not pin.get("url"):
+                        continue          # no admissible version -- recorded, not fetched
+                    if fetcher.ensure_pdf(record, pdfs_dir, pin=pin or None):
                         if fetcher.parse_one(self.data_dir, self.submission_id, pid) == "ok":
                             p["fulltext"] = (ft_dir / f"{pid}.txt").read_text(encoding="utf-8")
                             self._paper_index.pop(pid, None)

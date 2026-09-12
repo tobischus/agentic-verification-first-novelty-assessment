@@ -12,15 +12,24 @@ Kept deliberately light: it does the S2 fetch + ranking with a shared embedder
 agent_retrieved_papers.json and optional full-text fetch are handled by the
 toolbox, so provenance stays separate from the initial ranked_papers.json.
 """
+import logging
 import os
 import re
+import sys
 import time
-from datetime import datetime
+from pathlib import Path
 from typing import List, Optional
 
 import numpy as np
 import requests
 from rapidfuzz import fuzz
+
+# One prior-work cutoff for the whole system: this module used to carry its own copy of
+# the rule, and the copy drifted (see is_valid_prior_work).
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "retrieval"))
+import paper_versions as pv
+
+logger = logging.getLogger("retrieve_more")
 
 _S2_SEARCH = "https://api.semanticscholar.org/graph/v1/paper/search"
 _FIELDS = "title,abstract,paperId,publicationDate,year,venue,authors,citationCount,externalIds"
@@ -96,32 +105,28 @@ def is_valid_prior_work(
     """Same admissibility rule as retrieval.merge_paper_collections.is_valid_paper:
     exclude the submission itself (near-duplicate title OR near-duplicate abstract, which
     catches a renamed earlier version) and any paper not clearly published BEFORE the
-    submission (>=90 days older with full dates; strictly earlier year otherwise; rejected
-    when no usable date)."""
+    submission.
+
+    "Clearly before" is one rule over whole date intervals, shared with the pipeline
+    (paper_versions.gap_verdict), rather than the two it used to be. The year branch here
+    said "strictly earlier year" -- December against the following January passed it, at a
+    gap of one day, while the date branch beside it demanded ninety. A granularity that
+    cannot establish the gap now rejects and says why, instead of guessing generously."""
     title = (paper.get("title") or "").lower()
     # self / near-duplicate exclusion (title, then abstract for renamed versions)
     if source_title and fuzz.ratio(title, source_title.lower()) >= 90:
         return False
     if source_abstract and _same_paper(paper.get("abstract", ""), source_abstract):
         return False
-    pdate = paper.get("publication_date")
-    # PRIORITY 1: full dates on both sides -> must be >3 months older than the submission
-    if source_pub_date and pdate:
-        try:
-            pub = datetime.strptime(pdate, "%Y-%m-%d")
-            src = datetime.strptime(source_pub_date, "%Y-%m-%d")
-            return (src - pub).days >= 90
-        except ValueError:
-            pass
-    # PRIORITY 2: years only -> must be a strictly earlier year
-    py = paper.get("year") or (pdate[:4] if pdate else None)
-    if source_year and py:
-        try:
-            return int(py) < int(source_year)
-        except (ValueError, TypeError):
-            pass
-    # PRIORITY 3: no usable date -> reject (conservative, same as the pipeline)
-    return False
+
+    stated = paper.get("publication_date") or paper.get("year")
+    source_stated = source_pub_date or (str(source_year) if source_year else "")
+    verdict = pv.gap_verdict(stated, source_stated, pv.DEFAULT_MIN_GAP_DAYS)
+    if verdict != "ok":
+        logger.info(
+            "retrieve_more: not prior work (%s): %r vs submission %r | %s",
+            verdict, stated, source_stated, (paper.get("title") or "")[:60])
+    return verdict == "ok"
 
 
 def retrieve(

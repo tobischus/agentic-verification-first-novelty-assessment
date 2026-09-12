@@ -26,6 +26,14 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 logger = logging.getLogger(__name__)
 
+# Prior-work cutoff, shared by the retrieval filter and the version pinning in
+# paper_versions: a candidate must stand at least this far before the submission.
+# Own directory on the path first -- this file is imported both as a script and as a
+# module from the orchestrator, and only the script form has it there already.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import paper_versions as pv
+from paper_versions import DEFAULT_MIN_GAP_DAYS as MIN_PRIOR_GAP_DAYS
+
 # Load environment variables
 load_dotenv()
 
@@ -76,6 +84,10 @@ class Paper:
     relevance: float = 0.0  # SPECTER2 cosine similarity to the submission (0-1), for the UI
     cluster: int = -1       # topical cluster id among the final related work (UI grouping)
     cluster_label: str = ""  # human-readable cluster heading
+    # "" when the record's own date clears the prior-work cutoff; "too_recent"/"unknown"
+    # for a CITED paper kept in spite of it (see merge_paper_collections). Carried into
+    # ranked_papers.json so version pinning and the reviewer both see which papers these are.
+    record_date_verdict: str = ""
     embedding: np.ndarray = None
 
     def __repr__(self):
@@ -468,50 +480,49 @@ class PaperRankingSystem:
                 )
                 return False
 
-            # PRIORITY 1: If both have full dates, use precise date comparison
-            if source_paper.publication_date and paper.publication_date:
-                try:
-                    pub_date = datetime.strptime(paper.publication_date, "%Y-%m-%d")
-                    source_date = datetime.strptime(
-                        source_paper.publication_date, "%Y-%m-%d"
-                    )
-
-                    # Allow same-year papers if they're >3 months old
-                    days_difference = (source_date - pub_date).days
-                    if days_difference < 90:  # Less than 3 months
-                        self.logger.debug(
-                            f"Skipping recent paper: {paper.publication_date} (only {days_difference} days before source)"
-                        )
-                        return False
-                    return True
-
-                except ValueError:
-                    self.logger.debug(f"Invalid date format: {paper.publication_date}")
-                    # Fall through to year-based logic
-
-            # PRIORITY 2: If only years available, be conservative
-            if source_paper.year and (paper.year or paper.publication_date):
-                try:
-                    pub_year = (
-                        int(paper.year)
-                        if paper.year
-                        else int(paper.publication_date[:4])
-                    )
-                    if pub_year >= int(source_paper.year):
-                        self.logger.debug(
-                            f"Skipping paper from same/later year: {pub_year}"
-                        )
-                        return False
-                    return True
-                except ValueError:
-                    self.logger.debug(f"Invalid year format: {paper.year}")
-
-            # PRIORITY 3: No date information - reject
-            self.logger.debug(f"Skipping paper with no date: {paper.title}")
+            # The cutoff, over whole date INTERVALS rather than points.
+            #
+            # This used to run in two tiers: full dates were held to a 90-day gap, and
+            # anything left over fell through to "an earlier year is fine". Those two do
+            # not agree. A paper dated 2024 against a submission dated 2025 passed the
+            # year rule while the true gap could be a single day -- December 31st to
+            # January 1st -- which the date rule would have rejected outright. A bare year
+            # is a 365-day interval, not a date, and the only honest reading of one is the
+            # whole span it could mean (see paper_versions.gap_verdict).
+            #
+            # So there is one rule now, and a granularity that cannot settle it says so
+            # rather than guessing in the permissive direction.
+            stated = paper.publication_date or paper.year
+            source_stated = source_paper.publication_date or source_paper.year
+            verdict = pv.gap_verdict(stated, source_stated, MIN_PRIOR_GAP_DAYS)
+            if verdict == "ok":
+                return True
+            if verdict == "too_recent":
+                self.logger.debug(
+                    f"Skipping paper that is not prior work: {stated} vs {source_stated} "
+                    f"| {paper.title[:60]}"
+                )
+                return False
+            # "unknown": the dates are too coarse to establish the gap. Logged at info,
+            # not debug -- this is a data problem a reviewer may want to know about, and
+            # the old code resolved exactly this case silently in favour of including it.
+            self.logger.info(
+                f"Skipping paper whose dating cannot establish a {MIN_PRIOR_GAP_DAYS}-day "
+                f"gap: {stated!r} vs submission {source_stated!r} | {paper.title[:60]}"
+            )
             return False
 
-        # Add cited papers (always include) -- except a cited paper that is actually the
-        # submission's own earlier/renamed version (self-citation of a prior arXiv version).
+        # Cited papers are kept even when their RECORD looks too recent, but no longer
+        # silently: being cited is good evidence the work predates the submission, while
+        # the date attached to it is the date of the newest record S2 holds -- typically a
+        # later version of the very paper that was cited. Four of the twenty papers in the
+        # graphrag_when_to_use pool arrived this way, two of them dated AFTER the
+        # submission, and both were later marked "published after the cutoff" by hand.
+        #
+        # Which document to actually read is settled downstream by pinning a version
+        # (paper_versions.resolve_version); what belongs here is the flag saying the
+        # record's own date does not clear the cutoff, so that step -- and the reviewer --
+        # can see which papers rest on it.
         for paper in cited_papers:
             if is_same_paper(paper.abstract, source_paper.abstract):
                 self.logger.info(
@@ -519,6 +530,16 @@ class PaperRankingSystem:
                 )
                 continue
             paper.cited_paper = True  # Add this flag
+            stated = paper.publication_date or paper.year
+            source_stated = source_paper.publication_date or source_paper.year
+            verdict = pv.gap_verdict(stated, source_stated, MIN_PRIOR_GAP_DAYS)
+            if verdict != "ok":
+                paper.record_date_verdict = verdict
+                self.logger.info(
+                    f"Cited paper kept despite its record date ({verdict}): {stated!r} vs "
+                    f"submission {source_stated!r} | {paper.title[:60]} -- the version "
+                    f"actually read is pinned later"
+                )
             unique_papers[paper.paper_id] = paper
 
         # Add query papers if valid and not duplicate
