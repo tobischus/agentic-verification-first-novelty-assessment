@@ -285,7 +285,33 @@ class EvidenceMap(BaseModel):
 MAP_PROMPT = """Identify every substantive component-level correspondence between ONE claimed contribution and ONE prior paper.
 
 Your task is evidence extraction, not an overall novelty judgment.
+The proposed semantic comparison below is a hypothesis to verify, not a fact.
 
+First identify the specific shared contribution asserted in "What is shared"
+and the assessment. Search the provided source texts for evidence of THAT
+assertion. Do not substitute a different, easier-to-match contribution.
+
+Keep the current claim as the scope of the comparison. Contributions elsewhere
+in the submission are relevant only when you explain their direct bearing on
+this claim.
+
+For an empirical claim, distinguish a shared research activity from a shared
+finding. "Both conduct experiments" does not by itself establish that both
+answer the same scientific question or deliver the same empirical knowledge.
+For other claim types, apply the same distinction to their actual contribution.
+
+Use the proposed comparison to direct the search, but do not force agreement.
+If the sources establish a different substantive overlap within the current
+claim, report that correspondence and explicitly state how it differs from
+the proposed rationale. If the proposed overlap has no supporting spans,
+do not manufacture a substitute pair.
+
+In each relation, state the concrete shared contribution established by the
+two quotes and how it bears on the current claim. Do not merely repeat the
+proposed assessment.
+
+## Proposed semantic comparison — unverified
+{comparison}
 A correspondence exists when:
 1. the submission states a substantive component of its claimed contribution;
 2. the prior paper itself contributes something that instantiates the same substantive component; and
@@ -413,8 +439,6 @@ class Conclusion(BaseModel):
 #              wording, and still belongs to X.
 # --------------------------------------------------------------------------- #
 
-_OWN_IDENTITY = 0.92        # normalised similarity above which a span is a quotation
-
 
 class _OwnItem(BaseModel):
     index: int = Field(description="the pair's number, as given")
@@ -449,21 +473,6 @@ def _norm_span(t: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", (t or "").lower()).strip()
 
 
-def _identical(a: str, b: str) -> bool:
-    """Is the paper's span the submission's span? Then it is a quotation of it."""
-    na, nb = _norm_span(a), _norm_span(b)
-    if not na or not nb:
-        return False
-    if na in nb or nb in na:
-        return True
-    try:
-        from rapidfuzz import fuzz
-        return fuzz.token_sort_ratio(na, nb) / 100.0 >= _OWN_IDENTITY
-    except Exception:
-        import difflib
-        return difflib.SequenceMatcher(None, na, nb).ratio() >= _OWN_IDENTITY
-
-
 def _context_of(span: str, document: str, window: int = 320) -> str:
     """The span with the text around it, so attribution can be read off the page."""
     doc = document or ""
@@ -491,20 +500,17 @@ def check_ownership(struct_call: Callable, pairs: List[dict], title: str,
     """
     if not pairs:
         return pairs
-    kept, need = [], []
-    for p in pairs:
-        if _identical(p.get("paper_quote", ""), p.get("claim_quote", "")):
-            p["ownership"] = "quotes_the_submission"
-            continue                      # dropped: the paper is citing the submission
-        need.append(p)
-    if not need:
-        return kept
+    kept, need = [], list(pairs)
 
     spans = "\n\n".join(
         f"[{i + 1}] SPAN: {p.get('paper_quote', '')}\n"
         f"    CONTEXT: {_context_of(p.get('paper_quote', ''), verify_paper)}"
         for i, p in enumerate(need))
-    parsed = struct_call(_Ownership, OWNERSHIP_PROMPT.format(title=title, spans=spans))
+
+    parsed = struct_call(
+        _Ownership,
+        OWNERSHIP_PROMPT.format(title=title, spans=spans)
+    )
     if parsed is None:
         # The call did not come back. Keeping the pairs is the honest failure: this gate
         # removes evidence, and a gate that removes on silence would turn an API error
@@ -537,7 +543,8 @@ def check_ownership(struct_call: Callable, pairs: List[dict], title: str,
 
 def build_map(struct_call: Callable, claim_str: str, submission_text: str,
               title: str, paper_text: str, verify_submission: str, verify_paper: str,
-              min_quote_tokens: int = 10, fuzzy_threshold: float = 90.0) -> dict:
+              min_quote_tokens: int = 10, fuzzy_threshold: float = 90.0,
+              comparison: Optional[dict] = None) -> dict:
     """The verified map for one (claim, paper), or an empty one.
 
     `submission_text` and `paper_text` are what the model may quote FROM; `verify_submission`
@@ -545,9 +552,16 @@ def build_map(struct_call: Callable, claim_str: str, submission_text: str,
     because the model sees a section selection while verification must run against the whole
     document -- a span trimmed at a section boundary is still in the paper.
     """
-    parsed = struct_call(EvidenceMap, MAP_PROMPT.format(
-        claim=claim_str[:1500], submission=submission_text,
-        title=title, paper=paper_text))
+    parsed = struct_call(
+        EvidenceMap,
+        MAP_PROMPT.format(
+            claim=claim_str,
+            submission=submission_text,
+            title=title,
+            paper=paper_text,
+            comparison=_fmt_comparison(comparison or {}),
+        ),
+    )
     if parsed is None:
         # `failed` separates "the call did not come back" from "the model found nothing".
         # Both used to leave an empty map, and an empty map reads as `none` -- so an API
@@ -626,8 +640,8 @@ def _list_pairs(pairs: List[dict], start: int = 1) -> str:
         "    SUBMISSION: \u201c{}\u201d\n"
         "    THIS PAPER: \u201c{}\u201d".format(
             i, p.get("strength", "?"), p.get("rationale", ""),
-            " ".join(p["claim_quote"].split())[:400],
-            " ".join(p["paper_quote"].split())[:400])
+            " ".join(p["claim_quote"].split()),
+            " ".join(p["paper_quote"].split()))
         for i, p in enumerate(pairs, start))
 
 
@@ -656,69 +670,200 @@ class EvidenceCheck(BaseModel):
     status: str = Field(
         description="material | nonmaterial | insufficient"
     )
+
     supporting_pair_indices: List[int] = Field(
         default_factory=list,
         description=(
-            "1-based indices of grounded pairs that genuinely support MATERIAL "
-            "contribution overlap. Must contain at least one index when status=material; "
-            "normally empty for nonmaterial or insufficient."
+            "1-based indices of grounded pairs that establish substantive "
+            "overlap within the CURRENT claim. Include only pairs whose "
+            "quoted spans actually support the stated relation."
         ),
     )
+
+    proposed_degree_supported: Optional[bool] = Field(
+        default=None,
+        description=(
+            "For proposed partial/substantial/same: whether the grounded "
+            "evidence supports the decision-relevant overlap assertion "
+            "at the proposed degree. Do not require every sentence of the "
+            "assessment or delta to be established by correspondence pairs. "
+            "An unsupported delta assertion makes this false only when "
+            "resolving it could change the overlap degree; explain that "
+            "dependency in unresolved_question. Otherwise record the "
+            "limitation in reasoning. For none/superficial return null. "
+            "Do not assign a replacement degree."
+        ),
+    )
+
+    unresolved_question: str = Field(
+        default="",
+        description=(
+            "Only a question whose resolution could change the overlap "
+            "decision or establish its currently missing evidential basis. "
+            "Name the contested assertion, relevant pair indices, and why "
+            "the answer matters to the decision. Prioritize the conflict "
+            "between the proposal and valid evidence, not an irrelevant "
+            "rejected pair. Put non-blocking delta limitations in reasoning. "
+            "Empty when no decision-relevant conflict remains."
+        ),
+    )
+
     reasoning: str = Field(default="")
 
 
-EVIDENCE_CHECK_PROMPT = """Check whether the grounded evidence supports substantive
-contribution overlap.
+EVIDENCE_CHECK_PROMPT = """Check whether grounded evidence supports the
+specific overlap asserted by a semantic comparison of ONE claim and ONE
+prior paper.
 
-You are an evidence checker, not the final novelty grader.
-Do not assign or revise an overall overlap degree.
+The comparison is a hypothesis, not evidence.
+The quoted spans have passed source-grounding and ownership checks.
+The proposed relation between two spans may still be wrong.
 
-You may use:
-1. the claimed contribution;
-2. the prior semantic comparison; and
-3. the grounded correspondence pairs.
+Perform these checks:
 
-The comparison owns the overall semantic degree.
+1. CLAIM SCOPE
+Identify the actual contribution under review.
+Do not use a neighboring contribution to establish overlap or preserve novelty
+unless its relevance to this claim is explicitly justified.
 
-The quoted spans have already passed source-grounding and ownership checks.
-However, the semantic relation proposed for a pair is not automatically correct.
-Judge what the two quoted spans themselves establish.
+2. PAIR VALIDITY
+For each pair, judge what the quoted spans themselves establish.
+A relation is supported only when both spans express the asserted shared
+contribution in compatible semantic roles.
+Constructing, using, evaluating, and surveying something are not interchangeable.
 
-A pair supports material overlap only when both spans express the same substantive
-contribution in the same semantic role. Constructing, using, evaluating, applying,
-or discussing a component are not interchangeable contribution relations.
+For empirical claims, distinguish:
+- conducting a similar research activity;
+- answering the same scientific question;
+- establishing the same finding under comparable conditions.
+
+Shared evaluation activity alone is not sufficient evidence of shared findings.
+Different conditions may support a narrower overlap; explain the limitation.
+Apply equivalent reasoning to methodological, theoretical, resource, and other
+contribution types.
+
+3. SUPPORT FOR THE PROPOSED RATIONALE
+Check the specific assertion in "What is shared" and the assessment.
+Evidence for another component does not automatically support that assertion.
+If a different substantive overlap is evidenced within the current claim,
+identify it, but do not silently substitute it for the proposed rationale.
+
+4. SUPPORT FOR THE PROPOSED DEGREE
+For proposed partial, substantial, or same, assess whether the valid evidence
+justifies the proposed rationale at that degree:
+
+partial:
+    A meaningful part of the current contribution is already delivered.
+    The overlap must be more than a shared topic or generic research activity.
+
+substantial:
+    The evidence reaches the central contribution of the current claim.
+    A match on a subordinate component alone is not sufficient.
+
+same:
+    The evidence supports equivalence of the current claimed contribution
+    in its scientifically relevant content and scope.
+
+Use scientific relevance, not the number of pairs or matched phrases.
+Do not require every detail to match for partial or substantial overlap.
+Do not assign a replacement degree.
+
+A different dataset, implementation, or experimental setting does not by itself
+establish a scientifically meaningful residual contribution. Conversely, a
+difference can matter when it changes capabilities, assumptions, findings, or
+the scope in which a result holds.
+
+5. DISTINGUISH OVERLAP SUPPORT FROM DELTA LIMITATIONS
+
+Correspondence pairs provide positive evidence of overlap.
+They are not an exhaustive account of either paper.
+
+Absence of a correspondence does not prove that the prior paper lacks a
+component. Do not endorse such an absence claim merely because no pair
+demonstrates that component.
+
+However, an unsupported absence claim in the delta does not automatically
+invalidate independently supported overlap.
+
+Apply this decision test:
+Would resolving the disputed assertion change the proposed overlap degree,
+or is the assertion necessary to establish the overlap itself?
+
+If yes:
+    Identify the specific dependency in unresolved_question.
+    For a material proposal, set proposed_degree_supported=false when
+    the available evidence cannot resolve that decision-relevant issue.
+
+If no:
+    Do not block the overlap decision because of that assertion.
+    Explain in reasoning which delta statement must remain qualified.
+    Do not present the unverified difference as established novelty.
+
+For partial overlap, evidence must establish a meaningful shared component.
+It need not prove that every other component is absent from the prior paper.
+If the evidence leaves a concrete ambiguity about whether the shared
+contribution is central rather than partial, explain that ambiguity.
+Do not invent such an ambiguity solely because the pairs are non-exhaustive.
+
+For substantial or same, a subordinate match is insufficient to establish
+the proposed degree. Missing evidence about centrality or relevant scope
+can therefore remain a blocking issue.
+
+When the comparison proposes none/superficial but valid pairs establish
+material overlap, the unresolved question must address why that demonstrated
+contribution overlap is being treated as nonmaterial.
+
+A rejected pair is not automatically a reason to repeat the comparison.
+If other valid pairs independently support the decision, identify the
+rejected pair in reasoning without making it the repair target.
+It becomes blocking only if the decision depends on its assertion.
 
 Return:
 
-material
-    At least one grounded pair genuinely supports substantive contribution overlap.
+status:
+    material: at least one valid pair establishes substantive overlap within
+              the current claim.
+    nonmaterial: the pairs establish only non-substantive relationships.
+    insufficient: available evidence does not permit a reliable determination.
 
-nonmaterial
-    The grounded pairs establish only topical, supporting, mechanistic, contextual,
-    or otherwise non-substantive relationships.
+supporting_pair_indices:
+    All 1-based indices of valid material pairs.
+    Empty for nonmaterial or insufficient.
 
-insufficient
-    The available grounded evidence is absent, ambiguous, semantically mismatched,
-    or insufficient to determine whether substantive overlap is evidenced.
+proposed_degree_supported:
+    For proposed partial/substantial/same, true when the valid evidence
+    supports the decision-relevant overlap assertion at that degree.
+    False when its evidential basis or a decision-relevant scope issue
+    remains unresolved.
+    Do not set false solely because a nonessential delta statement is
+    unsupported or an unused candidate pair is invalid.
+    For proposed none/superficial, return null.
 
-Do not require the pairs to reproduce every part of the claim.
-Missing pairs are not evidence that unmatched parts are absent from the prior paper.
+unresolved_question:
+    State only a decision-relevant conflict.
+    Identify the contested assertion and relevant pair indices.
+    Explain how resolving it would affect the overlap decision.
+    For none/superficial contradicted by material evidence, address that
+    contradiction directly.
+    Do not request evidence merely to prove all remaining differences absent.
+    Do not assume that additional reading is necessary.
+    Empty when no decision-relevant conflict remains.
 
-When `status` is `material`, return the 1-based indices of every grounded pair
-that genuinely supports that material-overlap finding in `supporting_pair_indices`.
-At least one such index is required for `material`.
+reasoning:
+    Explain what the valid pairs establish and what they do not establish.
+    Identify rejected pairs and non-blocking limitations separately.
+    Explicitly qualify unsupported delta assertions; do not certify residual
+    novelty from missing correspondence pairs.
 
-For `nonmaterial` or `insufficient`, return an empty `supporting_pair_indices` list.
-
-## Claim
+## Current claim
 {claim}
 
-## Semantic comparison
+## Proposed semantic comparison
 {comparison}
 
 ## Grounded pairs
 {pairs}
-"""    
+"""
 
 def check_evidence(
     struct_call: Callable,
@@ -726,58 +871,90 @@ def check_evidence(
     mapping: dict,
     comparison: Optional[dict] = None,
 ) -> dict:
-    """Check whether the grounded owned pairs support material overlap.
-
-    This does NOT assign the novelty degree. The semantic comparison owns that.
-    """
-
+    comparison = comparison or {}
     pairs = mapping.get("pairs") or []
 
-    # No grounded + ownership-verified evidence available.
-    if not pairs:
+    proposed_degree = (
+        comparison.get("overlap_degree") or ""
+    ).lower()
+
+    material_proposal = proposed_degree in {
+        "partial",
+        "substantial",
+        "same",
+    }
+
+    def unresolved(reason):
         return {
             "status": "insufficient",
             "supporting_pair_indices": [],
-            "reasoning": (
-                "No grounded ownership-verified correspondence is available "
-                "to establish substantive contribution overlap."
+            "reasoning": reason,
+            "proposed_degree_supported": (
+                False if material_proposal else None
             ),
+            "unresolved_question": reason,
         }
+
+    if not pairs:
+        return unresolved(
+            "No grounded ownership-verified pair supports the proposed overlap. "
+            "Check the specific shared contribution in the comparison against "
+            "the source passages; do not substitute a different contribution."
+        )
 
     parsed = struct_call(
         EvidenceCheck,
         EVIDENCE_CHECK_PROMPT.format(
-            claim=claim_str[:1200],
-            comparison=_fmt_comparison(comparison or {}),
+            claim=claim_str,
+            comparison=_fmt_comparison(comparison),
             pairs=_list_pairs(pairs),
         ),
     )
 
-    # A failed model call is epistemic uncertainty, never a semantic label.
     if parsed is None:
-        return {
-            "status": "insufficient",
-            "supporting_pair_indices": [],
-            "reasoning": "The evidence check did not complete.",
-        }
+        return unresolved("The evidence check did not complete.")
 
     status = (parsed.status or "").strip().lower()
 
-    if status not in ("material", "nonmaterial", "insufficient"):
+    if status not in {"material", "nonmaterial", "insufficient"}:
         status = "insufficient"
 
-    valid_indices = sorted({
+    indices = sorted({
         i
         for i in (parsed.supporting_pair_indices or [])
-        if isinstance(i, int) and 1 <= i <= len(pairs)
+        if type(i) is int and 1 <= i <= len(pairs)
     })
 
-    # "material" has to identify at least one pair that actually supports it.
-    if status == "material" and not valid_indices:
+    if status == "material" and not indices:
         status = "insufficient"
+
+    if status != "material":
+        indices = []
+
+    degree_supported = parsed.proposed_degree_supported
+
+    if material_proposal:
+        degree_supported = (
+            degree_supported is True
+            and status == "material"
+            and bool(indices)
+        )
+    else:
+        degree_supported = None
+
+    question = (parsed.unresolved_question or "").strip()
+
+    if material_proposal and not degree_supported and not question:
+        question = (
+            "Which grounded correspondence supports the specific shared "
+            "contribution and the proposed overlap degree? Reassess the "
+            "comparison if the existing evidence supports only a narrower claim."
+        )
 
     return {
         "status": status,
-        "supporting_pair_indices": valid_indices,
+        "supporting_pair_indices": indices,
         "reasoning": (parsed.reasoning or "").strip(),
+        "proposed_degree_supported": degree_supported,
+        "unresolved_question": question,
     }

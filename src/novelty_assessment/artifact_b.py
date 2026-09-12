@@ -30,31 +30,49 @@ load_dotenv()
 
 ARTIFACT_B_PROMPT = """You are writing a novelty assessment of a paper to support a peer reviewer.
 
-You are given STRUCTURED EVIDENCE (Artifact A): for each claimed contribution of the submission, the result of comparing it against retrieved prior work — which prior papers CHALLENGE the claim (each backed by verified verbatim quotes from both the submission and the prior paper), and which related papers were examined but do NOT challenge it (with the reason they differ).
+You are given STRUCTURED EVIDENCE (Artifact A).
 
-## STRICT GROUNDING RULES (verification-first)
-- Base your assessment ONLY on the evidence below (Artifact A). Do NOT use any outside knowledge, prior work, comparison, or fact that is not present in the evidence. Artifact A is your ONLY source.
-- Every statement about prior work must correspond to a specific entry in the evidence; name the prior paper(s) by their titles exactly as given.
-- Quote or paraphrase only the verified evidence shown; never invent overlaps or quotes.
-- If a claim has no challenging prior work in the evidence, conclude its novelty is NOT challenged WITHIN the examined literature. Do NOT assert it is novel in an absolute sense (the search scope is limited).
+## STRICT GROUNDING RULES
+- Base the assessment ONLY on Artifact A.
+- The claim verdict in Artifact A is FIXED by the deterministic evidence controller.
+- Copy that verdict exactly. Do NOT infer, revise, strengthen, or weaken it.
+- `not_challenged` means that no verifier-approved strong refuter was found.
+  It does NOT mean that no prior-work overlap was found.
+- Partial material overlaps must still be described when present.
+- Individual paper comparisons may be marked UNRESOLVED because their
+  reading/comparison budget was exhausted.
+- An unresolved paper does NOT change the FIXED CONTROLLER VERDICT.
+- `EVIDENCE SUFFICIENT` refers to whether the claim-level strong-refuter
+  decision could be made.
+- `REVIEW COMPLETE` refers to whether every individual paper comparison
+  was fully resolved.
+- A claim may therefore be `not_challenged` while `REVIEW COMPLETE` is false.
+- If unresolved papers exist, mention their number and briefly report their
+  last semantic assessment and the recorded budget reason.
+- Do not describe the claim itself as uncertain merely because individual
+  paper comparisons remain unresolved.
+- The last semantic assessment of an unresolved paper is the best available
+  semantic assessment, but its evidence conflict was not fully resolved.
+- Every statement about prior work must correspond to an entry in Artifact A.
+- Do not introduce outside knowledge.
 - Do not output numeric scores.
 
-## Evidence (Artifact A)
+## Evidence
 {evidence}
 
 ## Produce
-1. per_claim: for each claim provide:
-   - verdict: exactly one of "challenged" (verified prior work substantially presents the same contribution), "not_challenged" (no examined prior work challenges it), or "uncertain" (evidence insufficient to decide).
-   - rationale: a SELF-CONTAINED, ARGUMENTATIVE assessment of 3-6 sentences that a reviewer could read on its own and find convincing. Build the argument STEP BY STEP from the evidence:
-       * Open with the verdict and how strongly it holds.
-       * If CHALLENGED: name the specific prior paper(s); state precisely WHAT overlaps, grounding it in the verified submission-vs-prior-work quotes; judge whether the overlap is substantial (the same contribution) or only partial; and explicitly note any remaining differentiator of the submission if the evidence shows one.
-       * If NOT CHALLENGED: name the closest examined prior work and explain, using the recorded reason it differs, WHY it does not cover the claimed contribution; then state that novelty holds within the examined literature (not absolutely).
-       * Reflect the STRENGTH of the evidence so the reader can gauge credibility — e.g. whether the comparison rested on the prior work's full text or only its abstract+introduction, and whether the overlap quotes were verified.
-       Keep it strictly grounded; introduce nothing beyond the evidence.
-   - challenging_papers: titles of the prior papers that challenge this claim (empty if none).
-2. overall_assessment: one coherent, argumentative paragraph synthesizing ACROSS all claims for the reviewer — which contributions appear genuinely novel within the examined literature, which are challenged by prior work (name them), how the submission positions itself relative to that prior work, and the overall novelty picture. Strictly grounded in the evidence above.
-"""
+For every claim:
+- copy the FIXED CONTROLLER VERDICT exactly;
+- write a concise 3-6 sentence rationale explaining that verdict from the evidence;
+- if partial material overlap exists without a strong refuter, say so explicitly;
+- if challenged, identify the verified strong refuter(s);
+- if unresolved papers exist, report how many remain unresolved and briefly
+  state their last semantic assessment and recorded budget reason;
+- do not equate "no strong refuter" with "no overlap";
+- do not equate an unresolved paper comparison with an uncertain claim verdict.
 
+Also produce an overall_assessment grounded only in the supplied claims.
+"""
 
 class ClaimVerdict(BaseModel):
     claim_id: str = Field(description="The claim id from the evidence")
@@ -75,11 +93,25 @@ class ArtifactB(BaseModel):
 
 
 class ArtifactBBuilder:
-    def __init__(self, model_name: str = "gpt-4.1", temperature: float = 0.0):
+    def __init__(self, model_name="gpt-4.1", temperature=0.0):
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise ValueError("OPENAI_API_KEY environment variable is not set")
-        self.llm = ChatOpenAI(model_name=model_name, temperature=temperature, api_key=api_key)
+
+        if model_name.startswith(("gpt-5", "o1", "o3", "o4")):
+            kw = {
+                "reasoning_effort": os.getenv(
+                    "NOVELTY_CONCLUSION_EFFORT", "low"
+                )
+            }
+        else:
+            kw = {"temperature": temperature}
+
+        self.llm = ChatOpenAI(
+            model_name=model_name,
+            api_key=api_key,
+            **kw,
+        )
 
     @staticmethod
     def _format_evidence(artifact_a: dict) -> str:
@@ -88,6 +120,32 @@ class ArtifactBBuilder:
             lines.append(f"### Claim {e['claim_id']}: {e['claim_name']}")
             lines.append(f'Claimed contribution (verbatim): "{e["claim_text"]}"')
             lines.append(f"Prior-work papers examined for this claim: {e['candidates_examined']}")
+            lines.append(
+                f"FIXED CONTROLLER VERDICT: {e.get('agent_verdict', 'uncertain')}"
+            )
+            lines.append(
+                f"EVIDENCE SUFFICIENT: {bool(e.get('evidence_sufficient', False))}"
+            )
+            lines.append(
+                f"STOP REASON: {e.get('stop_reason', '')}"
+            )
+            lines.append(
+                f"REVIEW COMPLETE: {bool(e.get('review_complete', True))}"
+            )
+            lines.append(
+                f"UNRESOLVED PAPERS: {int(e.get('unresolved_count', 0))}"
+            )
+
+            for u in e.get("unresolved_papers", []):
+                lines.append(
+                    f'- UNRESOLVED: "{u.get("title", "")}" | '
+                    f'best semantic assessment: {u.get("semantic_degree", "")} | '
+                    f'reason: {u.get("reason", "")}'
+                )
+                if u.get("deficit"):
+                    lines.append(
+                        f'  open evidence issue: {u["deficit"]}'
+                    )
             comps = e["comparisons"]
             refuters = [c for c in comps if vd.challenges(c)]
             others = [c for c in comps if not vd.challenges(c)]
@@ -117,7 +175,9 @@ class ArtifactBBuilder:
                     if c.get("brief_note"):
                         lines.append(f"    - analysis: {c['brief_note']}")
             else:
-                lines.append("No examined prior work challenges this claim (no verified overlap found).")
+                lines.append(
+                    "No verified strong refuter was found for this claim."
+                )
 
             # Every non-refuting paper the review found to OVERLAP the claim, plus a few of the
             # closest remaining ones for context. Selecting these by similarity alone (the old
@@ -134,26 +194,68 @@ class ArtifactBBuilder:
                 lines.append("RELATED BUT NOT CHALLENGING (examined, with reason they differ):")
                 for c in top_others:
                     src = c.get("content_source", "")
-                    note = c.get("brief_note") or "no specific overlap found"
+                    note = c.get("brief_note") or c.get("assessment") or "no specific overlap found"
                     deg = c.get("overlap_degree")
                     extra = f" [overlap: {deg}]" if deg else ""
-                    lines.append(f'- "{c["title"]}" (compared against: {src}){extra}: {note}')
+
+                    is_unresolved = bool(
+                        c.get("unresolved") or c.get("insufficient")
+                    )
+                    unresolved_tag = " [UNRESOLVED]" if is_unresolved else ""
+
+                    lines.append(
+                        f'- "{c["title"]}" (compared against: {src})'
+                        f'{extra}{unresolved_tag}: {note}'
+                    )
+
                     if c.get("submission_delta"):
-                        lines.append(f"    - submission adds: {c['submission_delta']}")
+                        lines.append(
+                            f"    - submission adds: {c['submission_delta']}"
+                        )
+
+                    if is_unresolved:
+                        reason = c.get("unresolved_reason", "budget_exhausted")
+                        deficit = c.get("unresolved_deficit", "")
+
+                        lines.append(
+                            f"    - unresolved reason: {reason}"
+                        )
+
+                        if deficit:
+                            lines.append(
+                                f"    - open evidence issue: {deficit}"
+                            )
             lines.append("")
         return "\n".join(lines)
 
+    @staticmethod
+    def _force_controller_fields(entry: dict, value: dict | None = None) -> dict:
+            v = dict(value or {})
+    
+            v["claim_id"] = entry["claim_id"]
+            v["claim_name"] = entry.get("claim_name", "")
+            v["verdict"] = entry.get("agent_verdict", "uncertain")
+            v["challenging_papers"] = [
+                c["title"]
+                for c in entry.get("comparisons", [])
+                if vd.challenges(c)
+            ]
+    
+            return v
+
+
     def build_one(self, entry: dict) -> dict:
-        """Synthesize the verdict for a SINGLE claim's Artifact-A entry (on-demand)."""
         evidence = self._format_evidence({"claims": [entry]})
         prompt = ARTIFACT_B_PROMPT.format(evidence=evidence)
         result = self.llm.with_structured_output(ArtifactB).invoke(prompt)
-        if result.per_claim:
-            v = result.per_claim[0].model_dump()
-        else:
-            v = {"claim_id": entry["claim_id"], "claim_name": entry["claim_name"],
-                 "verdict": "uncertain", "rationale": "", "challenging_papers": []}
-        return v
+
+        raw = (
+            result.per_claim[0].model_dump()
+            if result.per_claim
+            else {"rationale": ""}
+        )
+
+        return self._force_controller_fields(entry, raw)
 
     def build(self, data_dir: str, submission_id: str, variant: str = "") -> dict:
         sub_dir = Path(data_dir) / submission_id
@@ -165,7 +267,18 @@ class ArtifactBBuilder:
         prompt = ARTIFACT_B_PROMPT.format(evidence=evidence)
         result = self.llm.with_structured_output(ArtifactB).invoke(prompt)
 
-        per_claim = [v.model_dump() for v in result.per_claim]
+        raw_by = {
+            v.claim_id: v.model_dump()
+            for v in result.per_claim
+        }
+
+        per_claim = [
+            self._force_controller_fields(
+                entry,
+                raw_by.get(entry["claim_id"], {"rationale": ""}),
+            )
+            for entry in artifact_a["claims"]
+        ]
         artifact_b = {
             "submission_id": submission_id,
             "generated_from": variant_path(sub_dir, submission_id, "artifact_a", variant).name,
