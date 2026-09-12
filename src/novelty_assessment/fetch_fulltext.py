@@ -187,8 +187,20 @@ class FullTextFetcher:
         dest = pdfs_dir / f"{pid}.pdf"
         if dest.exists():
             if self._is_valid_pdf(dest):
-                return True
-            dest.unlink()  # corrupt cached download (HTML/empty) -> re-fetch
+                # A file being present says nothing about WHICH document it is. Callers
+                # other than download_pdfs (the agent's mid-run fetch) reach this with a
+                # PDF left over from before pinning existed, i.e. whatever the unversioned
+                # URL served that day. Accept it only when the pin vouches for this exact
+                # file; otherwise it and its parsed texts are stale by definition.
+                recorded = (pin or {}).get("doc_sha256")
+                if not pin or (recorded and recorded == self._sha256(dest)):
+                    return True
+                logger.info(f"  cached PDF does not match the pinned "
+                            f"{pin.get('version') or 'version'} -- discarding it")
+                dest.unlink()
+                self._drop_derived_texts(pdfs_dir.parent, pid)
+            else:
+                dest.unlink()  # corrupt cached download (HTML/empty) -> re-fetch
 
         if pin and pin.get("url"):
             ok, detail = self._try_download(pin["url"], dest)
@@ -297,6 +309,11 @@ class FullTextFetcher:
 
     VERSIONS_FILE = "versions.json"
 
+    # The two statuses a paper may be read at: a specific admissible version, or the one
+    # document a source without version history has, checked against the cutoff. Everything
+    # else (unavailable / uncertain / unresolved) is a paper the review does not read.
+    USABLE_STATUSES = ("pinned", "single")
+
     @staticmethod
     def _sha256(path: Path) -> str:
         h = hashlib.sha256()
@@ -304,6 +321,33 @@ class FullTextFetcher:
             for chunk in iter(lambda: f.read(1 << 20), b""):
                 h.update(chunk)
         return h.hexdigest()
+
+    @staticmethod
+    def _derived_texts(rwd: Path, pid: str) -> list:
+        """Every file derived from this paper's PDF, whichever parser produced it.
+
+        The readers downstream (tools._load_fulltext_file, artifact_a) try these in a
+        fixed order and take the first that exists -- nougat BEFORE grobid. So dropping
+        only the grobid dump on a version change leaves a stale nougat or mineru file to
+        win, and the review then quotes text from a document that is no longer on disk.
+        """
+        return [
+            rwd / "nougat_output" / f"{pid}.mmd",
+            rwd / "grobid_fulltext" / f"{pid}.txt",
+            rwd / "mineru_output" / f"{pid}.md",
+            rwd / "mineru_output" / pid / f"{pid}.md",
+        ]
+
+    def _drop_derived_texts(self, rwd: Path, pid: str) -> int:
+        dropped = 0
+        for p in self._derived_texts(rwd, pid):
+            if p.exists():
+                try:
+                    p.unlink()
+                    dropped += 1
+                except OSError:
+                    logger.info(f"  could not remove stale text {p}")
+        return dropped
 
     def _versions_path(self, rwd: Path) -> Path:
         return rwd / self.VERSIONS_FILE
@@ -430,6 +474,26 @@ class FullTextFetcher:
                         f"{pin.status.upper()}: {pin.note}")
         return entry
 
+    def record_pdf_hash(self, data_dir: str, submission_id: str, paper_id: str,
+                        pdf_path: Path) -> str:
+        """Bind the file now on disk to its manifest entry.
+
+        Without this the hash only ever gets written by the batch downloader, so a paper
+        fetched mid-run by the agent would be judged "does not match the pin" on the next
+        pass and fetched again, every time.
+        """
+        rwd, _, _ = self._dirs(data_dir, submission_id)
+        manifest = self._load_versions(rwd)
+        entry = manifest.get(paper_id)
+        if not entry or not pdf_path.exists():
+            return ""
+        digest = self._sha256(pdf_path)
+        entry["doc_sha256"] = digest
+        entry["downloaded_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        manifest[paper_id] = entry
+        self._save_versions(rwd, manifest)
+        return digest
+
     def _apply_version_abstracts(self, rwd: Path, ranked: list, manifest: dict) -> None:
         """Put the PINNED version's own abstract into ranked_papers.json.
 
@@ -501,7 +565,11 @@ class FullTextFetcher:
             pin = manifest.get(pid) or {}
             pdf_path = pdfs_dir / f"{pid}.pdf"
 
-            if pin_versions and pin and not pin.get("url"):
+            # Admissibility is the STATUS, not the presence of a URL. A "single" paper --
+            # a journal article, say -- is admissible and has no version-bound URL to
+            # give, because its source publishes no version history; testing for a URL
+            # skipped every one of those, which is most non-arXiv prior work.
+            if pin_versions and pin and pin.get("status") not in self.USABLE_STATUSES:
                 # Pinning ran and could not settle on a version. Not an error to retry:
                 # a decision, and it stands until the record or the source changes.
                 results[pid] = False
@@ -522,14 +590,14 @@ class FullTextFetcher:
                     continue
                 # Either no hash was ever recorded (downloaded before pinning) or the file
                 # is a different document than the pin names. Both mean the cached PDF --
-                # and the text parsed out of it -- cannot be attributed to the pinned
-                # version, so both go.
+                # and every text parsed out of it -- cannot be attributed to the pinned
+                # version, so all of it goes.
                 logger.info(f"[dl {idx+1}/{n}] {pid}  {title} -> cached PDF is not the "
                             f"pinned {pin.get('version') or 'version'}, re-fetching")
                 pdf_path.unlink()
-                stale_txt = ft_dir / f"{pid}.txt"
-                if stale_txt.exists():
-                    stale_txt.unlink()
+                dropped = self._drop_derived_texts(rwd, pid)
+                if dropped:
+                    logger.info(f"  dropped {dropped} stale parsed text(s) with it")
             else:
                 logger.info(f"[dl {idx+1}/{n}] {pid}  {title}")
 
@@ -585,6 +653,20 @@ class FullTextFetcher:
             logger.info(f"[parse] {paper_id} -> parse_empty ({len(text)} chars)")
             return "parse_empty"
         (ft_dir / f"{paper_id}.txt").write_text(text, encoding="utf-8")
+        # Bind the text to the exact PDF it came out of. Readers check this against the
+        # manifest's current hash, so a text cannot outlive the document it describes --
+        # which is what happened when a version change replaced the PDF underneath it.
+        try:
+            rwd, _, _ = self._dirs(data_dir, submission_id)
+            manifest = self._load_versions(rwd)
+            entry = manifest.get(paper_id)
+            if entry is not None:
+                entry["parsed_from_sha256"] = self._sha256(pdf_path)
+                entry["parsed_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+                manifest[paper_id] = entry
+                self._save_versions(rwd, manifest)
+        except Exception as e:
+            logger.info(f"[parse] {paper_id}: could not record provenance ({type(e).__name__})")
         logger.info(f"[parse] {paper_id} -> ok ({len(text)} chars)  [{time.time()-t0:.1f}s]")
         return "ok"
 

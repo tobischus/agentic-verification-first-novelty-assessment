@@ -237,6 +237,7 @@ def arxiv_admissible_version(arxiv_id: str, submission_date, paper_id: str = "",
         time.sleep(delay_s)
     older = _arxiv_query([f"{aid}v{k}" for k in range(1, n)], session=session)
     by_version = {e["version"]: e for e in older}
+    missing = [k for k in range(1, n) if f"v{k}" not in by_version]
     for k in range(n - 1, 0, -1):
         e = by_version.get(f"v{k}")
         if not e:
@@ -250,8 +251,19 @@ def arxiv_admissible_version(arxiv_id: str, submission_date, paper_id: str = "",
                 latest_version=head["version"] or f"v{n}",
                 latest_version_date=head["date"], checked_versions=checked)
 
-    # Nothing admissible. Distinguish "every version really is too recent" from "the dates
-    # are too coarse to tell", because the second is a data problem and the first is not.
+    # Nothing admissible among the versions actually SEEN. That is only a statement about
+    # the paper if every version was seen: a failed or partial history request would
+    # otherwise be reported as "this paper has no admissible version", which is a claim
+    # about the world made from a network error. Not knowing is its own answer.
+    if missing:
+        return PinnedVersion(
+            pid, "unresolved", latest_version=head["version"] or f"v{n}",
+            latest_version_date=head["date"], checked_versions=checked,
+            note=f"version history incomplete: {len(missing)} of {n} versions "
+                 f"({', '.join('v' + str(k) for k in missing[:6])}) could not be read")
+
+    # Every version was read and none qualifies. Distinguish "all genuinely too recent"
+    # from "the dates are too coarse to tell", because the second is a data problem.
     verdicts = {gap_verdict(c["date"], submission_date, min_gap_days) for c in checked}
     status = "uncertain" if "unknown" in verdicts else "unavailable"
     return PinnedVersion(
