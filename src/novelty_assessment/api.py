@@ -598,9 +598,19 @@ def _assemble_claim(entry, meta):
     verify = []
     for c in comps:
         pairs = c.get("evidence_pairs") or []
-        # Only surface quote pairs verified on BOTH sides -- never show ungrounded quotes.
-        verified_pairs = [p for p in pairs
-                          if p.get("claim_quote_verified") and p.get("paper_quote_verified")]
+
+        # Keep the original 1-based pair index because EvidenceCheck's
+        # supporting_pair_indices refer to evidence_pairs in exactly this order.
+        verified_indexed = [
+            (i, p)
+            for i, p in enumerate(pairs, 1)
+            if p.get("claim_quote_verified")
+            and p.get("paper_quote_verified")
+        ]
+
+        # Keep the old plain list too, so existing code using verified_pairs
+        # continues to work unchanged.
+        verified_pairs = [p for _, p in verified_indexed]
         _m = meta.get(c.get("paper_id"), {})
         verify.append({
             "paper_id": c.get("paper_id"), "title": c.get("title"),
@@ -632,10 +642,57 @@ def _assemble_claim(entry, meta):
             "assessment": c.get("assessment", ""),
             # The claim-evidence pairs: a sentence of the SUBMISSION beside the prior
             # paper's own sentence saying the same thing, each side already checked
-            "evidence": [{"claim_quote": p.get("claim_quote"), "paper_quote": p.get("paper_quote"),
-                          "rationale": p.get("rationale")}
-                         for p in verified_pairs],
+            "evidence": [
+                {
+                    "pair_index": i,
+                    "claim_quote": p.get("claim_quote"),
+                    "paper_quote": p.get("paper_quote"),
+                    "rationale": p.get("rationale"),
+                }
+                for i, p in verified_indexed
+            ],
+
             "verified": len(verified_pairs) > 0,
+
+            "decision_trace": list(
+                ((c.get("map_diag") or {}).get("loop") or [])
+            ),
+
+            "evidence_status": (
+                (c.get("evidence_check") or {}).get("status")
+            ),
+
+            "supporting_pair_indices": (
+                (c.get("evidence_check") or {}).get(
+                    "supporting_pair_indices", []
+                )
+            ),
+
+            "evidence_reasoning": (
+                (c.get("evidence_check") or {}).get(
+                    "reasoning", ""
+                )
+            ),
+
+            "grounded_pairs": len(verified_pairs),
+
+            "insufficient": bool(c.get("insufficient")),
+
+            "unresolved": bool(
+                c.get("unresolved") or c.get("insufficient")
+            ),
+
+            "unresolved_reason": c.get(
+                "unresolved_reason", ""
+            ),
+
+            "unresolved_deficit": c.get(
+                "unresolved_deficit", ""
+            ),
+
+            "paper_state": c.get(
+                "paper_state", ""
+            ),
         })
     return {
         "claim_id": entry.get("claim_id"),
@@ -652,6 +709,11 @@ def _assemble_claim(entry, meta):
         "agent": {
             "verdict": entry.get("agent_verdict"),
             "evidence_sufficient": entry.get("evidence_sufficient", True),
+
+            "review_complete": entry.get("review_complete", True),
+            "unresolved_count": entry.get("unresolved_count", 0),
+            "unresolved_papers": entry.get("unresolved_papers", []),
+
             "stop_reason": entry.get("stop_reason"),
             "retrieval_rounds": entry.get("retrieval_rounds", 0),
             "pool_sources": entry.get("pool_sources", {}),
@@ -754,12 +816,78 @@ def _claim_worker(sid: str, cid: str):
         )
         entry = agent.run(claim, progress_cb=lambda info: _write_live(sid, cid, info))
 
+                # 1. Artifact A kurz und atomar schreiben.
         with _artifact_lock:
             a_path = sub / f"{sid}_artifact_a.json"
-            a = _load_json(a_path) or {"submission_id": sid, "agentic": True, "n_related_pool": 0, "claims": []}
-            a["claims"] = [e for e in a["claims"] if e.get("claim_id") != cid] + [entry]
-            a["n_related_pool"] = sum(entry.get("pool_sources", {}).values()) or a.get("n_related_pool", 0)
-            a_path.write_text(json.dumps(a, ensure_ascii=False, indent=2), encoding="utf-8")
+            a = _load_json(a_path) or {
+                "submission_id": sid,
+                "agentic": True,
+                "n_related_pool": 0,
+                "claims": [],
+            }
+
+            a["claims"] = [
+                e for e in a["claims"]
+                if e.get("claim_id") != cid
+            ] + [entry]
+
+            a["n_related_pool"] = (
+                sum(entry.get("pool_sources", {}).values())
+                or a.get("n_related_pool", 0)
+            )
+
+            a_path.write_text(
+                json.dumps(a, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+
+        # 2. LLM-Rationale AUSSERHALB des Locks erzeugen.
+        from artifact_b import ArtifactBBuilder
+
+        fixed_fallback = {
+            "claim_id": entry["claim_id"],
+            "claim_name": entry.get("claim_name", ""),
+            "verdict": entry.get("agent_verdict", "uncertain"),
+            "rationale": "",
+            "challenging_papers": [
+                c["title"]
+                for c in entry.get("comparisons", [])
+                if vd.challenges(c)
+            ],
+        }
+
+        try:
+            model = os.getenv(
+                "NOVELTY_CONCLUSION_MODEL",
+                os.getenv("NOVELTY_MODEL", "gpt-5.6-luna"),
+            )
+            claim_b = ArtifactBBuilder(
+                model_name=model
+            ).build_one(entry)
+        except Exception:
+            claim_b = fixed_fallback
+
+        # 3. Artifact B wieder kurz unter Lock aktualisieren.
+        with _artifact_lock:
+            b_path = sub / f"{sid}_artifact_b.json"
+
+            b_doc = _load_json(b_path) or {
+                "submission_id": sid,
+                "generated_from": f"{sid}_artifact_a.json",
+                "per_claim": [],
+                "overall_assessment": "",
+            }
+
+            b_doc["per_claim"] = [
+                v for v in b_doc.get("per_claim", [])
+                if v.get("claim_id") != cid
+            ]
+            b_doc["per_claim"].append(claim_b)
+
+            b_path.write_text(
+                json.dumps(b_doc, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
 
         _persist_claim_cost(sid, cid, entry.get("cost", {}))
         # Fold the just-written Artifact A + cost into the per-PDF cache so a re-upload of
@@ -933,6 +1061,15 @@ def review_summary(sid: str):
                 "what_is_shared": c.get("what_is_shared", ""),
                 "submission_delta": c.get("submission_delta", ""),
                 "assessment": c.get("assessment", ""),
+                "unresolved": bool(
+                    c.get("unresolved") or c.get("insufficient")
+                ),
+                "unresolved_reason": c.get(
+                    "unresolved_reason", ""
+                ),
+                "unresolved_deficit": c.get(
+                    "unresolved_deficit", ""
+                ),
                 "paper_realization": c.get("paper_realization", []),
                 # The claim-evidence pairs, so the summary shows the review's actual result
                 # and not only prose about it. Pre-filtered to pairs verified on BOTH sides.
@@ -958,10 +1095,26 @@ def review_summary(sid: str):
     b = _load_json(sub / f"{sid}_artifact_b.json") or {}
     b_by = {v.get("claim_id"): v for v in b.get("per_claim", [])}
     for oc in out_claims:
+        e = a_by.get(oc["claim_id"]) or {}
         v = b_by.get(oc["claim_id"]) or {}
-        oc["verdict"] = v.get("verdict")
+
+        oc["verdict"] = e.get("agent_verdict", "not_challenged")
+
+        oc["review_complete"] = e.get("review_complete", True)
+        oc["unresolved_count"] = e.get("unresolved_count", 0)
+        oc["unresolved_papers"] = e.get("unresolved_papers", [])
+
+        # Artifact B only contributes prose.
         oc["rationale"] = v.get("rationale", "")
-        oc["challenging_papers"] = v.get("challenging_papers", [])
+
+        oc["challenging_papers"] = [
+            c["title"]
+            for c in e.get("comparisons", [])
+            if vd.challenges(c)
+        ]
+
+        oc["evidence_sufficient"] = e.get("evidence_sufficient", False)
+        oc["stop_reason"] = e.get("stop_reason", "")
 
     return {
         "submission_id": sid, "title": claims_doc.get("title", ""),

@@ -24,7 +24,7 @@ import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Optional
-
+import hashlib
 from dotenv import load_dotenv
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_openai import ChatOpenAI
@@ -74,6 +74,24 @@ def _usage(ai) -> tuple:
         return int(um.get("input_tokens", 0) or 0), int(um.get("output_tokens", 0) or 0)
     tu = (getattr(ai, "response_metadata", {}) or {}).get("token_usage", {}) or {}
     return int(tu.get("prompt_tokens", 0) or 0), int(tu.get("completion_tokens", 0) or 0)
+
+
+def _cache_read(ai) -> int:
+    """How many of this call's prompt tokens OpenAI served from its own prompt cache.
+
+    Telemetry only -- read-only reporting, never affects what gets sent or how it's
+    billed by us. OpenAI's automatic caching hits when a prompt's first 1024+ tokens
+    match a recent prior call byte-for-byte; nothing in this pipeline requests or
+    controls it. usage_metadata carries it under input_token_details.cache_read
+    (langchain_openai >= 0.3); response_metadata is the fallback for older raw usage
+    dicts, where OpenAI names it prompt_tokens_details.cached_tokens."""
+    um = getattr(ai, "usage_metadata", None) or {}
+    if um:
+        details = um.get("input_token_details") or {}
+        return int(details.get("cache_read", 0) or 0)
+    tu = (getattr(ai, "response_metadata", {}) or {}).get("token_usage", {}) or {}
+    details = tu.get("prompt_tokens_details") or {}
+    return int(details.get("cached_tokens", 0) or 0)
 
 
 def _usd(model: str, prompt_tokens: int, completion_tokens: int) -> float:
@@ -321,6 +339,7 @@ _AGENTIC_SECTIONS = os.getenv("NOVELTY_AGENTIC_SECTIONS", "1").strip().lower() n
 # model reading less, not from a cap silently truncating it, or the comparison between
 # full text and selection would be measuring the cap.
 _READ_CAP = 50000          # chars of a paper the model may be shown, per paper
+_SUBMISSION_CONTEXT_CAP = 24000
 _FALSIFY_SECTIONS = 2      # unread sections a proposed dismissal must survive
 # Look at every retrieved paper instead of screening the pool from abstracts first.
 #
@@ -359,9 +378,19 @@ _DEEP_SYSTEM = """You are doing a CLOSE comparison of ONE prior paper against a 
 
 # --- section-based understanding (V3) ---
 
-_SUBMISSION_SECTION_PICK = """A paper makes ONE specific claimed contribution (below). You will explain what THE SUBMISSION ITSELF does to realize exactly THIS claim -- e.g. if the claim proposes a benchmark, the construction/design of that benchmark, NOT the experimental results or findings.
+_SUBMISSION_SECTION_PICK = """Select the original SUBMISSION sections needed to compare ONE claimed contribution against prior work.
 
-Choose the section titles whose FULL text you need to explain this. Section titles say what each section is about; pick the ones about the claimed contribution itself (definition, design, construction, method) and skip results/experiments/ablations/limitations unless the claim is about them.
+Choose where the paper actually delivers or substantiates the claim, including its
+conditions and scope. For an empirical investigation or guideline claim, include the
+actual findings and their conditions, not only the experimental design. For a theoretical
+claim, include the result and assumptions; for a method or resource, include the
+mechanism or construction and the properties relevant to the claim. These are examples,
+not a required taxonomy. Do not exclude results or limitations by section type.
+
+Select only sections relevant to this claim, in descending order of importance. They
+will be reused, unchanged, by both the comparison and the evidence mapper. The source
+context budget is {budget} characters; prefer a focused set that fits, using the sizes
+shown below. An over-budget section will be reported as unavailable in full.
 
 ## Claim
 {claim}
@@ -369,13 +398,14 @@ Choose the section titles whose FULL text you need to explain this. Section titl
 ## Submission sections (title :: preview :: size)
 {sections}
 
-Return `sections`: the exact titles to read in full (usually 2-5)."""
+Return `sections`: the [S#] handles copied exactly from the menu, most important first.
+Return `why`: what these sections establish about the claim."""
 
-_SUBMISSION_REALIZE = """Explain what THE SUBMISSION ITSELF does to realize this specific claim, using ONLY the section text below. Describe the contribution and HOW IT IS BUILT/DESIGNED (e.g. for a benchmark: its tasks, corpora, construction, metrics) -- NOT the experimental results or findings.
+_SUBMISSION_REALIZE = """Explain what THE SUBMISSION ITSELF delivers for this specific claim, using ONLY the original source passages below. Describe the concrete contribution and its conditions or scope. For claims about an empirical investigation or practical guidelines, state the actual findings and the conditions studied, not just the setup. For other claims, explain the claimed result, mechanism or resource and the relevant assumptions. Do not introduce a novelty verdict, or infer missing properties from silence.
 
 Write `segments` as a flowing explanation in reading order, alternating:
 - kind="text": your own concise prose.
-- kind="quote": a VERBATIM span copied CHARACTER-FOR-CHARACTER from the section text (no [Section] tag, no quotation marks). Use quotes for the load-bearing specifics (what is built, how). Every quote must be copyable verbatim from the text below.
+- kind="quote": a VERBATIM span copied CHARACTER-FOR-CHARACTER from the source text (no [Section] tag, no quotation marks). Quote the load-bearing specifics, including findings or assumptions when relevant. Every quote must be copyable verbatim from the text below.
 Keep it to a short paragraph or two.
 
 ## Claim
@@ -474,7 +504,7 @@ Name only sections you would actually use: each one is then read in full. Do not
 ## What you have read so far
 {read}
 
-## Sections not yet opened (title :: preview :: size)
+## Selectable unread sections that fit the remaining read budget
 {unread}"""
 
 
@@ -498,7 +528,7 @@ Say in `why`, in one or two sentences, what you read and what it showed. That se
 ## What you have read so far
 {read}
 
-## Sections not yet opened (title :: preview :: size)
+## Selectable unread sections that fit the remaining read budget
 {unread}"""
 
 
@@ -549,7 +579,7 @@ not on that list opens nothing.
 ## Full text of sections already read
 {read}
 
-## Sections not yet opened (handle :: title :: preview :: size)
+## Selectable unread sections that fit the remaining read budget
 {unread}
 """
 
@@ -569,7 +599,7 @@ Look for where a paper states what it delivers and what it was measured on: what
 ## What has been read
 {read}
 
-## Sections not yet opened (handle :: title :: preview :: size)
+## Selectable unread sections that fit the remaining read budget (handle :: title :: preview :: size)
 {unread}
 
 Return `sections`: the [S#] handles to open, copied exactly from the list above.
@@ -596,7 +626,7 @@ If it does not, name in `missing` the ONE thing that would settle it, concretely
 ## What was read
 {read}
 
-## Sections not opened (title :: preview :: size)
+## Selectable unread sections that fit the remaining read budget
 {unread}"""
 
 _EVIDENCE_REENTRY_MANDATE = """
@@ -634,7 +664,7 @@ Judge the pages, not the paper's importance, and not what it ought to contain. I
 ## What was read
 {read}
 
-## Sections not opened (title :: preview :: size)
+## Selectable unread sections that fit the remaining read budget (title :: preview :: size)
 {unread}"""
 
 
@@ -848,6 +878,11 @@ class ClaimNoveltyAgent:
         }
         self.llm = self._role_llm["reading"]   # default for call sites that don't specify a role
 
+        # Cache telemetry only -- read-only counters, never consulted by any decision the
+        # agent makes. One entry per role, mirroring self._role_llm's keys, plus "other"
+        # for anything called without a role.
+        self._cache_stats: dict = {}
+
     # ------------------------------ helpers ------------------------------ #
 
     @staticmethod
@@ -864,6 +899,13 @@ class ClaimNoveltyAgent:
         res = llm.with_structured_output(model, include_raw=True).invoke(prompt)
         parsed, raw = res.get("parsed"), res.get("raw")
         pt, ct = _usage(raw) if raw is not None else (0, 0)
+        # Telemetry only: does not read into pt/ct and nothing downstream reads it back.
+        cached = _cache_read(raw) if raw is not None else 0
+        st = self._cache_stats.setdefault(
+            role, {"calls": 0, "prompt_tokens": 0, "cached_tokens": 0})
+        st["calls"] += 1
+        st["prompt_tokens"] += pt
+        st["cached_tokens"] += cached
         return parsed, pt, ct
 
     # ------------------------------ phase 1 ------------------------------ #
@@ -905,44 +947,194 @@ class ClaimNoveltyAgent:
         got = tb.read_sections(pid, names).get("sections", [])
         return got, pt, ct
 
-    def _understand_submission(self, tb: ClaimToolbox, claim: dict):
-        """What the SUBMISSION itself does for this claim (verified-quote realization).
 
-        Normally this is already part of the claim artifact: deep claim extraction
-        (Step 2) picks the relevant submission sections, reads them in full and stores
-        the realization + section provenance per claim, reviewed at the HITL checkpoint.
-        We then just adopt it -- no model call, and the reading the reviewer approved is
-        exactly the one used for every comparison.
+    def _build_submission_basis(self, tb: ClaimToolbox, claim: dict):
+        """Select original passages once per claim run.
 
-        Only a claim WITHOUT a stored realization (a reviewer-authored or edited claim)
-        is read here on the fly, using the same section-menu -> read-in-full procedure.
-        Returns (realization_segments, claim_context_text, pt, ct)."""
-        stored = claim.get("realization") or []
-        if stored:
-            tb.claim_realization = stored
-            tb._log("understand_submission",
-                    f"from claim artifact: "
-                    f"{sum(1 for s in stored if s.get('kind') == 'quote')} verified quotes",
-                    progress=True)
-            return stored, _segments_to_text(stored), 0, 0
-
+        Comparison, reading policy and evidence mapping reuse this context.
+        Complete sections are loaded in selected priority order.
+        """
         pt = ct = 0
-        pick_prompt = _SUBMISSION_SECTION_PICK.replace("{claim}", self._claim_str(claim)[:1200])
-        secs, a, b = self._pick_sections(tb, "submission", pick_prompt); pt += a; ct += b
-        if not secs:  # no section structure -> fall back to claim-query passages
-            ctx = _fmt_passages(tb.search_submission(self._claim_str(claim), k=4).get("passages"))
-            return [], ctx, pt, ct
-        parsed, a, b = self._struct(_Realization, _fill(
-            _SUBMISSION_REALIZE, claim=self._claim_str(claim)[:1200],
-            sections=_fmt_sections_full(secs))); pt += a; ct += b
-        raw_segments = [s.model_dump() for s in (getattr(parsed, "segments", None) or [])] if parsed else []
-        realization = tb.verify_segments(raw_segments, "submission")
+        cap = _SUBMISSION_CONTEXT_CAP
+        menu = tb.section_menu("submission") or []
+
+        blocks, sources, omitted, notes = [], [], [], []
+        used = 0
+        requested = []
+
+        def append_source(name, text, kind, passage_id=None):
+            nonlocal used
+
+            text = (text or "").strip()
+            if not text:
+                return False
+
+            block = f"## {name}\n{text}"
+            cost = len(block) + (2 if blocks else 0)
+
+            if used + cost > cap:
+                return False
+
+            blocks.append(block)
+            sources.append({
+                "section": name,
+                "kind": kind,
+                "passage_id": passage_id,
+            })
+            used += cost
+            return True
+
+        if menu:
+            ids = _section_ids(menu)
+
+            parsed, a, b = self._struct(
+                _SectionPick,
+                _fill(
+                    _SUBMISSION_SECTION_PICK,
+                    claim=self._claim_str(claim),
+                    sections=_fmt_sections_menu(menu, ids=ids),
+                    budget=cap,
+                ),
+            )
+            pt += a
+            ct += b
+
+            requested, unresolved = _resolve_sections(
+                getattr(parsed, "sections", None) or [],
+                menu,
+                ids,
+            )
+
+            if unresolved:
+                notes.append(
+                    "Unresolved section requests: " + ", ".join(unresolved)
+                )
+
+            if not requested:
+                notes.append(
+                    "No usable section selection; using source-text fallback."
+                )
+
+            for name in requested:
+                overhead = len(f"## {name}\n") + (2 if blocks else 0)
+                remaining = max(0, cap - used - overhead)
+
+                secs = tb.read_sections(
+                    "submission",
+                    [name],
+                    max_total=remaining,
+                    exact=True,
+                ).get("sections", []) or []
+
+                sec = next(
+                    (s for s in secs if s.get("name") == name),
+                    None,
+                )
+
+                if sec is None or not append_source(
+                    name, sec.get("text"), "section"
+                ):
+                    omitted.append(name)
+
+        if not blocks:
+            # Prefer the complete source when it fits.
+            if append_source(
+                "Submission full text",
+                tb._submission_text,
+                "full_text",
+            ):
+                notes.append(
+                    "Fallback: full submission fits the context budget."
+                )
+                omitted = []
+            else:
+                # Otherwise use explicitly labelled retrieved excerpts.
+                hits = tb.search_submission(
+                    self._claim_str(claim),
+                    k=6,
+                ).get("passages") or []
+
+                for i, hit in enumerate(hits, 1):
+                    name = hit.get("section") or "Submission"
+                    pid = hit.get("passage_id") or f"retrieved-{i}"
+
+                    append_source(
+                        f"{name} [retrieved excerpt: {pid}]",
+                        hit.get("text"),
+                        "excerpt",
+                        pid,
+                    )
+
+                notes.append(
+                    "Fallback: retrieved excerpts; full sections were unavailable."
+                )
+
+        text = "\n\n".join(blocks)
+
+        if not text:
+            raise ValueError(
+                "No original submission passages available for comparison."
+            )
+
+        basis = {
+            "text": text,
+            "sources": sources,
+            "requested_sections": requested,
+            "omitted_sections": omitted,
+            "notes": notes,
+            "max_chars": cap,
+            "chars": len(text),
+            "source_sha256": hashlib.sha256(
+                tb._submission_text.encode("utf-8")
+            ).hexdigest(),
+        }
+
+        tb.submission_basis = basis
+
+        tb._log(
+            "submission_basis",
+            f"{len(sources)} source blocks, {len(text):,}/{cap:,} chars; "
+            f"{len(omitted)} sections omitted; " + "; ".join(notes),
+            progress=True,
+        )
+
+        return basis, pt, ct
+
+
+    def _understand_submission(self, tb: ClaimToolbox, claim: dict):
+        """Build the shared source context and explain it once per claim run.
+
+        Claim text stays unchanged. Comparison and mapping consume the
+        original passages, not the generated explanation.
+        """
+        basis, pt, ct = self._build_submission_basis(tb, claim)
+
+        parsed, a, b = self._struct(
+            _Realization,
+            _fill(
+                _SUBMISSION_REALIZE,
+                claim=self._claim_str(claim),
+                sections=basis["text"],
+            ),
+        )
+        pt += a
+        ct += b
+
+        raw = [
+            s.model_dump()
+            for s in (getattr(parsed, "segments", None) or [])
+        ] if parsed else []
+
+        realization = tb.verify_segments(raw, "submission")
         tb.claim_realization = realization
-        tb._log("understand_submission",
-                f"{len(secs)} sections -> {sum(1 for s in realization if s['kind']=='quote')} verified quotes",
-                progress=True)
-        ctx = _segments_to_text(realization) or _fmt_sections_full(secs, max_total=1600)
-        return realization, ctx, pt, ct
+
+        tb._log(
+            "understand_submission",
+            "explanation from shared original-source context",
+            progress=True,
+        )
+
+        return realization, basis["text"], pt, ct
 
     # ------------------------------ phase 2 ------------------------------ #
 
@@ -1048,7 +1240,14 @@ class ClaimNoveltyAgent:
             Framework > 3.x" beneath it, and an agent that asked for three sections was
             given seven. The budget then went where nothing chose to send it."""
             nonlocal used, last_take
-            new = [n for n in (names or []) if n and n not in read]
+            selectable = {m["name"] for m in fitting_unread()}
+
+            new = [
+                n for n in (names or [])
+                if n
+                and n not in read
+                and n in selectable
+            ]
             if not new:
                 last_take = (len(names or []), 0, 0)
                 return []
@@ -1090,16 +1289,14 @@ class ClaimNoveltyAgent:
                 cap_hit = True
                 trace.append(
                     f"turn {turn}: read cap exhausted "
-                    f"({used:,}/{_READ_CAP:,} chars) -> compare"
+                    f"({used:,}/{_READ_CAP:,} chars)"
                 )
                 return True
 
-            left = unread()
-
-            if not left:
+            if not unread():
                 trace.append(
                     f"turn {turn}: all sections read "
-                    f"({len(read)}/{len(menu)}) -> compare"
+                    f"({len(read)}/{len(menu)})"
                 )
                 return True
 
@@ -1107,7 +1304,7 @@ class ClaimNoveltyAgent:
                 cap_hit = True
                 trace.append(
                     f"turn {turn}: no complete unread section fits remaining "
-                    f"budget ({_READ_CAP - used:,} chars) -> compare"
+                    f"budget ({_READ_CAP - used:,} chars)"
                 )
                 return True
 
@@ -1116,11 +1313,14 @@ class ClaimNoveltyAgent:
         decision = None
         for turn in range(_LOOP_MAX_TURNS):
             if exhausted(turn):
-                decision = "compare"
                 if reentry_requires_read:
+                    decision = "insufficient"
                     trace.append(
-                        f"turn {turn}: evidence deficit remains, but no further reading is possible"
+                        f"turn {turn}: evidence deficit remains and no further "
+                        "complete section can be read -> INSUFFICIENT"
                     )
+                else:
+                    decision = "compare"
                 break
 
             if not got and not resuming:
@@ -1132,20 +1332,34 @@ class ClaimNoveltyAgent:
             act = struct(_PaperAction, _fill(
                 _PAPER_ACTION,
                 claim=claim_s,
-                realization=claim_ctx[:1600],
+                realization=claim_ctx,
                 title=title,
                 read=(
                     _fmt_sections_full(got, max_total=_READ_CAP)
                     if got
                     else "(nothing yet -- this turn must be a read)"
                 ),
-                unread=_fmt_sections_menu(unread(), ids=sec_ids),
+                unread=_fmt_sections_menu(fitting_unread(), ids=sec_ids),
                 deficits=deficit_block(),
                 mandate=mandate,
             ))
             if act is None:
-                decision = "compare"; trace.append(f"turn {turn}: no action -> compare"); break
+                if reentry_requires_read:
+                    decision = "insufficient"
+                    trace.append(
+                        f"turn {turn}: reading action failed during evidence re-entry "
+                        "-> INSUFFICIENT"
+                    )
+                else:
+                    decision = "compare"
+                    trace.append(f"turn {turn}: no action -> compare")
+                break
             tool = (act.tool or "").strip().lower()
+
+            trace.append(
+                f"turn {turn}: proposed action={tool}, "
+                f"sections={list(act.sections or [])}"
+            )
 
             if reentry_requires_read and tool != "read_more":
                 trace.append(
@@ -1171,17 +1385,31 @@ class ClaimNoveltyAgent:
             if not got and not resuming:
                 wanted, unresolved = resolve(act.sections)
                 names = take(wanted[:_FIRST_READ_N])
+
                 if unresolved:
                     trace.append(f"  unresolved: {', '.join(unresolved[:6])}")
+
                 if len(names) < _FIRST_READ_N:
-                    names += take([m["name"] for m in
-                                   sorted(unread(), key=lambda m: -m.get("chars", 0))
-                                   ][:_FIRST_READ_N - len(names)])
-                log_read(turn, f"mandatory initial read ({_FIRST_READ_N} sections)",
-                         names, act.why)
+                    names += take([
+                        m["name"]
+                        for m in sorted(
+                            fitting_unread(),
+                            key=lambda m: -m.get("chars", 0)
+                        )
+                    ][:_FIRST_READ_N - len(names)])
+
+                log_read(
+                    turn,
+                    f"mandatory initial read ({_FIRST_READ_N} sections)",
+                    names,
+                    act.why,
+                )
+
                 if not names:
-                    decision = "compare"; trace.append(f"turn {turn}: nothing readable -> compare")
+                    decision = "compare"
+                    trace.append(f"turn {turn}: nothing readable -> compare")
                     break
+
                 continue
 
             if tool == "read_more":
@@ -1242,7 +1470,7 @@ class ClaimNoveltyAgent:
                     trace.append(f"  reason: {' '.join(why.split())[:160]}")
                     break
                 trace.append(f"turn {turn}: propose_dismissal")
-                left = unread()
+                left = fitting_unread()
                 if not left:
                     falsification_done = True
                     trace.append(f"turn {turn}: dismissal falsification exhausted "
@@ -1261,9 +1489,10 @@ class ClaimNoveltyAgent:
                     trace.append(f"  unresolved: {', '.join(unresolved[:6])}")
                 chosen = len(names)
                 if len(names) < min(_FALSIFY_SECTIONS, len(left)):
-                    names += take([m["name"] for m in
-                                   sorted(unread(), key=lambda m: -m.get("chars", 0))
-                                   ][:_FALSIFY_SECTIONS - len(names)])
+                    names += take([
+                        m["name"]
+                        for m in sorted(fitting_unread(), key=lambda m: -m.get("chars", 0))
+                    ][:_FALSIFY_SECTIONS - len(names)])
                 trace += [f"  - {n}" for n in names]
                 trace.append(f"  requested: {min(_FALSIFY_SECTIONS, len(left))}")
                 trace.append(f"  loaded: {len(names)}")
@@ -1296,11 +1525,10 @@ class ClaimNoveltyAgent:
             break
         else:
             if reentry_requires_read:
-                decision = "compare"
-                cap_hit = True
+                decision = "insufficient"
                 trace.append(
                     f"BUDGET: {_LOOP_MAX_TURNS} turns exhausted while evidence "
-                    "re-entry still required a new read"
+                    "re-entry still required an actual new read -> INSUFFICIENT"
                 )
             else:
                 decision = decision or "compare"
@@ -1350,7 +1578,28 @@ class ClaimNoveltyAgent:
                     "Read at section level; the paper's subject is a different contribution.")
                 trace.append(f"[{turn}] dismissed after {len(names)} sections")
                 return comp, pt, ct, trace
+            if decision == "insufficient":
+                comp = dict(comp)
 
+                comp["unresolved_deficit"] = deficit or (
+                    "Evidence re-entry required additional reading, "
+                    "but no new readable section was obtained."
+                )
+
+                comp["paper_state"] = "unresolved_budget"
+                comp["insufficient"] = True
+                comp["unresolved"] = True
+                comp["unresolved_reason"] = "reading_budget_exhausted"
+                comp["refutation_status"] = "cannot_refute"
+
+                trace.append(
+                    f"[{turn}] BUDGET: no further readable evidence available -- "
+                    f"keeping last semantic assessment "
+                    f"({comp.get('overlap_degree', '')}) as best available assessment; "
+                    f"UNRESOLVED"
+                )
+
+                return comp, pt, ct, trace
             comp, a, b = self._section_compare(tb, claim, pid, claim_ctx, context)
             pt += a; ct += b
 
@@ -1434,6 +1683,16 @@ class ClaimNoveltyAgent:
                     f"[{turn}] EVIDENCE REASON: "
                     f"{check.get('reasoning', '')}"
                 )
+                trace.append(
+                    f"[{turn}] PROPOSED DEGREE SUPPORTED: "
+                    f"{check.get('proposed_degree_supported')}"
+                )
+
+                if check.get("unresolved_question"):
+                    trace.append(
+                        f"[{turn}] UNRESOLVED QUESTION: "
+                        f"{check['unresolved_question']}"
+                    )
 
                 semantic_material = raw_degree in {
                     "partial",
@@ -1471,16 +1730,38 @@ class ClaimNoveltyAgent:
                 # out while something was still missing" are different findings, and a
                 # reviewer is entitled to see which this was.
                 comp = dict(comp)
+
+                # Keep the LAST semantic comparison as the best available assessment.
+                # Do not overwrite overlap_degree / assessment / what_is_shared / submission_delta.
                 comp["unresolved_deficit"] = deficit
-                comp["paper_state"] = (
-                    "budget_exhausted_with_deficit"
+
+                budget_reason = (
+                    "read_cap_exhausted"
                     if cap_spent
-                    else "turns_exhausted_with_deficit"
+                    else "comparison_budget_exhausted"
                 )
+
+                comp["paper_state"] = "unresolved_budget"
                 comp["insufficient"] = True
+                comp["unresolved"] = True
+                comp["unresolved_reason"] = budget_reason
+
+                # An unresolved paper must never become a verified strong refuter merely
+                # because its last semantic proposal was substantial/same.
                 comp["refutation_status"] = "cannot_refute"
-                why = ("read cap" if cap_spent else f"{_LOOP_MAX_COMPARES} compares")
-                trace.append(f"BUDGET: {why} spent, INSUFFICIENT -- deficit stands: {deficit[:70]}")
+
+                why = (
+                    "read cap"
+                    if cap_spent
+                    else f"{_LOOP_MAX_COMPARES} compares"
+                )
+
+                trace.append(
+                    f"BUDGET: {why} spent -- keeping last semantic assessment "
+                    f"({comp.get('overlap_degree', '')}) as best available assessment; "
+                    f"UNRESOLVED: {deficit[:70]}"
+                )
+
                 return comp, pt, ct, trace
             trace.append(f"[{turn}] evidence gate REFUSED -> read again: {deficit[:70]}")
         return comp, pt, ct, trace
@@ -1526,6 +1807,26 @@ class ClaimNoveltyAgent:
 
         check = comp.get("evidence_check") or {}
         status = (check.get("status") or "").lower()
+
+        question = (
+            check.get("unresolved_question") or ""
+        ).strip()
+
+        if (
+            proposal_material
+            and check.get("proposed_degree_supported") is not True
+        ):
+            return question or (
+                "The grounded evidence does not establish the specific proposed "
+                "overlap and its degree. Check the comparison's actual rationale."
+            )
+
+        if (
+            status == "material"
+            and not proposal_material
+            and question
+        ):
+            return question
 
         # This should normally never be empty after a successful map.
         if not status:
@@ -1583,7 +1884,7 @@ class ClaimNoveltyAgent:
         title = (tb.pool.get(pid, {}) or {}).get("title", "")
 
         parsed, a, b = self._struct(_SectionPick, _fill(
-            _PAPER_SECTION_PICK, claim=claim_s, realization=claim_ctx[:1600],
+            _PAPER_SECTION_PICK, claim=claim_s, realization=claim_ctx,
             title=title, sections=_fmt_sections_menu(menu)))
         pt += a; ct += b
         names = [s for s in (getattr(parsed, "sections", None) or []) if s] if parsed else []
@@ -1630,7 +1931,7 @@ class ClaimNoveltyAgent:
             schema = _ReadMore if may_dismiss else _SectionPick
             tmpl = _PAPER_READ_MORE_OR_DROP if may_dismiss else _PAPER_READ_MORE
             parsed2, a, b = self._struct(schema, _fill(
-                tmpl, claim=claim_s, realization=claim_ctx[:1600], title=title,
+                tmpl, claim=claim_s, realization=claim_ctx, title=title,
                 read=_fmt_sections_full(got, max_total=_READ_CAP),
                 unread=_fmt_sections_menu(unread)))
             pt += a; ct += b
@@ -1693,7 +1994,7 @@ class ClaimNoveltyAgent:
             _fill(
                 _PAPER_COMPARE,
                 claim=self._claim_str(claim)[:1200],
-                realization=claim_ctx[:1600],
+                realization=claim_ctx,
                 title=tb.pool[pid]["title"],
                 sections=paper_text,
             ),
@@ -1826,14 +2127,15 @@ class ClaimNoveltyAgent:
         #
         # Verification runs against the whole of both documents either way, so this changes
         # the search space and the bill, never what counts as verified.
-        names = tb._sections_read.get("submission") or [
-            m.get("name") for m in (tb.section_menu("submission") or [])[:6] if m.get("name")]
-        sub_secs = (tb.read_sections("submission", names) or {}).get("sections") or []
-        # No fallback here on purpose: `comp` carries the PRIOR paper's realization, not the
-        # submission's, so reaching for it would silently pass an empty string. If the
-        # submission's own sections cannot be read, the guard below leaves the comparison
-        # alone rather than mapping against nothing.
-        submission_text = _fmt_sections_full(sub_secs)
+        # Reuse exactly the source context used by the comparison.
+        # Do not select or re-read submission sections here.
+        basis = getattr(tb, "submission_basis", None) or {}
+        submission_text = basis.get("text", "")
+
+        if not submission_text.strip():
+            raise ValueError(
+                "Build the shared submission basis before evidence mapping."
+            )
         # SEARCH SPACE -- what the model reads to propose pairs. May be a selection.
         paper_text = paper_context or tb._paper_source_text(pid)
         if not (submission_text.strip() and paper_text.strip()):
@@ -1864,6 +2166,7 @@ class ClaimNoveltyAgent:
             tb._paper_source_text(pid),
             self.min_quote_tokens,
             self.fuzzy_threshold,
+            comparison=raw_proposal,
         )
 
         kept = mapping["pairs"]
@@ -1896,8 +2199,16 @@ class ClaimNoveltyAgent:
         comp["evidence_check"] = {
             "status": check.get("status", "insufficient"),
             "reasoning": check.get("reasoning", ""),
-            "supporting_pair_indices": check.get("supporting_pair_indices", []),
+            "supporting_pair_indices": check.get(
+                "supporting_pair_indices", []
+            ),
             "grounded_pairs": len(kept),
+            "proposed_degree_supported": check.get(
+                "proposed_degree_supported"
+            ),
+            "unresolved_question": check.get(
+                "unresolved_question", ""
+            ),
         }
 
         comp["evidence_pairs"] = kept
@@ -1923,6 +2234,7 @@ class ClaimNoveltyAgent:
                 raw_degree in ("substantial", "same")
                 and check.get("status") == "material"
                 and bool(supporting)
+                and check.get("proposed_degree_supported") is True
             )
             else "cannot_refute"
         )
@@ -2010,29 +2322,56 @@ class ClaimNoveltyAgent:
         run_t0 = time.perf_counter()
         timings = {"deep_dive_papers": []}
 
-        def emit(status="running"):
+        def emit(status="running", extra_pt=0, extra_ct=0):
             if not progress_cb:
                 return
-            # Snapshot the ledger under the toolbox lock: parallel deep dives may be
-            # appending to these lists, and serializing them to JSON while a worker
-            # mutates them would raise "changed size during iteration".
+
             with tb._lock:
                 traj = list(tb.ledger["trajectory"])
+                comps = list(tb.ledger["comparisons"])
                 n_examined = len(tb.ledger["examined"])
-                n_comparisons = len(tb.ledger["comparisons"])
+                n_comparisons = len(comps)
                 n_retr = tb.retrievals_done()
+
+                paper_traces = []
+                for c in comps:
+                    check = c.get("evidence_check") or {}
+                    diag = c.get("map_diag") or {}
+
+                    paper_traces.append({
+                        "paper_id": c.get("paper_id"),
+                        "title": c.get("title", ""),
+                        "overlap_degree": c.get("overlap_degree"),
+                        "refutation_status": c.get("refutation_status"),
+                        "evidence_status": check.get("status"),
+                        "grounded_pairs": len(c.get("evidence_pairs") or []),
+                        "insufficient": bool(c.get("insufficient")),
+                        "trace": list(diag.get("loop") or []),
+                    })
+
+            cur_pt = pt + extra_pt
+            cur_ct = ct + extra_ct
+
             try:
                 progress_cb({
-                    "status": status, "claim_id": claim["id"],
+                    "status": status,
+                    "claim_id": claim["id"],
                     "step": len(traj),
-                    "max_steps": max(est_total["v"], len(traj)) if est_total["v"] else 0,
+                    "max_steps": (
+                        max(est_total["v"], len(traj))
+                        if est_total["v"] else 0
+                    ),
                     "last_action": traj[-1]["detail"] if traj else "starting",
-                    "trajectory": traj,
+                    "trajectory": traj,       # raw debug log
+                    "paper_traces": paper_traces,
                     "examined": n_examined,
                     "comparisons": n_comparisons,
                     "retrieval_rounds": n_retr,
-                    "cost": {"prompt_tokens": pt, "completion_tokens": ct,
-                             "usd": _usd(self.model_name, pt, ct)},
+                    "cost": {
+                        "prompt_tokens": cur_pt,
+                        "completion_tokens": cur_ct,
+                        "usd": _usd(self.model_name, cur_pt, cur_ct),
+                    },
                 })
             except Exception:
                 pass
@@ -2051,7 +2390,8 @@ class ClaimNoveltyAgent:
                 for pid, deg in items:
                     a, b, tinfo = self._deep_dive(tb, claim, pid, deg, claim_ctx)
                     lp += a; lc += b
-                    timings["deep_dive_papers"].append(tinfo); emit()
+                    timings["deep_dive_papers"].append(tinfo)
+                    emit(extra_pt=lp, extra_ct=lc)
                 return lp, lc
             with ThreadPoolExecutor(max_workers=workers) as ex:
                 futs = [ex.submit(self._deep_dive, tb, claim, pid, deg, claim_ctx)
@@ -2059,7 +2399,8 @@ class ClaimNoveltyAgent:
                 for fut in as_completed(futs):
                     a, b, tinfo = fut.result()
                     lp += a; lc += b
-                    timings["deep_dive_papers"].append(tinfo); emit()
+                    timings["deep_dive_papers"].append(tinfo)
+                    emit(extra_pt=lp, extra_ct=lc)
             return lp, lc
 
         emit()
@@ -2164,23 +2505,32 @@ class ClaimNoveltyAgent:
             if c.get("refutation_status") == "can_refute"
         ]
 
-        # Any paper that exhausted its budget with an unresolved evidence deficit
-        # prevents a clean negative novelty conclusion.
+        # Preserve unresolved budget-exhausted paper comparisons for transparency.
+        # They do not change the claim-level verdict.
         unresolved = [
             c for c in comparisons
-            if c.get("insufficient")
+            if c.get("unresolved") or c.get("insufficient")
+        ]
+
+        unresolved_papers = [
+            {
+                "paper_id": c.get("paper_id"),
+                "title": c.get("title", ""),
+                "semantic_degree": c.get("overlap_degree", ""),
+                "semantic_assessment": c.get("assessment", ""),
+                "reason": c.get(
+                    "unresolved_reason",
+                    "budget_exhausted",
+                ),
+                "deficit": c.get("unresolved_deficit", ""),
+            }
+            for c in unresolved
         ]
 
         if refuters:
             verdict = "challenged"
             suff = True
             stop = "challenged"
-
-        elif unresolved:
-            verdict = "uncertain"
-            suff = False
-            stop = "unresolved_evidence_deficit"
-
         else:
             verdict = "not_challenged"
             suff = True
@@ -2191,15 +2541,41 @@ class ClaimNoveltyAgent:
         _named = sum(v for k, v in timings.items()
                      if k not in ("deep_dive_papers", "total") and isinstance(v, (int, float)))
         timings["other"] = round(max(0.0, timings["total"] - _named), 1)
+        # Cache telemetry only -- summarised here, never consulted above. A zero-cost,
+        # zero-behaviour report: whether OpenAI's automatic prompt caching is finding
+        # anything to reuse in this pipeline's call shapes, and where.
+        cache_by_role = {
+            role: dict(st) | {
+                "hit_rate": round(st["cached_tokens"] / st["prompt_tokens"], 3)
+                            if st["prompt_tokens"] else 0.0,
+            }
+            for role, st in self._cache_stats.items()
+        }
+        cache_total_pt = sum(st["prompt_tokens"] for st in self._cache_stats.values())
+        cache_total_hit = sum(st["cached_tokens"] for st in self._cache_stats.values())
+        cache_by_role_str = ", ".join(
+            f"{r}={s['cached_tokens']:,}/{s['prompt_tokens']:,}"
+            for r, s in self._cache_stats.items())
+        cache_rate = round(cache_total_hit / cache_total_pt, 3) if cache_total_pt else 0.0
+        tb._log("cache", f"{cache_total_hit:,}/{cache_total_pt:,} prompt tokens served "
+                         f"from cache ({cache_rate:.1%}) by role: {cache_by_role_str}")
+
         entry = tb.artifact_entry()
         entry.update({
+            "submission_basis": tb.submission_basis,
             "agent_verdict": verdict,
             "agent_rationale": "",
             "evidence_sufficient": bool(suff),
+            "review_complete": not bool(unresolved),
+            "unresolved_count": len(unresolved),
+            "unresolved_papers": unresolved_papers,
             "stop_reason": stop,
             "confidence": None,
             "timings": timings,
-            "cost": {"prompt_tokens": pt, "completion_tokens": ct, "usd": _usd(self.model_name, pt, ct)},
+            "cost": {"prompt_tokens": pt, "completion_tokens": ct, "usd": _usd(self.model_name, pt, ct),
+                     "cache": {"by_role": cache_by_role, "total_prompt_tokens": cache_total_pt,
+                               "total_cached_tokens": cache_total_hit,
+                               "hit_rate": round(cache_total_hit / cache_total_pt, 3) if cache_total_pt else 0.0}},
         })
         # NOT emit("done"): the api worker still assembles the review after this and writes
         # the real "done" payload (with review). A premature done here made the frontend stop

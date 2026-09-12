@@ -81,28 +81,53 @@ class Judge:
         return out
 
     def _deterministic_checks(self, artifact_a: dict, artifact_b: dict):
-        refuters = self._refuters_from_a(artifact_a)
+        a_by = {
+            e["claim_id"]: e
+            for e in artifact_a["claims"]
+        }
+
         checks, issues = [], []
+
         for v in artifact_b["per_claim"]:
             cid = v["claim_id"]
             verdict = v["verdict"]
             b_papers = v.get("challenging_papers", []) or []
-            a_titles = refuters.get(cid, set())
-            a_has = len(a_titles) > 0
+
+            a_entry = a_by.get(cid) or {}
+            expected = a_entry.get("agent_verdict", "uncertain")
+
+            refuter_titles = {
+                c["title"]
+                for c in a_entry.get("comparisons", [])
+                if c.get("refutation_status") == "can_refute"
+            }
 
             problems = []
-            if verdict == "challenged" and not a_has:
-                problems.append("B verdict 'challenged' but A has no verified can_refute for this claim")
-            if verdict == "not_challenged" and a_has:
-                problems.append("B verdict 'not_challenged' but A HAS a verified can_refute for this claim")
-            # named challenging papers must exist among A's refuters (fuzzy title match)
+
+            if verdict != expected:
+                problems.append(
+                    f"B verdict {verdict!r} != fixed Artifact-A verdict {expected!r}"
+                )
+
             for p in b_papers:
-                if not any(fuzz.token_set_ratio(p, at) >= 85 for at in a_titles):
-                    problems.append(f"challenging paper not in A's verified refuters: '{p[:60]}'")
+                if not any(
+                    fuzz.token_set_ratio(p, title) >= 85
+                    for title in refuter_titles
+                ):
+                    problems.append(
+                        f"challenging paper not in A's verified refuters: '{p[:60]}'"
+                    )
 
             consistent = not problems
-            checks.append({"claim_id": cid, "verdict": verdict, "consistent": consistent, "problems": problems})
+
+            checks.append({
+                "claim_id": cid,
+                "verdict": verdict,
+                "consistent": consistent,
+                "problems": problems,
+            })
             issues.extend(f"{cid}: {p}" for p in problems)
+
         return checks, issues
 
     @staticmethod

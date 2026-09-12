@@ -54,6 +54,32 @@ def build_report(data_dir: str, submission_id: str) -> str:
         if v["rationale"]:
             out.append(v["rationale"])
             out.append("")
+
+        unresolved = ae.get("unresolved_papers", []) or []
+
+        if unresolved:
+            out.append(
+                f"**⚠ Unresolved paper comparisons: {len(unresolved)}**"
+            )
+            out.append("")
+
+            for u in unresolved:
+                title = u.get("title", "")
+                degree = u.get("semantic_degree", "")
+                reason = u.get("reason", "budget_exhausted")
+                deficit = u.get("deficit", "")
+
+                out.append(
+                    f"- *{title}* — best semantic assessment: "
+                    f"`{degree}`; reason: `{reason}`"
+                )
+
+                if deficit:
+                    out.append(
+                        f"  - Open evidence issue: {deficit}"
+                    )
+
+            out.append("")    
         refuters = [c for c in ae.get("comparisons", []) if c["refutation_status"] == "can_refute"]
         if refuters:
             out.append("**Challenged by:**")
