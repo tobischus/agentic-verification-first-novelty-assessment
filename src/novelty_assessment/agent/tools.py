@@ -171,7 +171,30 @@ class ClaimToolbox:
                 return p.read_text(encoding="utf-8")
         return ""
 
+    def _versions_manifest(self) -> dict:
+        """related_work_data/versions.json -- which version each paper is pinned to.
+
+        Read once and cached: every pool paper consults it, and it does not change while
+        a claim runs.
+        """
+        if getattr(self, "_versions_cache", None) is None:
+            self._versions_cache = self._load_json(
+                self.sub_dir / "related_work_data" / "versions.json") or {}
+        return self._versions_cache
+
     def _load_fulltext_file(self, pid: str) -> str:
+        """The parsed text of the PINNED version, or nothing.
+
+        A parsed text is only evidence about the document it was parsed from, so it is
+        accepted only while the manifest says that document is still the one on disk.
+        Without this check a text left over from an earlier version keeps being read
+        after the PDF under it was replaced -- and nougat's output is tried first, so the
+        stale file wins over the fresh one.
+        """
+        entry = self._versions_manifest().get(pid) or {}
+        current, parsed_from = entry.get("doc_sha256"), entry.get("parsed_from_sha256")
+        if current and parsed_from and current != parsed_from:
+            return ""
         for rel in (
             f"related_work_data/nougat_output/{pid}.mmd",
             f"related_work_data/grobid_fulltext/{pid}.txt",
@@ -183,6 +206,10 @@ class ClaimToolbox:
                 return p.read_text(encoding="utf-8")
         return ""
 
+    # Statuses a paper may be compared against: a specific admissible version, or the one
+    # document a source without version history has. Mirrors FullTextFetcher.USABLE_STATUSES.
+    _USABLE_VERSION_STATUSES = ("pinned", "single")
+
     def _add_pool_paper(self, p: dict, source: str):
         pid = p.get("paper_id")
         if not pid or pid in self.pool:
@@ -191,6 +218,18 @@ class ClaimToolbox:
         title = p.get("title", "") or ""
         if self.sub_title and fuzz.ratio(title.lower(), self.sub_title.lower()) >= 90:
             return
+
+        # Temporal admissibility, enforced where the paper becomes evidence rather than
+        # only where its PDF is fetched. Skipping the download was not enough: a paper
+        # ruled out as prior work still entered the pool here with its abstract -- the
+        # CURRENT abstract, which for a post-cutoff paper is post-cutoff text -- and with
+        # any full text left on disk from before pinning. An empty status means pinning
+        # never ran for this paper, which is not a finding either way, so it stays.
+        entry = self._versions_manifest().get(pid) or {}
+        status = entry.get("status") or p.get("version_status") or ""
+        if status and status not in self._USABLE_VERSION_STATUSES:
+            return
+
         self.pool[pid] = {
             "paper_id": pid,
             "title": p.get("title", "") or "",
@@ -202,6 +241,14 @@ class ClaimToolbox:
             "intro": self._load_intro(pid),
             "fulltext": self._load_fulltext_file(pid),
             "source": source,
+            # Provenance, carried so the comparison and the reviewer can both see WHICH
+            # document was read -- not only that one was.
+            "version_status": status,
+            "pinned_version": entry.get("version") or p.get("pinned_version", ""),
+            "pinned_version_date": entry.get("version_date") or p.get("pinned_version_date", ""),
+            "pinned_url": entry.get("url", ""),
+            "doc_sha256": entry.get("doc_sha256", ""),
+            "abstract_source": p.get("abstract_source", "") or entry.get("abstract_source", ""),
         }
 
     def _load_pool(self):
@@ -704,9 +751,16 @@ class ClaimToolbox:
                     # retrieved mid-run must not be read at whatever version the
                     # unversioned URL serves today, any more than a pool paper must.
                     pin = fetcher.pin_for_record(self.data_dir, self.submission_id, record)
-                    if pin and not pin.get("url"):
+                    # Admissible by STATUS, not by having a URL: a "single" paper is
+                    # admissible and has no version-bound URL to offer.
+                    if pin and pin.get("status") not in self._USABLE_VERSION_STATUSES:
                         continue          # no admissible version -- recorded, not fetched
                     if fetcher.ensure_pdf(record, pdfs_dir, pin=pin or None):
+                        # Record which file is now on disk before parsing it, so the text
+                        # written next can be bound to that hash rather than to nothing.
+                        fetcher.record_pdf_hash(self.data_dir, self.submission_id, pid,
+                                                pdfs_dir / f"{pid}.pdf")
+                        self._versions_cache = None      # manifest changed underneath us
                         if fetcher.parse_one(self.data_dir, self.submission_id, pid) == "ok":
                             p["fulltext"] = (ft_dir / f"{pid}.txt").read_text(encoding="utf-8")
                             self._paper_index.pop(pid, None)
