@@ -336,10 +336,14 @@ class ClaimToolbox:
         p = self.sub_dir / "related_work_data" / named
         if not p.exists():
             return ""
-        text = p.read_text(encoding="utf-8")
-        if hashlib.sha256(text.encode("utf-8")).hexdigest() != want_text:
+        # Hash the BYTES, as the writer did. Hashing the decoded text instead never
+        # matches on Windows: write_text turns "\n" into "\r\n" on the way out and
+        # read_text turns it back on the way in, so re-encoding what was read yields a
+        # different digest than the file it was read from -- and every parsed text was
+        # silently rejected, leaving the deep dive with the abstract alone.
+        if hashlib.sha256(p.read_bytes()).hexdigest() != want_text:
             return ""                      # the named file is not the file that was recorded
-        return text
+        return p.read_text(encoding="utf-8")
 
     def _load_fulltext_unchecked(self, pid: str) -> str:
         """The pre-pinning search: first parsed text found, whoever wrote it.
