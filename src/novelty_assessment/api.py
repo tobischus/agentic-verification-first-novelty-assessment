@@ -1225,6 +1225,16 @@ def export_assessment(sid: str):
         raise HTTPException(404, "no claims computed yet -- run the claim-level review first")
 
 
+@app.get("/submissions/{sid}/review/quote_index")
+def export_quote_index(sid: str):
+    """Which document each VERIFIED quote in the export text can be found in, and what
+    id to scroll the PDF viewer to -- the side channel that lets the Summary tab render
+    `/review/export`'s own text and still make its quotes click-to-PDF, the same way
+    the Review tab's quotes are. See battle_export.quote_index for the exact contract."""
+    from battle_export import quote_index
+    return quote_index(DATA_DIR, sid)
+
+
 @app.get("/submissions/{sid}/{artifact}")
 def get_artifact(sid: str, artifact: str):
     if artifact not in ("artifact_a", "artifact_b", "judge"):

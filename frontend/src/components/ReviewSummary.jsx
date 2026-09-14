@@ -1,108 +1,251 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../api";
-import { DEGREE_LABEL, VERDICT } from "../verdict";
+import SplitView from "../pdf/SplitView.jsx";
+import PdfViewer, { colorFor } from "../pdf/PdfViewer.jsx";
 
-const claimLabel = (id) =>
-  /^claim_\d+$/.test(id || "") ? id.replace("claim_", "Claim ") : id;
+// The Summary tab renders `/review/export`'s text -- the exact artifact used in the
+// system comparison -- and NOTHING else: no synthesis, no extra framing, no fields the
+// export itself does not print. What this file adds is presentation only: headings,
+// tables and blockquotes instead of one <pre>, and quotes that jump to their passage in
+// the PDF the same way the Review tab's quotes do. The content is the export's; the
+// interactivity is a side channel (`/review/quote_index`, see battle_export.quote_index)
+// that maps each VERIFIED blockquote's own text back to a document and a highlight id.
+// Content and interactivity can never drift apart on the CONTENT side, because the
+// content is never re-typed here -- it is parsed, not regenerated.
 
-// "Haoyu Han, Harry Shomer, ..." (+ year) -> "Han et al. · 2025"
-function fmtAuthors(a, year) {
-  const names = (a || "")
-    .split(/,\s*/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-  let cite = "";
-  if (names.length) {
-    const first = names[0].split(/\s+/).slice(-1)[0];
-    cite = names.length > 1 ? `${first} et al.` : names[0];
+const norm = (s) => (s || "").replace(/\s+/g, " ").trim();
+// Strip the curly quotes _quote() wraps a span in, so the inner text matches the index's
+// key exactly (the index normalises with the same ' '.join(text.split()) rule).
+const unquote = (s) => norm(s).replace(/^[“"]/, "").replace(/[”"]$/, "");
+
+/** **bold**, [text](url) / [text](<url>), and plain text -> inline React nodes. */
+function inline(text, keyPrefix) {
+  const out = [];
+  const re = /\*\*(.+?)\*\*|\[([^\]]+)\]\(<?([^()>]+)>?\)/g;
+  let last = 0,
+    m,
+    i = 0;
+  while ((m = re.exec(text))) {
+    if (m.index > last) out.push(text.slice(last, m.index));
+    if (m[1] !== undefined) {
+      out.push(<strong key={`${keyPrefix}-b${i++}`}>{m[1]}</strong>);
+    } else {
+      out.push(
+        <a
+          key={`${keyPrefix}-a${i++}`}
+          href={m[3]}
+          target="_blank"
+          rel="noreferrer"
+        >
+          {m[2]}
+        </a>,
+      );
+    }
+    last = re.lastIndex;
   }
-  return [cite, year].filter(Boolean).join(" · ");
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+
+/** A rendered quote block: clickable + coloured when the index resolves it to a
+ *  document, plain (but still visually a quote) when it does not -- e.g. a span the
+ *  export itself marked "Not confirmed verbatim", which the index never indexes. */
+function Quote({ text, target, activeId, onPick }) {
+  const clickable = !!target;
+  const active = clickable && activeId === target.id;
+  return (
+    <blockquote
+      className={"rz-quote" + (clickable ? " qjump" : "") + (active ? " active" : "")}
+      onClick={clickable ? () => onPick(target) : undefined}
+      title={clickable ? "Show this passage in the PDF" : undefined}
+    >
+      <span className="rz-qmark" title="Verified verbatim in its source">
+        ✓
+      </span>
+      <span className="rz-qtext">{text}</span>
+    </blockquote>
+  );
+}
+
+function Table({ rows, keyPrefix }) {
+  const cells = (line) =>
+    line
+      .replace(/^\|/, "")
+      .replace(/\|$/, "")
+      .split("|")
+      .map((c) => c.trim().replace(/&#124;/g, "|"));
+  const head = cells(rows[0]);
+  const body = rows.slice(2).map(cells); // rows[1] is the |---|---| separator
+  return (
+    <div className="se-table-wrap">
+      <table className="se-table">
+        <thead>
+          <tr>
+            {head.map((h, i) => (
+              <th key={i}>{inline(h, `${keyPrefix}-h${i}`)}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {body.map((r, ri) => (
+            <tr key={ri}>
+              {r.map((c, ci) => (
+                <td key={ci}>{inline(c, `${keyPrefix}-${ri}-${ci}`)}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** Parse the export text into React blocks, resolving each blockquote against the
+ *  quote index as it walks past the "### R# — Title" heading that names which paper's
+ *  passages follow -- see quote_index's own docstring for why text alone is the key. */
+function renderExport(text, index, activeId, onPick) {
+  const lines = (text || "").split("\n");
+  const subMap = new Map((index?.submission || []).map((q) => [q.text, q.id]));
+  const refToPaper = {};
+  Object.entries(index?.refs || {}).forEach(([pid, ref]) => {
+    refToPaper[ref] = pid;
+  });
+  const papMap = (pid) =>
+    new Map((index?.papers?.[pid]?.quotes || []).map((q) => [q.text, q.id]));
+
+  const resolve = (quoteText, currentPaper) => {
+    if (currentPaper) {
+      const m = papMap(currentPaper);
+      if (m.has(quoteText)) return { paperId: currentPaper, id: m.get(quoteText) };
+    }
+    if (subMap.has(quoteText)) return { paperId: null, id: subMap.get(quoteText) };
+    return null;
+  };
+
+  const out = [];
+  let currentPaper = null;
+  let i = 0,
+    key = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    const t = line.trim();
+
+    if (!t) {
+      i++;
+      continue;
+    }
+
+    // Context: which paper (if any) the following passages belong to.
+    const refHead = t.match(/^###\s+(R\d+)\s+—\s+(.+)$/);
+    if (/^#\s+Claim\s+\d+\s+—\s+Review$/.test(t) || t === "## Extracted claims" ||
+        t === "## Related work examined") {
+      currentPaper = null;
+    } else if (refHead) {
+      currentPaper = refToPaper[refHead[1]] || null;
+    }
+
+    if (t === "---") {
+      out.push(<hr key={key++} className="se-hr" />);
+      i++;
+      continue;
+    }
+
+    const heading = t.match(/^(#{1,5})\s+(.*)$/);
+    if (heading) {
+      const level = heading[1].length;
+      const Tag = `h${Math.min(level + 1, 6)}`; // export's h1 is the doc title, not the page's
+      out.push(
+        <Tag key={key++} className={"se-h se-h" + level}>
+          {inline(heading[2], `h${key}`)}
+        </Tag>,
+      );
+      i++;
+      continue;
+    }
+
+    if (t.startsWith("|")) {
+      const rows = [];
+      while (i < lines.length && lines[i].trim().startsWith("|")) {
+        rows.push(lines[i].trim());
+        i++;
+      }
+      out.push(<Table key={key++} rows={rows} keyPrefix={`t${key}`} />);
+      continue;
+    }
+
+    if (t.startsWith("> ")) {
+      const quoteText = unquote(t.slice(2));
+      const target = resolve(quoteText, currentPaper);
+      out.push(
+        <Quote
+          key={key++}
+          text={quoteText}
+          target={target}
+          activeId={activeId}
+          onPick={onPick}
+        />,
+      );
+      i++;
+      continue;
+    }
+
+    if (/^- /.test(t) || /^  - /.test(t)) {
+      const items = [];
+      while (i < lines.length && /^\s*- /.test(lines[i])) {
+        const nested = /^\s\s/.test(lines[i]);
+        items.push({ nested, text: lines[i].trim().replace(/^- /, "") });
+        i++;
+      }
+      out.push(
+        <ul key={key++} className="se-list">
+          {items.map((it, ii) => (
+            <li key={ii} className={it.nested ? "se-nested" : undefined}>
+              {inline(it.text, `l${key}-${ii}`)}
+            </li>
+          ))}
+        </ul>,
+      );
+      continue;
+    }
+
+    out.push(
+      <p key={key++} className="se-p">
+        {inline(t, `p${key}`)}
+      </p>,
+    );
+    i++;
+  }
+  return out;
 }
 
 export default function ReviewSummary({ submissionId, active }) {
-  const [data, setData] = useState(null);
+  const [text, setText] = useState(null);
+  const [index, setIndex] = useState(null);
   const [err, setErr] = useState("");
-  const [exportText, setExportText] = useState(null); // null = hidden
-  const [exportBusy, setExportBusy] = useState(false);
-  // Shown, not swallowed: when the export failed silently the button simply did
-  // nothing, which reads as a dead control rather than as an error.
-  const [exportErr, setExportErr] = useState("");
+  const [reader, setReader] = useState({ paperId: null, focusId: null });
 
-  const load = useCallback(() => {
-    api
-      .reviewSummary(submissionId)
-      .then((d) => {
-        setData(d);
+  const load = () => {
+    Promise.all([api.reviewExport(submissionId), api.quoteIndex(submissionId)])
+      .then(([t, idx]) => {
+        setText(t);
+        setIndex(idx);
         setErr("");
       })
       .catch((e) => {
         const msg = String(e);
-        // not-yet-reviewed is an empty summary, not an error
         if (msg.includes("no claims computed") || msg.includes("404")) {
-          setData({ claims: [], n_claims: 0, n_overlap_papers: 0 });
+          setText("");
+          setIndex({ submission: [], papers: {}, refs: {} });
           setErr("");
         } else setErr(msg);
       });
-  }, [submissionId]);
+  };
 
-  useEffect(() => {
-    load();
-  }, [load]);
-  // refresh whenever the tab becomes active (e.g. right after finishing the review)
+  useEffect(load, [submissionId]);
   useEffect(() => {
     if (active) load();
-  }, [active, load]);
-
-  // The synthesised overall assessment is not shown here. It is prose ABOUT the review
-  // rather than the review, and what a reviewer -- or a judge comparing systems -- has to
-  // be able to check is the claim-level evidence below. The pipeline still builds it
-  // (Artifact B), so bringing it back is a matter of rendering it again.
-  //
-  // The step itself still has to be runnable: the SAME artifact carries the per-claim
-  // verdicts, which the summary badges and the exported comparison document both use.
-  // Dropping the control along with the prose left a review that could never state a
-  // verdict at all.
-
-  // Fetches the plain-text export once and keeps it, so toggling it open and shut does
-  // not hit the backend again -- the text is deterministic for a given run anyway.
-  const toggleExport = async () => {
-    if (exportText !== null) {
-      setExportText(null);
-      return;
-    }
-    setExportBusy(true);
-    setExportErr("");
-    try {
-      setExportText(await api.reviewExport(submissionId));
-    } catch (e) {
-      setExportErr(String(e));
-    } finally {
-      setExportBusy(false);
-    }
-  };
-
-  const downloadExport = async () => {
-    setExportBusy(true);
-    setExportErr("");
-    try {
-      const text = exportText ?? (await api.reviewExport(submissionId));
-      setExportText(text);
-      const url = URL.createObjectURL(
-        new Blob([text], { type: "text/markdown;charset=utf-8" }),
-      );
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${submissionId}_assessment.md`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      setExportErr(String(e));
-    } finally {
-      setExportBusy(false);
-    }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
 
   if (err)
     return (
@@ -110,195 +253,67 @@ export default function ReviewSummary({ submissionId, active }) {
         <div className="error">{err}</div>
       </div>
     );
-  if (!data) return <div className="panel">Loading summary…</div>;
+  if (text === null) return <div className="panel">Loading summary…</div>;
 
-  const claims = data.claims || [];
-  // What this review produced: pairs whose two halves were each checked against their
-  // own document. The header used to report whether a synthesis had been written,
-  // which said nothing about whether anything was found.
-  const nPairs = claims.reduce(
-    (n, c) =>
-      n + (c.overlaps || []).reduce((m, o) => m + (o.evidence || []).length, 0),
-    0,
-  );
-
-  return (
-    <div className="panel review-summary">
-      <div className="review-head">
-        <div>
-          <h2>Novelty Assessment</h2>
-          <div className="muted">
-            {data.n_claims} claim{data.n_claims === 1 ? "" : "s"}
-            {" · "}
-            {data.n_overlap_papers} overlapping{" "}
-            {data.n_overlap_papers === 1 ? "paper" : "papers"}
-            {" · "}
-            {nPairs} verified {nPairs === 1 ? "pair" : "pairs"}
-          </div>
-        </div>
-      </div>
-      <p className="muted rv-sub">
-        The complete output of this review: for every claim, the prior work that
-        overlaps it and the sentences the two papers share — each side quoted
-        from its own document and checked against it automatically.
-      </p>
-
-      {claims.length === 0 && (
+  if (!text) {
+    return (
+      <div className="panel review-summary">
         <div className="muted">
           No claims have been reviewed yet. Open the <strong>Review</strong> tab
           and run the claim-level review first.
         </div>
-      )}
+      </div>
+    );
+  }
 
-      {claims.length > 0 && (
-        <div className="sum-export">
-          <div className="sum-export-bar">
-            <span className="muted">
-              Text output used for the comparison against other systems
-            </span>
-            <span className="sum-export-btns">
-              <button
-                className="link"
-                disabled={exportBusy}
-                onClick={toggleExport}
-              >
-                {exportBusy
-                  ? "Loading…"
-                  : exportText !== null
-                    ? "hide"
-                    : "show"}
-              </button>
-              <button
-                className="link"
-                disabled={exportBusy}
-                onClick={downloadExport}
-              >
-                download .md
-              </button>
-            </span>
-          </div>
-          {exportErr && <div className="error">{exportErr}</div>}
-          {exportText !== null && (
-            <pre className="sum-export-text">{exportText}</pre>
-          )}
-        </div>
-      )}
+  const onPick = (target) => setReader({ paperId: target.paperId, focusId: target.id });
 
-      {claims.map((c) => {
-        const v = VERDICT[c.verdict] || null;
-        return (
-          <div className="sum-claim" key={c.claim_id}>
-            <div className="sum-claim-head">
-              <span className="sum-claim-tag">{claimLabel(c.claim_id)}</span>
-              <span className="sum-claim-text">{c.claim_text}</span>
-            </div>
+  const paperIds = Object.keys(index.papers || {});
+  const readerPaper = reader.paperId ? index.papers[reader.paperId] : null;
+  const paperColor = {};
+  paperIds.forEach((pid, i) => {
+    paperColor[pid] = colorFor(i + 1);
+  });
 
-            {v && (
-              <div className="sum-verdict">
-                <span className={"relbadge " + v.cls}>{v.label}</span>
-                {c.rationale && <p className="sum-rationale">{c.rationale}</p>}
-              </div>
-            )}
+  const highlights = readerPaper
+    ? readerPaper.quotes.map((q) => ({ id: q.id, text: q.text, color: paperColor[reader.paperId] }))
+    : (index.submission || []).map((q) => ({ id: q.id, text: q.text, color: colorFor(0) }));
 
-            {c.overlaps.length === 0 ? (
-              <div className="sum-none">
-                No overlapping prior work found for this claim ({c.n_compared}{" "}
-                papers compared).
-              </div>
-            ) : (
-              <div className="sum-overlaps">
-                <div className="sum-ov-count">
-                  Evidence: {c.overlaps.length} overlapping paper
-                  {c.overlaps.length === 1 ? "" : "s"} of {c.n_compared}{" "}
-                  compared
-                </div>
-                {c.overlaps.map((o) => (
-                  <div
-                    className={
-                      "sum-paper" + (o.challenges ? " challenges" : "")
-                    }
-                    key={o.paper_id}
-                  >
-                    <div className="ev-head">
-                      <span className="ev-title">{o.title}</span>
-                      <span
-                        className={"relbadge " + (o.challenges ? "low" : "mid")}
-                      >
-                        {DEGREE_LABEL[o.overlap_degree] || o.overlap_degree}
-                      </span>
-                      {o.cited_by_submission && (
-                        <span className="citedbadge">cited</span>
-                      )}
-                    </div>
-                    {fmtAuthors(o.authors, o.year) && (
-                      <div className="ev-authors">
-                        {fmtAuthors(o.authors, o.year)}
-                      </div>
-                    )}
-                    {o.assessment ? (
-                      <div className="ev-analysis">{o.assessment}</div>
-                    ) : (
-                      <>
-                        {o.what_is_shared && (
-                          <div className="ev-line">
-                            <span className="ev-lab">Shared:</span>{" "}
-                            {o.what_is_shared}
-                          </div>
-                        )}
-                        {o.submission_delta && (
-                          <div className="ev-line">
-                            <span className="ev-lab">Submission adds:</span>{" "}
-                            {o.submission_delta}
-                          </div>
-                        )}
-                      </>
-                    )}
-                    {(o.evidence || []).length > 0 && (
-                      <div className="ev-pairs">
-                        <div className="ev-sublab">
-                          Where the two papers say the same thing
-                          <span className="ev-pairhint">
-                            {" "}
-                            · {o.evidence.length} verified
-                            {o.evidence.length === 1 ? " pair" : " pairs"}
-                          </span>
-                        </div>
-                        {o.evidence.map((q, i) => (
-                          <div className="ev-pair" key={i}>
-                            {q.rationale && (
-                              <div className="ev-pairwhy">{q.rationale}</div>
-                            )}
-                            <blockquote className="rz-quote pair-sub">
-                              <span
-                                className="rz-qmark"
-                                title="Verified verbatim in the submission"
-                              >
-                                ✓
-                              </span>
-                              <span className="ev-pairside">Your paper</span>
-                              <span className="rz-qtext">{q.claim_quote}</span>
-                            </blockquote>
-                            <blockquote className="rz-quote pair-pap">
-                              <span
-                                className="rz-qmark"
-                                title="Verified verbatim in the prior paper"
-                              >
-                                ✓
-                              </span>
-                              <span className="ev-pairside">This paper</span>
-                              <span className="rz-qtext">{q.paper_quote}</span>
-                            </blockquote>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        );
-      })}
+  const readerUrl = reader.paperId
+    ? api.paperPdfUrl(submissionId, reader.paperId)
+    : api.pdfUrl(submissionId);
+
+  const panel = (
+    <div className="panel review-summary se-export">
+      {renderExport(text, index, reader.focusId, onPick)}
     </div>
   );
+
+  const viewer = (
+    <div className="pdfpane">
+      <div className="pdfpicker">
+        <select
+          value={reader.paperId || ""}
+          onChange={(e) =>
+            setReader({ paperId: e.target.value || null, focusId: null })
+          }
+        >
+          <option value="">The submission</option>
+          {paperIds.map((pid) => (
+            <option key={pid} value={pid}>
+              {index.papers[pid].title}
+            </option>
+          ))}
+        </select>
+      </div>
+      <PdfViewer
+        key={readerUrl}
+        url={readerUrl}
+        highlights={highlights}
+        focusId={reader.focusId}
+      />
+    </div>
+  );
+
+  return <SplitView storageKey="summary" left={panel} right={viewer} />;
 }
