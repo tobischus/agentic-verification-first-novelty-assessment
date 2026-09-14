@@ -1,28 +1,12 @@
 #!/usr/bin/env python3
-"""
-The system's final output as plain text -- the artifact that goes into the comparison
-against other novelty assessment systems.
+"""Deterministic reviewer export, layout v3.
 
-Nothing here is generated. Every line is copied from artifacts that already exist: the
-paper metadata, the extracted claims with the quote each rests on, the related work that
-was examined, and the assessment itself (Artifact B) over the evidence (Artifact A).
-Rendering the deliverable from a template rather than from a model call is what makes it
-reproducible: running this twice on the same run yields byte-identical text.
-
-Text falls into three kinds and each is rendered differently, because conflating them is
-exactly the failure this system exists to prevent: a span confirmed in its source appears
-in typographic quotation marks, a span the checker could not confirm is labelled as an
-unconfirmed quotation, and the system's own prose is left plain. A closing note states the
-convention, so the document needs no legend to be read correctly.
-
-Deliberately omitted, because they are reader aids rather than content: the per-quote
-checkmarks in the comparison sections and the list of sections read for a comparison.
-
-Usage
------
-  python src/novelty_assessment/battle_export.py --data-dir data --submission-id ID
-  python src/novelty_assessment/battle_export.py --data-dir data --submission-id ID \
-      --out battle/ID.md
+Drop-in replacement for src/novelty_assessment/battle_export.py.
+Uses existing Artifact A/B and embedded run provenance. Makes no model calls,
+changes no verdicts, and never fills historical version metadata from a live pool.
+Comparison cells contain the complete recorded text. Quote text is not shortened.
+--check-sources diagnoses missing run-bound version metadata without generating a
+report, modifying artifacts, downloading documents, or calling a model.
 """
 import argparse
 import json
@@ -31,38 +15,22 @@ from pathlib import Path
 from typing import List
 
 import verdict as vd
-from agent.evidence_map import trim_display_span
 
-_ORDINALS = ["First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh",
-             "Eighth", "Ninth", "Tenth"]
+EXPORT_LAYOUT_VERSION = "reviewer-v3.1"
 
-_LQ, _RQ = "“", "”"          # “ ”
+_LQ, _RQ = "“", "”"
+
 _QUOTE_NOTE = (
-    "Text in quotation marks (“…”) is quoted verbatim from the document it is "
-    "attributed to and was checked against that document automatically. Everything else is the "
-    "system's own prose."
+    "Block quotations show stored source passages. Unless marked 'Not confirmed verbatim', "
+    "they were automatically matched against their attributed document. This checks "
+    "the quoted wording, not the correctness of its interpretation."
 )
-
 
 def _load(path: Path):
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return None
-
-
-def _ordinal(i: int) -> str:
-    return f"{_ORDINALS[i]} extracted claim" if i < len(_ORDINALS) else f"Extracted claim {i + 1}"
-
-
-def _cite(authors: str, year) -> str:
-    names = [n.strip() for n in (authors or "").split(",") if n.strip()]
-    cite = ""
-    if names:
-        surname = names[0].split()[-1] if names[0].split() else names[0]
-        cite = f"{surname} et al." if len(names) > 1 else names[0]
-    return " · ".join(x for x in (cite, str(year or "")) if x)
-
 
 def _authors_from_tei(sub: Path, sid: str) -> str:
     """Author list of the submission, read from the GROBID header.
@@ -87,10 +55,8 @@ def _authors_from_tei(sub: Path, sid: str) -> str:
             names.append(name)
     return ", ".join(names)
 
-
 def _quote(text: str) -> str:
     return f"{_LQ}{' '.join((text or '').split())}{_RQ}"
-
 
 def _segments(segs, out: List[str]) -> None:
     """Verified spans in quotation marks, the system's prose plain, and rejected quotes
@@ -105,183 +71,17 @@ def _segments(segs, out: List[str]) -> None:
         content = (s.get("content") or "").strip()
         if not content:
             continue
-        if s.get("kind") == "quote" and s.get("verified"):
-            out.append(_quote(content))
-        elif "verified" in s:                       # a quote the checker could not confirm
-            out += ["Quoted from the source but NOT confirmed verbatim:", content]
+        if s.get("kind") == "quote" or "verified" in s:
+            _span(content, bool(s.get("kind") == "quote" and s.get("verified")), out)
+            continue
         else:
             out.append(content)
         out.append("")
-
-
-def _pair_groups(pairs: List[tuple]) -> List[tuple]:
-    """Group pairs that share the same (normalised) submission span, in first-seen order.
-
-    One correspondence usually names several prior-work spans against the same sentence of
-    the submission -- listing that sentence once per pair repeats it as many times as the
-    paper was quoted. Mirrors ReviewWalkthrough.jsx's groupBySubmissionQuote so the exported
-    text and the reviewer UI group evidence the same way.
-
-    `pairs` is a list of (original_index, pair) so a group keeps the number each pair had
-    when it was sent to check_evidence -- the number its own reasoning refers to.
-    """
-    groups: List[tuple] = []
-    index: dict = {}
-    for i, p in pairs:
-        key = " ".join((p.get("claim_quote") or "").split())
-        if key not in index:
-            index[key] = len(groups)
-            groups.append((key, []))
-        groups[index[key]][1].append((i, p))
-    return groups
-
-
-def _render_pair_groups(pairs: List[tuple], out: List[str]) -> None:
-    """`pairs` is a list of (original_index, pair); see `_pair_groups`."""
-    for claim_quote, group in _pair_groups(pairs):
-        first_i, first = group[0]
-        if claim_quote:
-            out.append("Submission contribution span")
-            out.append(_quote(claim_quote) if first.get("claim_quote_verified") else
-                       f"(not confirmed verbatim) {claim_quote}")
-            out.append("")
-        for i, p in group:
-            # Numbered so the evidence check's own reasoning ("pairs 1, 2, 4, 5, 6") stays
-            # checkable against what is actually shown here.
-            label = f"Pair {i}"
-            # Printed after the paper's span it read as a comment on it; printed before, it
-            # is the assertion the quote is evidence for -- which is what a pair is.
-            if p.get("rationale"):
-                out += [f"{label}: {p['rationale'].strip()}", ""]
-            else:
-                out += [label, ""]
-            pq = (p.get("paper_quote") or "").strip()
-            if pq:
-                out.append("The prior work states:")
-                out.append(_quote(pq) if p.get("paper_quote_verified") else
-                           f"(not confirmed verbatim) {pq}")
-                out.append("")
-
-
-def _evidence_pairs(c: dict, out: List[str], claim_stop_reason: str = "") -> None:
-    """Render the grounded claim/paper quote pairs for one comparison.
-
-    `c["evidence_pairs"]` already passed two gates before it got here: text verification
-    (both spans stand in their document, see evidence_map.build_map) and ownership (the
-    paper's span is its own contribution, not a citation, see check_ownership). Neither
-    gate is enough on its own to call a pair "support" -- PIKE-RAG's pair 1 is verified
-    AND owned, and the evidence check still rejects it, because the quoted spans don't
-    establish the SPECIFIC relation the pair claims (task-complexity classification is
-    not the same thing as GraphRAG-Bench's benchmark task design). That third gate is
-    `evidence_check.supporting_pair_indices`, and it is the one enforced below.
-
-    So for `material`, only the pairs the check actually named as supporting appear in
-    the main section, and every other grounded-and-owned candidate moves under a
-    separate, clearly-labelled header -- so a reader cannot mistake a merely-topical
-    correspondence for one the system is standing behind, and so nothing is dropped: a
-    rejected candidate stays visible in the audit trail, just not presented as support.
-
-    `nonmaterial` and `insufficient` do NOT clear `main` to empty: an empty
-    `supporting_pair_indices` there does not mean "no evidence" -- the checker's
-    `reasoning` for those verdicts is often written IN TERMS OF the same pairs, arguing
-    why their relation is topical rather than substantive, and a reader needs the pairs
-    in front of them to follow that argument. Comparisons from the older, non-agentic
-    builder carry no evidence_check at all; those also fall back to showing every
-    grounded pair, for the same reason.
-
-    A pair rejected by `material`'s own check (verified, owned, but the relation itself
-    didn't hold) is not printed at all here -- printing PIKE-RAG's pair 1 right after the
-    reasoning that just rejected it made the same claim read as both accepted and refused
-    in the same breath. It is not lost: `evidence_pairs` on the comparison record still
-    carries it, unabridged, for anyone auditing the run. Every pair that IS shown keeps
-    the number it had when check_evidence was asked about it, so "pairs 1, 2, 4, 5, 6" in
-    the reasoning above can be matched against what actually appears below it.
-    """
-    pairs = c.get("evidence_pairs") or []
-    ok = [p for p in pairs
-          if (p.get("claim_quote") or "").strip() or (p.get("paper_quote") or "").strip()]
-    if not ok:
-        return
-
-    out += ["Grounded evidence for the assessed overlap", ""]
-
-    check = c.get("evidence_check") or {}
-    status = (check.get("status") or "").strip().lower()
-    supporting = {i for i in (check.get("supporting_pair_indices") or [])}
-
-    if status:
-        out.append(f"Evidence check: {status}")
-        if status == "material":
-            out.append(f"{len(supporting)} of {len(ok)} grounded candidates support the overlap")
-        out.append("")
-        if check.get("reasoning"):
-            out += [check["reasoning"].strip(), ""]
-
-    # 1-based, matching what check_evidence was given: the order of `ok` exactly as sent
-    # to the evidence-check prompt (see api.py's own enumerate(pairs, 1)).
-    numbered = list(enumerate(ok, 1))
-    main = [(i, p) for i, p in numbered if i in supporting] if status == "material" and supporting \
-        else numbered
-
-    _render_pair_groups(main, out)
-
-    # `insufficient` is the evidence check unable to settle the question; `c["insufficient"]`
-    # is the paper loop's own read/re-entry budget running out with a deficit still standing
-    # -- both leave the assessment resting on less than the pipeline normally requires, and
-    # a reader comparing systems is entitled to see that rather than a confident-looking
-    # verdict that quietly cost less scrutiny than the others.
-    if status == "insufficient" or c.get("insufficient"):
-        out.append("evidence_sufficient=False")
-        if c.get("unresolved_deficit"):
-            out.append(f"unresolved_deficit: {c['unresolved_deficit'].strip()}")
-        elif claim_stop_reason:
-            out.append(f"stop_reason: {claim_stop_reason}")
-        out.append("")
-
 
 _EC_PHRASE = {
     "material": "material evidence", "nonmaterial": "nonmaterial",
     "insufficient": "insufficient evidence",
 }
-
-
-def _related_cell(entry) -> str:
-    """One cell of the related-work table: what is actually known for this (paper, claim).
-
-    A blank dash collapses three different situations into one mark: the paper was never
-    compared for this claim, it was compared and found not to overlap, or it was compared
-    and the evidence check could not settle the question. The first is an absent
-    measurement; the second and third are results, and different ones -- `superficial`
-    with `insufficient` evidence is not the same finding as `superficial` with the check
-    actually agreeing there is no substantive relation. Collapsing them let a missing
-    comparison read as a confirmed absence of overlap, which is the opposite of what an
-    empty result means.
-    """
-    if entry is None:
-        return "not assessed"
-    deg, status = entry
-    # The qualifier used to be dropped for partial/substantial/same, which made every
-    # overlap in the table look unchecked and left the check visible only on the
-    # non-overlapping cells -- backwards, since a reader most needs to know whether an
-    # OVERLAP is backed by evidence. Every cell with a degree now gets one.
-    plain = vd.overlap_label(deg) or deg or "not compared"
-    phrase = _EC_PHRASE.get(status, "no evidence check")
-    return f"{plain} · {phrase}"
-
-
-_RELATED_LEGEND = (
-    "Legend: Cells show overlap degree and evidence status: material = meaningful shared contribution supported; nonmaterial = examined correspondences do not support meaningful contribution overlap; insufficient = inconclusive evidence; no evidence check = no check recorded. Missing support is not proof of no overlap. Conflicting assessments are identified under Evidence limits."
-)
-
-
-# --------------------------- claim-level conclusion ------------------------- #
-# Five fields, assembled from records the comparison step already wrote -- no new model
-# call, no new interpretive sentence invented for a specific paper. Where the existing
-# per-claim synthesis (Artifact B) has not been run against the CURRENT set of
-# comparisons, the fields below are derived by the same deterministic rules verdict.py
-# already applies per comparison (challenges(), overlapping(), degree_rank) rather than
-# left to read as though a synthesis had produced them. A second, model-generated
-# synthesis over these fields is future work, not something to fake here.
 
 def _claim_verdict(comparisons: list, recorded: str):
     """(verdict, is_derived). Prefers Artifact B's own verdict; falls back to the same
@@ -291,7 +91,6 @@ def _claim_verdict(comparisons: list, recorded: str):
         return recorded, False
     derived = "challenged" if any(vd.challenges(c) for c in comparisons or []) else "not_challenged"
     return derived, True
-
 
 _ASSESSMENT_GLOSS = {
     "not_challenged": (
@@ -307,7 +106,6 @@ _ASSESSMENT_GLOSS = {
     "uncertain": "The available evidence did not permit a confident determination for this claim.",
 }
 
-
 def _claim_assessment(comparisons: list, recorded_verdict: str, recorded_rationale: str) -> str:
     verdict, derived = _claim_verdict(comparisons, recorded_verdict)
     lines = [f"{vd.verdict_label(verdict)}.", _ASSESSMENT_GLOSS.get(verdict, "")]
@@ -320,42 +118,6 @@ def _claim_assessment(comparisons: list, recorded_verdict: str, recorded_rationa
         )
     return " ".join(x for x in lines if x)
 
-
-def _main_overlap(comparisons: list) -> str:
-    """The decisive prior work and the SPECIFIC component each shares -- `what_is_shared`
-    is the comparison step's own text, already written per (claim, paper); this only
-    selects and labels it, it does not paraphrase or judge it.
-
-    Cut with `trim_display_span`, the same boundary-respecting cut already used to keep a
-    verified quote readable elsewhere in this pipeline (see evidence_map.py) -- one
-    sentence here, since this field lists several papers and a full multi-sentence
-    `what_is_shared` per paper is what pushed this field past a page.
-    """
-    rows = sorted(vd.overlapping(comparisons), key=vd.sort_key)
-    if not rows:
-        return "No prior work in the examined candidate set reached partial overlap or stronger."
-    # "The decisive prior work", not a second copy of the related-work table: where a
-    # stronger degree is present (substantial/same), the partial-overlap comparisons
-    # beneath it are not what decided this claim's assessment, and listing all of them
-    # here just repeats the table above at paragraph length instead of pointing at what
-    # mattered. Restricting to the strongest tier present is what made 11 comparisons for
-    # claim 2 collapse to the 2 (Zhou, Han) that are actually substantial.
-    strongest = vd.degree_rank(vd.degree(rows[0]))
-    rows = [c for c in rows if vd.degree_rank(vd.degree(c)) == strongest]
-    parts = []
-    for c in rows:
-        shared = trim_display_span((c.get("what_is_shared") or "").strip(),
-                                   max_sentences=1, max_chars=220)
-        deg = vd.degree(c)
-        status = ((c.get("evidence_check") or {}).get("status") or "").strip().lower()
-        tag = f"{vd.degree_label(deg)}" + (f" · {status}" if status else "")
-        piece = c.get("title", "")
-        if shared:
-            piece += f" ({shared})"
-        parts.append(f"{piece} [{tag}]")
-    return "; ".join(parts) + "."
-
-
 def _eligible_for_remainder(comparisons: list) -> list:
     """Comparisons whose degree is actually carried by the evidence check, not merely
     proposed. `material` plus an overlap degree is the plain reading; the stricter
@@ -365,92 +127,6 @@ def _eligible_for_remainder(comparisons: list) -> list:
     return [c for c in (comparisons or [])
             if ((c.get("evidence_check") or {}).get("status") or "").lower() == "material"
             and vd.degree(c) in vd.OVERLAP_DEGREES]
-
-
-def _remaining_contribution(comparisons: list) -> str:
-    """The submission_delta of EVERY comparison at the strongest evidence-supported
-    degree, verbatim and separately -- not one picked arbitrarily among ties, and not
-    merged into a single sentence that would misrepresent two different papers' deltas
-    as one synthesis. Each bullet is the comparison step's own text; nothing here is
-    written new for this export beyond the selection and the heading.
-    """
-    eligible = _eligible_for_remainder(comparisons)
-    if not eligible:
-        return ("**Remaining contribution:** No evidence-supported material comparison "
-                "was available from which to derive a residual contribution.")
-    strongest = min(vd.degree_rank(vd.degree(c)) for c in eligible)
-    rows = [c for c in eligible if vd.degree_rank(vd.degree(c)) == strongest]
-    out = ["**Remaining contribution relative to the strongest supported comparison(s):**", ""]
-    for c in rows:
-        delta = trim_display_span((c.get("submission_delta") or "").strip(),
-                                  max_sentences=2, max_chars=380)
-        out.append(f"- **{c.get('title', '')}:** "
-                   + (delta or "No submission_delta text was recorded for this comparison."))
-    out.append("")
-    out.append("These are comparison-specific differences, not a synthesis across all prior work. Evidence supporting overlap does not automatically verify every stated difference or absence claim; see each comparison’s evidence assessment.")
-    return "\n".join(out)
-
-
-def _evidence_limits(comparisons: list) -> str:
-    """Three separate limits, not one blended sentence -- `insufficient`, `no evidence
-    check ran`, and `assessment and evidence check disagree` are different failures with
-    different remedies, and folding them into "did not fully support the proposed
-    degree" hid which one applied to a given paper. A prior version of this line named
-    PIKE-RAG and "How to Mitigate Information Loss" together under that one phrase, when
-    only the second is actually a conflict -- PIKE-RAG's evidence check simply never
-    completed for the field this reads, and its `unresolved_question` alone had put it
-    in the same bucket as a paper the check flatly disagreed with.
-
-    A conflict is read directly off the two fields that are supposed to agree: the
-    assessed degree (does it count as overlap?) and the evidence check's status (did the
-    check find a meaningful shared contribution?). `proposed_degree_supported is None`
-    is NOT treated as a conflict signal here -- EvidenceCheck returns null for
-    none/superficial proposals by design (see its own field description), so null means
-    "not applicable", not "unsupported".
-    """
-    comparisons = comparisons or []
-    total = len(comparisons)
-
-    def status_of(c):
-        return ((c.get("evidence_check") or {}).get("status") or "").strip().lower()
-
-    insufficient = [c for c in comparisons if status_of(c) == "insufficient"]
-    not_checked = [c for c in comparisons if status_of(c) not in ("material", "nonmaterial", "insufficient")]
-
-    def conflict(c):
-        s, overlap = status_of(c), vd.degree(c) in vd.OVERLAP_DEGREES
-        return (overlap and s == "nonmaterial") or (not overlap and s == "material")
-
-    conflicts = [c for c in comparisons if conflict(c)]
-
-    lines = []
-    counted = []
-    if insufficient:
-        verb = "has" if len(insufficient) == 1 else "have"
-        counted.append(f"{len(insufficient)} of {total} comparisons {verb} insufficient evidence")
-    if not_checked:
-        verb = "has" if len(not_checked) == 1 else "have"
-        counted.append(f"{len(not_checked)} {verb} no recorded evidence check")
-    if counted:
-        lines.append(", and ".join(counted).capitalize() + ".")
-
-    for c in conflicts:
-        s, deg = status_of(c), vd.degree(c)
-        lines.append(
-            f"One comparison shows a conflict between the overlap assessment and evidence "
-            f"check: {c.get('title', '')} was assessed as {deg or 'none'} while the evidence "
-            f"check found {s} overlap. This conflict remains unresolved."
-        )
-
-    if insufficient:
-        lines.append(
-            "Insufficient evidence means the check could not settle the question, not "
-            "that no overlap exists."
-        )
-
-    return " ".join(lines) or f"No insufficiency, missing evidence checks, or " \
-                              f"assessment/evidence conflicts recorded among the {total} comparisons."
-
 
 def _coverage(comparisons: list) -> str:
     comparisons = comparisons or []
@@ -466,180 +142,18 @@ def _coverage(comparisons: list) -> str:
     return (f"{len(comparisons)} comparison{'s' if len(comparisons) != 1 else ''} processed"
             + (f", {checked} with an evidence check{tail}." if checked else "."))
 
-
-def build(data_dir: str, submission_id: str, variant: str = "") -> str:
-    sub = Path(data_dir) / submission_id
-    tail = f"_{variant}" if variant else ""
-    a = _load(sub / f"{submission_id}_artifact_a{tail}.json")
-    if a is None:
-        raise FileNotFoundError(f"{submission_id}_artifact_a{tail}.json not found")
-    b = _load(sub / f"{submission_id}_artifact_b{tail}.json") or {}
-    meta = _load(sub / f"{submission_id}.json") or {}
-    claims_doc = _load(sub / f"{submission_id}_claims.json") or {"claims": []}
-    ranked = _load(sub / "related_work_data" / "ranked_papers.json") or []
-    pool = {p.get("paper_id"): p for p in ranked}
-
-    claims = [c for c in claims_doc.get("claims", []) if c.get("status") != "rejected"]
-    order = [c["id"] for c in claims]
-    a_by = {e.get("claim_id"): e for e in a.get("claims", [])}
-    b_by = {v.get("claim_id"): v for v in b.get("per_claim", [])}
-    if not order:                     # claims file gone or rewritten: fall back to A's order
-        order = [e.get("claim_id") for e in a.get("claims", [])]
-
-    out: List[str] = ["# Novelty Assessment", ""]
-
-    # ---------------------------- the paper ---------------------------- #
-    title = meta.get("title") or claims_doc.get("title") or ""
-    if title:
-        out += [f"**{title}**", ""]
-    authors = _authors_from_tei(sub, submission_id)
-    if authors:
-        out.append(f"Authors: {authors}")
-    if meta.get("publication_date"):
-        out.append(f"Publication date: {meta['publication_date']}")
-    out.append("")
-
-    # ------------------------- extracted claims ------------------------ #
-    if claims:
-        out += ["## Extracted claims", ""]
-        for i, c in enumerate(claims, 1):
-            out += [f"### Extracted Claim {i}", "", (c.get("claim_text") or "").strip(), ""]
-            q = (c.get("evidence_quote") or "").strip()
-            if q and c.get("evidence_verified"):
-                out += ["Evidence in paper:", "", _quote(q), "", "✓ verbatim in paper", ""]
-            elif q:
-                out += ["Evidence in paper (could not be confirmed verbatim):", "",
-                        " ".join(q.split()), ""]
-            else:
-                out += ["Evidence in paper: none recorded", ""]
-
-    # ------------------------ related work list ------------------------ #
-    # One row per paper, one column per claim: a paper can be `partial` for one claim and
-    # `substantial` for another, and showing only its strongest degree -- as this table
-    # used to -- let a reader see "substantial" here and "partial" in the claim's own
-    # review section for the SAME paper with no indication that they are different claims.
-    by_paper = {}     # pid -> {"title", "cite", cid: (degree, evidence_check_status)}
-    best_rank = {}    # pid -> lowest DEGREE_RANK seen, for sorting only
-    for cid in order:
-        for c in (a_by.get(cid) or {}).get("comparisons", []) or []:
-            pid = c.get("paper_id")
-            pm = pool.get(pid, {})
-            deg = vd.degree(c)
-            row = by_paper.setdefault(pid, {
-                "title": c.get("title", ""),
-                "cite": _cite(c.get("authors") or pm.get("authors", ""),
-                              c.get("year") or pm.get("year")),
-            })
-            status = ((c.get("evidence_check") or {}).get("status") or "").strip().lower()
-            row[cid] = (deg, status)
-            rank = vd.degree_rank(deg)
-            if rank < best_rank.get(pid, vd.UNRANKED):
-                best_rank[pid] = rank
-
-    if by_paper:
-        cols = [(cid, f"Claim {i + 1}") for i, cid in enumerate(order) if cid in a_by]
-        out += ["## Related work examined", "",
-                f"{len(by_paper)} papers were compared against the claims above.", ""]
-        if len(cols) > 1:
-            out.append("| Paper | " + " | ".join(h for _, h in cols) + " |")
-            out.append("|" + "---|" * (len(cols) + 1))
-            for pid in sorted(by_paper, key=lambda p: (best_rank.get(p, vd.UNRANKED),
-                                                        by_paper[p]["title"].lower())):
-                row = by_paper[pid]
-                name = " — ".join(x for x in (row["title"], row["cite"]) if x)
-                cells = [_related_cell(row.get(cid)) for cid, _ in cols]
-                out.append(f"| {name} | " + " | ".join(cells) + " |")
-        else:
-            # One claim: a table with one data column says nothing a list didn't.
-            for pid in sorted(by_paper, key=lambda p: (best_rank.get(p, vd.UNRANKED),
-                                                        by_paper[p]["title"].lower())):
-                row = by_paper[pid]
-                cell = _related_cell(row.get(cols[0][0]) if cols else None)
-                tail = " — ".join(x for x in (row["cite"], cell) if x and x != "not assessed")
-                out.append(f"- {row['title']}" + (f" — {tail}" if tail else ""))
-        out.append(_RELATED_LEGEND)
-        out.append("")
-
-    # ------------------------------ review ----------------------------- #
-    # The synthesised overall assessment is deliberately left out. It is prose ABOUT the
-    # review rather than the review, and what a reader -- or a judge comparing systems --
-    # has to be able to check is the claim-level evidence: which sentence of the submission
-    # a prior paper already states, in both papers' own words.
-    out += ["## Review", ""]
-
-    n = 0
-    for cid in order:
-        e = a_by.get(cid)
-        if e is None:
-            continue
-        v = b_by.get(cid) or {}
-        out += ["---", "", f"### {_ordinal(n)}", "",
-                (e.get("claim_text") or e.get("claim_name") or "").strip(), ""]
-        n += 1
-
-        # Five fields, each pulled from records the comparison step already wrote (see
-        # the functions above for exactly which field feeds which line, and what is
-        # derived by rule versus quoted verbatim). This replaces a plain prior-work list
-        # and a count line with something that actually answers "so what, for this
-        # claim" -- without adding a second, model-written synthesis on top of Artifact A.
-        comparisons = e.get("comparisons") or []
-        out += [
-            "#### Claim-level conclusion", "",
-            f"**Assessment:** {_claim_assessment(comparisons, v.get('verdict'), v.get('rationale'))}", "",
-            f"**Main overlap:** {_main_overlap(comparisons)}", "",
-            _remaining_contribution(comparisons), "",
-            f"**Evidence limits:** {_evidence_limits(comparisons)}", "",
-            f"**Coverage:** {_coverage(comparisons)}", "",
-        ]
-
-        real = e.get("claim_realization") or []
-        if real:
-            out += ["#### What the submission does for this claim", ""]
-            _segments(real, out)
-
-        overlaps = vd.overlapping(e.get("comparisons"))
-        if not overlaps:
-            out += ["#### Overlapping prior work", "",
-                    f"None found among the {len(e.get('comparisons') or [])} papers compared.", ""]
-            continue
-
-        out += ["#### Overlapping prior work", ""]
-        for c in overlaps:
-            pm = pool.get(c.get("paper_id"), {})
-            out.append(f"##### {c.get('title', '')}")
-            deg = vd.degree(c)
-            head = [vd.degree_label(deg)] if deg else []
-            cite = _cite(c.get("authors") or pm.get("authors", ""), c.get("year") or pm.get("year"))
-            if cite:
-                head.append(cite)
-            if head:
-                out += [" · ".join(head), ""]
-
-            pr = c.get("paper_realization") or []
-            if pr:
-                out += ["How this paper realizes the claim", ""]
-                _segments(pr, out)
-            # Both, never one or the other. paper_realization is an agent-only field, so
-            # rendering only the narrative made the linear baseline look as though it had
-            # produced no evidence when it had produced verified pairs -- and rendering it
-            # INSTEAD of the pairs hid the agent's own claim-evidence map, which is the
-            # artifact this system exists to produce and the one a reader can check.
-            _evidence_pairs(c, out, claim_stop_reason=e.get("stop_reason", ""))
-            note = c.get("assessment") or c.get("brief_note") or ""
-            if note:
-                out += ["Comparison with the submission", "", note.strip(), ""]
-
-    out += ["---", "", _QUOTE_NOTE]
-    return "\n".join(out).rstrip() + "\n"
-
-
 def main():
     ap = argparse.ArgumentParser(description="Render the final assessment as plain text")
     ap.add_argument("--data-dir", required=True)
     ap.add_argument("--submission-id", required=True)
     ap.add_argument("--out", default=None, help="write here instead of stdout")
     ap.add_argument("--variant", default="", help="export the {variant}-suffixed artifacts")
+    ap.add_argument("--check-sources", action="store_true",
+                    help="diagnose version metadata in existing artifacts; no model calls")
     args = ap.parse_args()
+    if args.check_sources:
+        print(check_sources(args.data_dir, args.submission_id, args.variant))
+        return
     text = build(args.data_dir, args.submission_id, variant=args.variant)
     if args.out:
         p = Path(args.out)
@@ -648,6 +162,489 @@ def main():
         print(f"written: {p}  ({len(text)} chars)")
     else:
         print(text)
+
+
+def _cite(authors, year=None) -> str:
+    if isinstance(authors, list):
+        authors = ", ".join(a.get("name", "") if isinstance(a, dict) else str(a)
+                            for a in authors)
+    names = [n.strip() for n in str(authors or "").split(",") if n.strip()]
+    name = (names[0].split()[-1] + " et al." if len(names) > 1 else names[0]) if names else ""
+    return " · ".join(str(x) for x in (name, year) if x)
+
+
+def _status(c: dict) -> str:
+    return str((c.get("evidence_check") or {}).get("status") or "").strip().lower()
+
+
+def _conflict(c: dict) -> bool:
+    overlap = vd.degree(c) in vd.OVERLAP_DEGREES
+    return (overlap and _status(c) == "nonmaterial") or (not overlap and _status(c) == "material")
+
+
+def _cell(text: str) -> str:
+    """Keep prose in one Markdown table cell without turning source pipes into columns."""
+    return " ".join(str(text or "").split()).replace("|", "&#124;")
+
+
+def _pid(c: dict) -> str:
+    return str(c.get("paper_id") or c.get("title") or "unidentified source")
+
+
+def _ref(c: dict, refs: dict) -> str:
+    return refs.get(_pid(c), c.get("title") or "Unidentified source")
+
+
+def _snapshot(entry: dict, c: dict) -> dict:
+    """Only this claim's embedded run record (or inline fields), never a current manifest.
+
+    RunLog.to_dict() exports its comparisons as the prior_work LIST. This is the
+    immutable source record associated with the assessment, not the retrieval pool.
+    """
+    result = {k: c[k] for k in ("pinned_version", "pinned_version_date", "pinned_url",
+                               "version_status", "final_state", "unresolved_reason",
+                               "unresolved_deficit") if c.get(k) is not None}
+    log = entry.get("run_log")
+    prior = log.get("prior_work") if isinstance(log, dict) else None
+    for p in prior if isinstance(prior, list) else []:
+        if not isinstance(p, dict):
+            continue
+        if _pid(p) == _pid(c):
+            result.update(p)
+            break
+    return result
+
+
+def _document_label(snapshot: dict) -> str:
+    version = str(snapshot.get("pinned_version") or "").strip()
+    if version.isdigit():
+        version = "v" + version
+    date = str(snapshot.get("pinned_version_date") or "").strip()
+    # Preserve a recorded ISO calendar day, not just the year. Do not invent a day
+    # for old runs that recorded only a year, or infer one from an arXiv identifier.
+    match = re.match(r"^\d{4}-\d{2}-\d{2}(?:$|[T ])", date)
+    day = date[:10] if match else "exact date not recorded"
+    label = f"{version or 'version not recorded'} · {day}"
+    url = str(snapshot.get("pinned_url") or "").strip()
+    if url.startswith(("https://", "http://")) and version:
+        label = f"[{label}](<{url}>)"
+    return label
+
+
+def _related_cell(entry) -> str:
+    if entry is None:
+        return "not assessed"
+    degree, status = entry
+    return f"{vd.overlap_label(degree) or degree or 'not compared'} · " + _EC_PHRASE.get(status, "no evidence check")
+
+
+_RELATED_LEGEND = (
+    "**Legend:** overlap degree · evidence check. **Material:** meaningful overlap supported; "
+    "**nonmaterial:** examined matches do not support it; **insufficient:** inconclusive; "
+    "**no evidence check:** not recorded. These are separate assessments; missing support "
+    "does not establish absence."
+)
+
+
+def _strongest(rows: list) -> list:
+    """Keep every tie, using the original export's degree selection."""
+    if not rows:
+        return []
+    rank = min(vd.degree_rank(vd.degree(c)) for c in rows)
+    return [c for c in rows if vd.degree_rank(vd.degree(c)) == rank]
+
+
+def _comparison_summary(comparisons: list, refs: dict, out: List[str]) -> None:
+    # Preserve the original main-overlap selection (refutations sorted first),
+    # and the independent evidence-supported selection for the reported delta.
+    overlap = sorted(vd.overlapping(comparisons), key=vd.sort_key)
+    main = []
+    if overlap:
+        rank = vd.degree_rank(vd.degree(overlap[0]))
+        main = [c for c in overlap if vd.degree_rank(vd.degree(c)) == rank]
+    remainder = _strongest(_eligible_for_remainder(comparisons))
+    main_ids, delta_ids = {id(c) for c in main}, {id(c) for c in remainder}
+    selected = main + [c for c in remainder if id(c) not in main_ids]
+    out += ["## Closest comparisons", ""]
+    if not selected:
+        out += ["No comparison qualified for the strongest-overlap summary.", ""]
+        return
+    out += ["| Source | Shared contribution | Reported difference | Assessment |",
+            "|---|---|---|---|"]
+    for c in selected:
+        shared = str(c.get("what_is_shared") or "").strip() or "Not recorded."
+        # Do not promote an unchecked delta into the strongest supported remainder.
+        delta = ((str(c.get("submission_delta") or "").strip() or "Not recorded.") if id(c) in delta_ids
+                 else "Not selected as an evidence-supported remainder; see comparison details.")
+        tag = _related_cell((vd.degree(c), _status(c)))
+        label = _ref(c, refs)
+        if id(c) not in main_ids:
+            label += " (strongest supported comparison)"
+        out.append("| " + " | ".join(_cell(x) for x in (label, shared, delta, tag)) + " |")
+    out.append("")
+
+
+def _missing_check_reason(c: dict, snapshot: dict) -> str:
+    if (snapshot.get("final_state") == "dismissed" or c.get("dismissed")
+            or (c.get("map_diag") or {}).get("dismissed")):
+        return "dismissed before the evidence check"
+    if (snapshot.get("final_state") == "technical_error"
+            or (c.get("map_diag") or {}).get("call_failed")):
+        return "technical error recorded"
+    return "reason not recorded"
+
+
+def _evidence_limits(entry: dict, comparisons: list, refs: dict, out: List[str]) -> None:
+    out += ["## Evidence limits", ""]
+    insufficient = [c for c in comparisons if _status(c) == "insufficient"]
+    unchecked = [c for c in comparisons if _status(c) not in _EC_PHRASE]
+    conflicts = [c for c in comparisons if _conflict(c)]
+    if insufficient:
+        out += [f"- **Inconclusive:** {len(insufficient)}/{len(comparisons)} comparisons "
+                f"({', '.join(_ref(c, refs) for c in insufficient)})."]
+    if unchecked:
+        sources = "; ".join(f"{_ref(c, refs)} — {_missing_check_reason(c, _snapshot(entry, c))}"
+                            for c in unchecked)
+        out += [f"- **No evidence check:** {len(unchecked)}/{len(comparisons)} ({sources})."]
+    if conflicts:
+        out.append(f"- **Unresolved assessment conflicts:** {len(conflicts)}.")
+        for c in conflicts:
+            out.append(f"  - {_ref(c, refs)}: {vd.degree(c) or 'unspecified degree'} · {_status(c)} evidence.")
+    if not insufficient and not unchecked and not conflicts:
+        out.append("No inconclusive checks, missing checks, or degree/evidence conflicts recorded.")
+    out.append("")
+
+
+def _span(text: str, verified: bool, out: List[str]) -> None:
+    if not str(text or "").strip():
+        out += ["Not recorded.", ""]
+    elif verified:
+        out += ["> " + _quote(text), ""]
+    else:
+        out += ["Not confirmed verbatim:", "", "> " + _quote(str(text)), ""]
+
+
+def _evidence_pairs(c: dict, out: List[str], snapshot: dict = None) -> None:
+    """Keep every original index, including placeholders and non-supporting candidates.
+
+    Show definitions BEFORE the checker reasons about 'Pair 1', 'Pair 2', etc.
+    A candidate's rationale is not the checker's endorsement; label both separately.
+    Repeated submission spans are cross-referenced to an EARLIER numbered pair.
+    """
+    pairs = c.get("evidence_pairs") or []
+    check = c.get("evidence_check") or {}
+    status = _status(c)
+    supporting = {int(i) for i in check.get("supporting_pair_indices", []) or []
+                  if str(i).isdigit()}
+    out += ["#### Evidence pairs", "",
+            "Each pair links a submission passage to a prior-work passage. "
+            "The label records how the evidence check used it.", ""]
+    seen_submission = {}
+    for i, p in enumerate(pairs, 1):
+        if status == "material":
+            use = "supports overlap" if i in supporting else "not used to support overlap"
+        elif status == "nonmaterial":
+            use = "does not establish material overlap"
+        elif status == "insufficient":
+            use = "inconclusive candidate"
+        else:
+            use = "candidate; no evidence check recorded"
+        out += [f"**Pair {i} — {use}**", ""]
+        cq = str(p.get("claim_quote") or "").strip()
+        key = (" ".join(cq.split()), bool(p.get("claim_quote_verified")))
+        if cq and key in seen_submission:
+            out += [f"**Submission:** same passage as Pair {seen_submission[key]}.", ""]
+        else:
+            out += ["**Submission passage**", ""]
+            _span(cq, bool(p.get("claim_quote_verified")), out)
+            if cq:
+                seen_submission[key] = i
+        out += ["**Prior-work passage**", ""]
+        _span(p.get("paper_quote"), bool(p.get("paper_quote_verified")), out)
+        if p.get("rationale"):
+            out += ["**Proposed correspondence:** " + p["rationale"].strip(), ""]
+    if not pairs:
+        out += ["No evidence pairs recorded.", ""]
+    out += ["#### Evidence-check assessment", "",
+            "**Status:** " + _EC_PHRASE.get(status, "no evidence check recorded") + ".", ""]
+    if status == "material":
+        indices = ", ".join(str(i) for i in sorted(supporting)) or "none recorded"
+        out += [f"**Supporting pairs:** {indices}.", ""]
+        missing = sorted(supporting - set(range(1, len(pairs) + 1)))
+        if missing:
+            out += ["**Record inconsistency:** supporting indices without a stored pair: "
+                    + ", ".join(map(str, missing)) + ".", ""]
+    if check.get("reasoning"):
+        out += [check["reasoning"].strip(), ""]
+    unresolved = c.get("unresolved_deficit") or (snapshot or {}).get("unresolved_deficit")
+    reason = c.get("unresolved_reason") or (snapshot or {}).get("unresolved_reason")
+    if unresolved:
+        out += ["**Unresolved question:** " + str(unresolved).strip(), ""]
+    if reason:
+        out += ["**Recorded stopping reason:** " + str(reason).replace("_", " ") + ".", ""]
+
+
+def _comparison_detail(c: dict, entry: dict, refs: dict, pool: dict,
+                       out: List[str]) -> None:
+    snapshot = _snapshot(entry, c)
+    pm = pool.get(_pid(c), {})
+    out += ["---", "", f"### {_ref(c, refs)} — {c.get('title') or 'Untitled prior work'}", "",
+            f"**Source used:** {_document_label(snapshot)}", ""]
+    cite = _cite(c.get("authors") or pm.get("authors"), c.get("year") or pm.get("year"))
+    if cite:
+        out += [cite, ""]
+    out += [f"**Assessment:** {_related_cell((vd.degree(c), _status(c)))}", "",
+            "#### Comparison", ""]
+    for label, key in (("Shared contribution", "what_is_shared"),
+                       ("Reported difference", "submission_delta")):
+        if c.get(key):
+            out += [f"**{label}:** {c[key].strip()}", ""]
+    note = c.get("assessment") or c.get("brief_note")
+    if note:
+        out += ["**Novelty argument:** " + note.strip(), ""]
+    # Pair-referencing checker reasoning belongs below the pairs. The optional
+    # prior-work narrative remains available, but cannot interrupt that sequence.
+    _evidence_pairs(c, out, snapshot)
+    if c.get("paper_realization"):
+        out += ["#### Additional prior-work context", ""]
+        _segments(c["paper_realization"], out)
+
+
+def build(data_dir: str, submission_id: str, variant: str = "") -> str:
+    sub = Path(data_dir) / submission_id
+    suffix = f"_{variant}" if variant else ""
+    a = _load(sub / f"{submission_id}_artifact_a{suffix}.json")
+    if a is None:
+        raise FileNotFoundError(f"{submission_id}_artifact_a{suffix}.json not found")
+    b = _load(sub / f"{submission_id}_artifact_b{suffix}.json") or {}
+    meta = _load(sub / f"{submission_id}.json") or {}
+    claims_doc = _load(sub / f"{submission_id}_claims.json") or {"claims": []}
+    ranked = _load(sub / "related_work_data" / "ranked_papers.json") or []
+    # The live pool supplies bibliographic authors/year only, NEVER pinned versions.
+    pool = {_pid(p): p for p in ranked}
+    claims = [c for c in claims_doc.get("claims", []) if c.get("status") != "rejected"]
+    a_by = {e.get("claim_id"): e for e in a.get("claims", [])}
+    b_by = {v.get("claim_id"): v for v in b.get("per_claim", [])}
+    order = [c["id"] for c in claims] or list(a_by)
+    by_paper = {}
+    for cid in order:
+        entry = a_by.get(cid) or {}
+        for c in entry.get("comparisons", []) or []:
+            pid = _pid(c)
+            pm = pool.get(pid, {})
+            row = by_paper.setdefault(pid, {"title": c.get("title") or pid,
+                "cite": _cite(c.get("authors") or pm.get("authors"), c.get("year") or pm.get("year")),
+                "claims": {}, "versions": {}})
+            row["claims"][cid] = (vd.degree(c), _status(c))
+            row["versions"][cid] = _document_label(_snapshot(entry, c))
+    paper_order = sorted(by_paper, key=lambda p: (by_paper[p]["title"].casefold(), p))
+    refs = {pid: f"R{i}" for i, pid in enumerate(paper_order, 1)}
+    out: List[str] = ["# Novelty Assessment", ""]
+    title = meta.get("title") or claims_doc.get("title")
+    if title:
+        out += [f"**{title}**", ""]
+    authors = _authors_from_tei(sub, submission_id)
+    if authors:
+        out += [f"Authors: {authors}", ""]
+    if meta.get("publication_date"):
+        out += [f"Publication date: {meta['publication_date']}", ""]
+    if claims:
+        out += ["## Extracted claims", ""]
+        for i, c in enumerate(claims, 1):
+            out += [f"### Claim {i}", "", (c.get("claim_text") or "").strip(), "",
+                    "**Claim anchor in the submission**", ""]
+            _span(c.get("evidence_quote"), bool(c.get("evidence_verified")), out)
+    cols = [(cid, f"Claim {i + 1}") for i, cid in enumerate(order) if cid in a_by]
+    if by_paper:
+        out += ["## Related work examined", "",
+                "Source IDs below identify the same paper throughout the report. "
+                "Version dates come from the corresponding run record.", "",
+                "| Source | Paper | Version used · date | " + " | ".join(label for _, label in cols) + " |",
+                "|" + "---|" * (3 + len(cols))]
+        for pid in paper_order:
+            row = by_paper[pid]
+            documents = list(dict.fromkeys(row["versions"].values()))
+            version = documents[0] if len(documents) == 1 else "; ".join(
+                f"{label}: {row['versions'][cid]}" for cid, label in cols if cid in row["versions"])
+            name = " — ".join(x for x in (row["title"], row["cite"]) if x)
+            cells = [refs[pid], name, version] + [_related_cell(row["claims"].get(cid)) for cid, _ in cols]
+            out.append("| " + " | ".join(_cell(x) for x in cells) + " |")
+        out += ["", _RELATED_LEGEND, ""]
+    for i, cid in enumerate(order, 1):
+        entry = a_by.get(cid)
+        if entry is None:
+            continue
+        recorded = b_by.get(cid) or {}
+        comparisons = entry.get("comparisons") or []
+        out += ["---", "", f"# Claim {i} — Review", "",
+                (entry.get("claim_text") or entry.get("claim_name") or "").strip(), "",
+                "## Claim-level conclusion", "",
+                "**Assessment:** " + _claim_assessment(comparisons, recorded.get("verdict"),
+                                                      recorded.get("rationale")), ""]
+        _comparison_summary(comparisons, refs, out)
+        _evidence_limits(entry, comparisons, refs, out)
+        out += ["**Coverage:** " + _coverage(comparisons), ""]
+        # No claim_realization / 'What the submission does for this claim' section.
+        # Keep overlaps plus explicit conflicts, so every unresolved conflict named
+        # above is inspectable even if its proposed degree is superficial.
+        details = [c for c in comparisons if vd.is_overlap(c) or _conflict(c)]
+        details.sort(key=vd.sort_key)
+        out += ["## Detailed comparisons", ""]
+        if not details:
+            out += ["No overlapping comparison or assessment/evidence conflict recorded.", ""]
+        for c in details:
+            _comparison_detail(c, entry, refs, pool, out)
+    out += ["---", "", _QUOTE_NOTE]
+    return "\n".join(out).rstrip() + "\n"
+
+
+def quote_index(data_dir: str, submission_id: str, variant: str = "") -> dict:
+    """Every VERIFIED quote this export blockquotes, keyed by its own normalised text.
+
+    Built for the frontend's Summary tab: it renders `build()`'s own text verbatim (so
+    the tab's content stays byte-identical to the export by construction) and needs a
+    side channel to know, for a given rendered blockquote, which document it can be
+    found in and what id to scroll the PDF viewer to. `_quote()` normalises with
+    `' '.join(text.split())` before wrapping in curly quotes; this index normalises the
+    SAME way, so a rendered blockquote's text (curly quotes stripped) is the exact key
+    to look up here -- no fuzzy matching needed.
+
+    Unverified spans are not indexed: `_span()` renders them as "Not confirmed verbatim"
+    prose, not a clickable quote, and a search for text that is not actually in the PDF
+    would silently fail there anyway.
+
+    Returns {"submission": [{"id","text"}], "papers": {paper_id: {"title", "quotes":
+    [{"id","text"}]}}, "refs": {paper_id: "R#"}} -- `refs` lets the frontend resolve the
+    "### R7 — Title" headings it walks past back to a paper_id, the same numbering
+    `build()` itself assigns.
+    """
+    sub = Path(data_dir) / submission_id
+    suffix = f"_{variant}" if variant else ""
+    a = _load(sub / f"{submission_id}_artifact_a{suffix}.json")
+    if a is None:
+        return {"submission": [], "papers": {}, "refs": {}}
+    claims_doc = _load(sub / f"{submission_id}_claims.json") or {"claims": []}
+    claims = [c for c in claims_doc.get("claims", []) if c.get("status") != "rejected"]
+
+    sub_list, sub_seen = [], {}
+
+    def add_sub(text) -> None:
+        key = " ".join(str(text or "").split())
+        if not key or key in sub_seen:
+            return
+        item = {"id": f"sub#{len(sub_list)}", "text": key}
+        sub_list.append(item)
+        sub_seen[key] = item["id"]
+
+    for c in claims:
+        if c.get("evidence_verified"):
+            add_sub(c.get("evidence_quote"))
+
+    papers: dict = {}
+
+    def add_paper(pid: str, title: str, text) -> None:
+        key = " ".join(str(text or "").split())
+        if not key:
+            return
+        p = papers.setdefault(pid, {"title": title, "quotes": [], "_seen": {}})
+        if key in p["_seen"]:
+            return
+        item = {"id": f"pap:{pid}#{len(p['quotes'])}", "text": key}
+        p["quotes"].append(item)
+        p["_seen"][key] = item["id"]
+
+    for entry in a.get("claims", []) or []:
+        for c in entry.get("comparisons", []) or []:
+            pid, title = _pid(c), c.get("title") or _pid(c)
+            for seg in c.get("paper_realization") or []:
+                if seg.get("kind") == "quote" and seg.get("verified"):
+                    add_paper(pid, title, seg.get("content"))
+            for p in c.get("evidence_pairs") or []:
+                if p.get("claim_quote_verified"):
+                    add_sub(p.get("claim_quote"))
+                if p.get("paper_quote_verified"):
+                    add_paper(pid, title, p.get("paper_quote"))
+
+    for p in papers.values():
+        p.pop("_seen", None)
+
+    # The SAME paper_order/refs assignment build() uses, so "### R7 —" in the rendered
+    # text resolves to the paper_id this index filed its quotes under.
+    by_paper_titles = {pid: papers[pid]["title"] for pid in papers}
+    for entry in a.get("claims", []) or []:
+        for c in entry.get("comparisons", []) or []:
+            by_paper_titles.setdefault(_pid(c), c.get("title") or _pid(c))
+    paper_order = sorted(by_paper_titles, key=lambda p: (by_paper_titles[p].casefold(), p))
+    refs = {pid: f"R{i}" for i, pid in enumerate(paper_order, 1)}
+
+    return {"submission": sub_list, "papers": papers, "refs": refs}
+
+
+def check_sources(data_dir: str, submission_id: str, variant: str = "") -> str:
+    """Read-only diagnosis. Current manifest entries are NOT historical provenance.
+
+    The report is deliberately not repaired from the latest manifest or an arbitrary
+    log for the same paper. Such a log may belong to another review/run/version.
+    """
+    sub = Path(data_dir) / submission_id
+    suffix = f"_{variant}" if variant else ""
+    artifact_path = sub / f"{submission_id}_artifact_a{suffix}.json"
+    a = json.loads(artifact_path.read_text(encoding="utf-8"))
+    manifest_path = sub / "related_work_data" / "versions.json"
+    manifest = _load(manifest_path) or {}
+    if not isinstance(manifest, dict):
+        manifest = {}
+    lines = [f"Artifact: {artifact_path}",
+             f"Current versions.json: {manifest_path.exists()} ({len(manifest)} entries)",
+             "NOTE: current manifest values below are diagnostic only; not evidence of what an old run read.", ""]
+    for entry in a.get("claims", []) or []:
+        comps = entry.get("comparisons") or []
+        log = entry.get("run_log")
+        raw_prior = log.get("prior_work") if isinstance(log, dict) else None
+        prior = raw_prior if isinstance(raw_prior, list) else []
+        prior_by = {_pid(p): p for p in prior if isinstance(p, dict)}
+        run_id = log.get("run_id") if isinstance(log, dict) else None
+        lines += [f"Claim {entry.get('claim_id')}: {len(comps)} comparisons",
+                  f"  run_log type: {type(log).__name__}; run_id: {run_id or 'not recorded'}",
+                  f"  prior_work type: {type(raw_prior).__name__}; records: {len(prior)}"]
+        matched = complete = current_complete = 0
+        incomplete_examples = []
+        for c in comps:
+            pid = _pid(c)
+            p = prior_by.get(pid)
+            if p is not None:
+                matched += 1
+            # Mirror the export's supported format; malformed historical logs are
+            # reported above rather than allowed to crash this diagnostic command.
+            if isinstance(log, dict) and (raw_prior is None or isinstance(raw_prior, list)):
+                snap = _snapshot(entry, c)
+            else:
+                snap = c
+            version, day = snap.get("pinned_version"), snap.get("pinned_version_date")
+            valid_day = bool(re.match(r"^\d{4}-\d{2}-\d{2}(?:$|[T ])", str(day or "")))
+            ready = bool(version and valid_day)
+            complete += int(ready)
+            current = manifest.get(pid) or {}
+            if not isinstance(current, dict):
+                current = {}
+            current_complete += int(bool(current.get("version") and current.get("version_date")))
+            if not ready and len(incomplete_examples) < 9:
+                incomplete_examples += [
+                    f"    {pid} — {c.get('title') or ''}",
+                    f"      run record matched: {p is not None}; pinned_version={version!r}; pinned_version_date={day!r}",
+                    f"      current manifest (UNBOUND): version={current.get('version')!r}; version_date={current.get('version_date')!r}",
+                ]
+        lines += [f"  ID matches in embedded log: {matched}/{len(comps)}",
+                  f"  Exportable version + date: {complete}/{len(comps)}",
+                  f"  Version + date in current manifest: {current_complete}/{len(comps)}"]
+        lines += incomplete_examples
+        lines.append("")
+    log_dir = sub / "run_logs"
+    files = sorted(log_dir.glob("*.json")) if log_dir.is_dir() else []
+    lines += [f"Standalone log files: {len(files)} in {log_dir}",
+              "Standalone logs are not automatically attached: they must be linked to this exact run.",
+              "No files changed. No downloads. No model calls."]
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":

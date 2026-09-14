@@ -87,4 +87,9 @@ export const api = {
     if (!r.ok) throw new Error((await r.text()) || r.statusText)
     return r.text()
   },
+
+  // Which document each verified quote in the export text stands in, and what id to
+  // scroll the PDF viewer to -- lets the Summary tab render the export text verbatim
+  // and still jump to a quote in the PDF, the same way the Review tab does.
+  quoteIndex: (id) => j('GET', `/submissions/${id}/review/quote_index`),
 }
