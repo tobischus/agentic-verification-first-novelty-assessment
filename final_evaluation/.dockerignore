@@ -1,0 +1,25 @@
+# Nothing sensitive or study-identifying goes into the image. In cloud mode the study's
+# assets live in Supabase Storage (uploaded with `upload-assets`) and the responses live
+# in Supabase Postgres -- the container needs neither the frozen inputs nor any local
+# database, so shipping them would be pure risk with no benefit.
+
+../data
+../comparison
+../DeepReviewer-v2
+../OpenNovelty
+../eval/out
+
+private/
+backups/
+results/
+inputs/
+manifests/
+.env
+.env.*
+!.env.example
+
+dashboard/frontend/node_modules
+__pycache__
+*.pyc
+*.sqlite
+.pytest_cache

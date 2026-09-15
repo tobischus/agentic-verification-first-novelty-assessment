@@ -1,0 +1,25 @@
+# Secrets, credentials, participant data, and anything derived from them.
+# Rule of thumb: if it identifies a person, unlocks an account, or is a study response,
+# it does not belong in git.
+
+.env
+.env.*
+!.env.example
+
+private/
+backups/
+results/
+inputs/
+manifests/
+
+# Frontend build artefacts and dependencies
+dashboard/frontend/node_modules/
+dashboard/frontend/dist/
+dashboard/frontend/public/instructions.txt
+dashboard/frontend/public/criteria.json
+
+__pycache__/
+*.pyc
+*.sqlite
+*.sqlite-journal
+.pytest_cache/

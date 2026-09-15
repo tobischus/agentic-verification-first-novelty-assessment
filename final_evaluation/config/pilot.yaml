@@ -1,0 +1,50 @@
+# Pilot study definition: dashboard_pilot_v1. See PROTOCOL.md section 6.
+#
+# This is the ONLY config consumed by `inventory`, `import-pilot`, `validate-inputs`,
+# and `seed-pilot`. Changing a value here after `seed-pilot` has run does not retroactively
+# change an already-frozen Assignment -- see models.py's Assignment docstring.
+
+study:
+  id: dashboard_pilot_v1
+  title: "Novelty report comparison -- development pilot"
+  is_pilot: true
+  rubric_version: novelty_report_judge_v2
+  instructions_version: human_instructions_v1
+  ui_version: dashboard_v1
+  assignment_seed: 43        # A/B orientation
+  order_seed_base: 100       # per-rater order seed = order_seed_base + participant ordinal
+
+systems:
+  - agent
+  - linear
+  - opennovelty
+  - deepreviewer
+  - afzal
+
+papers:
+  graphrag_when_to_use:
+    title: "When to use Graphs in RAG: A Comprehensive Analysis for Graph Retrieval-Augmented Generation"
+  transducing_language_models:
+    title: "Transducing Language Models"
+
+# The six pilot tasks, fixed in the brief (section 6). `pair` lists the two system ids in
+# their CANONICAL (alphabetical) order -- which one a given rater sees as "A" is decided
+# per participant by the seeded orientation function (security.orientation_for), not here.
+tasks:
+  - paper: graphrag_when_to_use
+    pair: [agent, linear]
+  - paper: graphrag_when_to_use
+    pair: [agent, opennovelty]
+  - paper: graphrag_when_to_use
+    pair: [afzal, deepreviewer]
+  - paper: transducing_language_models
+    pair: [agent, linear]
+  - paper: transducing_language_models
+    pair: [deepreviewer, linear]
+  - paper: transducing_language_models
+    pair: [afzal, opennovelty]
+
+participants:
+  count: 2
+  prefix: "R"          # R01, R02
+  test: true            # marks Participant.is_test -- excluded from any "real study" framing

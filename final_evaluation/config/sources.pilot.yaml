@@ -1,0 +1,134 @@
+# Explicit source -> (paper, system, run) binding for the pilot import.
+#
+# Produced by running `python -m final_evaluation.cli inventory --config
+# final_evaluation/config/pilot.yaml` and then resolving every match BY HAND -- nothing
+# here is "the file with the newest mtime". Every path is either the one file that
+# exists, or a resolution rule with a stated reason. See the "AMBIGUOUS" note under
+# graphrag_when_to_use/agent below for the one case that needed one.
+#
+# import_pilot.py reads ONLY this file (plus config/pilot.yaml for the task list) -- it
+# never globs comparison/outputs/ itself, so an untracked draft file appearing there
+# later cannot silently change what a re-import produces.
+
+graphrag_when_to_use:
+  submission:
+    pdf: data/graphrag_when_to_use/graphrag_when_to_use.pdf
+    # Text fallback / E1 input. Frozen 2026-09-12, verified in-session against MinerU's
+    # own math/table counts (8 display + 30 inline formulas, 21 html tables) -- see
+    # eval/pilot_submission.py, which produced this file, for the check itself.
+    text: eval/out/pilot_v1/graphrag_when_to_use__submission.txt
+
+  agent:
+    kind: rendered           # regenerated at import time, not copied from a static file
+    renderer: battle_export.build
+    variant: agent
+    artifact_a: data/graphrag_when_to_use/graphrag_when_to_use_artifact_a_agent.json
+    artifact_b: data/graphrag_when_to_use/graphrag_when_to_use_artifact_b_agent.json
+    resolution_note: >
+      comparison/outputs/graphrag_when_to_use__agent.md, __agent_v2.md, __agent_v3.md and
+      __agent_v4.md are FOUR undocumented, untracked variants (none mentioned in
+      comparison/outputs/PROVENANCE.md), and NONE of the four byte-matches a fresh call to
+      the CURRENT battle_export.build() over the artifact files above -- battle_export.py
+      itself has kept changing locally while those snapshots were made at different
+      points in that process. Picking any one of the four by mtime would import a
+      renderer draft, not a reviewable output. Resolution: import_pilot.py calls
+      battle_export.build(variant="agent") ITSELF at import time (deterministic, zero
+      model calls -- the claim/paper/evidence data is untouched, only its text rendering
+      runs) and freezes THAT output as the bound content, with both the artifact files'
+      hashes and battle_export.py's own hash recorded in the manifest. The four ambiguous
+      files are left exactly where they are, unused, and are listed as superseded drafts
+      in the import report.
+
+  linear:
+    kind: rendered
+    renderer: battle_export.build
+    variant: linear
+    artifact_a: data/graphrag_when_to_use/graphrag_when_to_use_artifact_a_linear.json
+    artifact_b: data/graphrag_when_to_use/graphrag_when_to_use_artifact_b_linear.json
+    resolution_note: >
+      Only one comparison/outputs/graphrag_when_to_use__linear.md exists, but it also
+      does not match a fresh render (battle_export.py changed after it was written).
+      Same resolution as agent: rendered fresh at import time from the artifact files.
+
+  opennovelty:
+    kind: native_pdf
+    path: "comparison/OpenNovelty/novelty_report_lightweight_When_to_use_Graphs_in_RAG_A_Comprehensive_Analysis_20260104 (1).pdf"
+    resolution_note: Single match by title; the authors' own PDF, including the graphical taxonomy tree.
+
+  deepreviewer:
+    kind: deepreviewer_job
+    job_dir: DeepReviewer-v2/data/jobs/f6481f23-5991-4642-9d03-c1fb98c85ba4
+    file: final_report.md
+    resolution_note: >
+      Single completed job matched by upload filename ("15574_When_to_use_Graphs_in_RA",
+      a truncated arXiv-id-prefixed filename stem -- see inventory.py's matching note).
+      final_report.md is the FULL native review (Summary through Scores, References
+      included); the comparison/outputs/graphrag_when_to_use__deepreviewer.md file is
+      only the extracted Novelty Verification matrix section and is NOT used here -- the
+      brief requires the full review, not the earlier E1 pilot's narrower extract.
+      final_report.md carries no appended submission text (that only exists in
+      final_report.pdf), so the submission-boundary exclusion the brief asks for is
+      satisfied by using the .md rather than by any trimming step.
+
+  afzal:
+    kind: concat_text
+    parts:
+      - data/graphrag_when_to_use/summary.txt
+      - "---"
+      - data/graphrag_when_to_use/novelty_delta_analysis.txt
+    resolution_note: >
+      Same two-file, same-order rule already used for
+      comparison/outputs/transducing_language_models__afzal.md (verified reproducing it
+      byte-for-byte before this file was written). Full native output, both files, in
+      order.
+
+transducing_language_models:
+  submission:
+    pdf: data/transducing_language_models/transducing_language_models.pdf
+    text: eval/out/pilot_v1/transducing_language_models__submission.txt
+
+  agent:
+    kind: rendered
+    renderer: battle_export.build
+    variant: agent
+    artifact_a: data/transducing_language_models/transducing_language_models_artifact_a_agent.json
+    artifact_b: data/transducing_language_models/transducing_language_models_artifact_b_agent.json
+    resolution_note: >
+      Single comparison/outputs/transducing_language_models__agent.md exists (no _v2/_v3
+      ambiguity here), but for consistency with graphrag (same renderer version for
+      every report in the pilot, per the brief) this is ALSO rendered fresh at import
+      time rather than copied statically.
+
+  linear:
+    kind: rendered
+    renderer: battle_export.build
+    variant: linear
+    artifact_a: data/transducing_language_models/transducing_language_models_artifact_a_linear.json
+    artifact_b: data/transducing_language_models/transducing_language_models_artifact_b_linear.json
+    resolution_note: Rendered fresh at import time; same reasoning as graphrag/agent above.
+
+  opennovelty:
+    kind: native_pdf
+    path: comparison/OpenNovelty/novelty_report_lightweight_Transducing_Language_Models_20251227.pdf
+    resolution_note: Single match by title.
+
+  deepreviewer:
+    kind: deepreviewer_job
+    job_dir: DeepReviewer-v2/data/jobs/2ecb0405-2604-4027-8f61-d5bb7e0509a6
+    file: final_report.md
+    resolution_note: >
+      Single completed job, title "Transducing Language Models" (untruncated -- this
+      upload's filename was short enough to fit DeepReviewer's stored-title field
+      whole). Full native review, References included, no appended submission text.
+
+  afzal:
+    kind: concat_text
+    parts:
+      - data/transducing_language_models/summary.txt
+      - "---"
+      - data/transducing_language_models/novelty_delta_analysis.txt
+    resolution_note: >
+      Verified byte-for-byte identical to the existing
+      comparison/outputs/transducing_language_models__afzal.md before this file was
+      written (694-line DeepReviewer check aside, this is the earlier
+      summary.txt + "---" + novelty_delta_analysis.txt rule from PROVENANCE.md).

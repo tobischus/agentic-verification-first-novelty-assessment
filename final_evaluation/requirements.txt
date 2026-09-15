@@ -1,0 +1,18 @@
+# Runtime for the study dashboard. Deliberately small: no LLM SDK, no PDF parser, no
+# pipeline dependency -- the hosted process only serves frozen files and stores ratings.
+# (E1's judge adapter imports eval/pilot_judge.py, which needs langchain-openai, but that
+# path is CLI-only and never reached by the web process -- see evaluation/e1/adapter.py.)
+
+fastapi==0.115.8
+uvicorn[standard]==0.34.0
+SQLAlchemy==2.0.37
+pydantic==2.10.6
+python-dotenv==1.0.1
+httpx==0.28.1
+PyYAML==6.0.1
+
+# PostgreSQL driver -- used only when DATABASE_URL points at Supabase; harmless locally.
+psycopg2-binary==2.9.13
+
+# Tests
+pytest==9.1.1
