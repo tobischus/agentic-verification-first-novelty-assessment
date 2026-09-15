@@ -1,0 +1,57 @@
+# TEMPLATE for the main study. NOT loaded by any command until you copy this to
+# `main.yaml`, fill in the 20 paper ids/titles and 10 designated human-rated papers, and
+# resolve their sources the same way config/sources.pilot.yaml resolved the pilot's (one
+# entry per paper x system, explicit path, explicit reasoning for any ambiguity -- never
+# "newest file"). Nothing reads this file automatically; `import-pilot`/`seed-pilot` only
+# ever touch the pilot config unless you explicitly pass `--config
+# final_evaluation/config/main.yaml` to the same commands.
+#
+# Design per PROTOCOL.md section 6:
+#   - 10 of the 20 papers get human ratings.
+#   - Every one of those 10 papers gets an agent-vs-linear task (10 tasks).
+#   - Plus two further tasks per paper (20 tasks), for 30 tasks total.
+#   - Those 20 "further" pairs are spread across the nine OTHER system pairings
+#     (every pairing besides agent-vs-linear: agent-opennovelty, agent-deepreviewer,
+#     agent-afzal, linear-opennovelty, linear-deepreviewer, linear-afzal,
+#     opennovelty-deepreviewer, opennovelty-afzal, deepreviewer-afzal), each pairing
+#     used at least twice -- assign these BEFORE looking at any main-study judge
+#     (E1) result, exactly as the pilot's six tasks were fixed before judging.
+#   - Each of the 30 tasks gets exactly 2 raters -> 60 completed ratings total.
+#   - 2/3/4 available participants -> 30/20/15 tasks per person (an even split of the
+#     30 tasks x 2 raters = 60 assignment-slots).
+#   - The pilot's 2 papers serve as this study's TRAINING/practice cases (see
+#     prompts/human_instructions.md and the Instructions page's practice-round note);
+#     they carry no scored tasks of their own in the main study.
+
+study:
+  id: main_study_v1          # placeholder -- must differ from dashboard_pilot_v1
+  title: "Novelty report comparison -- main study"
+  is_pilot: false
+  rubric_version: novelty_report_judge_v2   # must match the pilot unless a new version is deliberately frozen
+  instructions_version: human_instructions_v1
+  ui_version: dashboard_v1
+  assignment_seed: 43
+  order_seed_base: 100
+
+systems:
+  - agent
+  - linear
+  - opennovelty
+  - deepreviewer
+  - afzal
+
+# Fill with exactly 20 entries; mark which 10 are human-rated.
+papers: {}
+#  some_paper_key:
+#    title: "..."
+#    human_rated: true   # exactly 10 of the 20 must be true
+
+# Populate once `papers` above is final -- see the design note at the top of this file.
+tasks: []
+#  - paper: some_paper_key
+#    pair: [agent, linear]
+
+participants:
+  count: 0        # set to the number of confirmed main-study raters before seeding
+  prefix: "M"
+  test: false

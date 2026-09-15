@@ -1,0 +1,38 @@
+# Render Free web service: ONE service, frontend + API, free .onrender.com HTTPS URL.
+# No Render Postgres: the free database expires after 30 days, so all data lives in
+# Supabase instead (see SETUP_HOSTING.md). No paid plan, no custom domain, no add-ons.
+#
+# Secrets are NOT in this file. Set them in Render's dashboard under the service's
+# Environment settings -- the four marked `sync: false` below will be prompted for.
+
+services:
+  - type: web
+    name: novelty-study-dashboard
+    runtime: docker
+    plan: free
+    region: frankfurt          # EU; change only if you deliberately want another region
+    dockerfilePath: ./final_evaluation/Dockerfile
+    dockerContext: .           # repository root -- final_evaluation must be importable
+    healthCheckPath: /api/health
+    autoDeploy: false          # deploy deliberately, not on every push during a live study
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: STORAGE_BACKEND
+        value: supabase
+      - key: DATABASE_URL          # Supabase POOLER connection string (see SETUP_HOSTING.md)
+        sync: false
+      - key: SESSION_SECRET
+        sync: false
+      - key: ACCESS_CODE_PEPPER
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_BUCKET
+        sync: false
+      - key: PUBLIC_BASE_URL
+        sync: false
+      - key: STUDY_CONTACT
+        sync: false

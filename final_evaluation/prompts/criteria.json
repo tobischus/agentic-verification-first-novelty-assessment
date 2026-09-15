@@ -1,0 +1,40 @@
+{
+  "rubric_version": "novelty_report_judge_v2",
+  "source_prompt_sha256": "4b839942e7d178a9327d85ea000bc2095c4e8e15c57ff0622c13b73fca0deacc",
+  "note": "Short questions are the exact wording from PROTOCOL section 8. Full descriptions are copied verbatim from prompts/novelty_report_judge_v2.txt's CRITERIA section (the human rubric must not diverge from the judge rubric). This file has no criteria, weights, or wording the prompt file does not also carry.",
+  "criteria": [
+    {
+      "key": "submission_fidelity",
+      "short_question": "Which report more accurately represents the submission's contributions, methods, assumptions, and limitations?",
+      "full_description": "Which report more faithfully represents the submission's central contributions, methods, assumptions, and scope? Check against the submission. Consider consequential omissions, misattributions, and distortions. Do not evaluate the factual accuracy of unavailable prior-work papers."
+    },
+    {
+      "key": "comparison_specificity",
+      "short_question": "Which report provides more concrete and decision-relevant comparisons with prior work?",
+      "full_description": "Which report identifies more concrete and decision-relevant shared contributions and differences? Reward distinctions between contribution roles, assumptions, capabilities, findings, and scope when relevant. Do not reward detail that does not affect the novelty argument. Shared topics or methods do not by themselves establish a shared contribution; differences do not by themselves establish novelty. This criterion assesses the analysis as presented, not independently verified prior-work correctness."
+    },
+    {
+      "key": "presented_evidence",
+      "short_question": "Which report better supports its important statements with relevant, attributable evidence or explanations?",
+      "full_description": "Which report more clearly connects its important statements to identifiable sources and relevant supporting passages or explanations? Assess whether the displayed evidence supports the associated argument on its face, and whether the source attribution is usable. Do not reward citation counts, mandatory quotation formats, or self-reported verification labels. Do not certify the authenticity of prior-work quotations. Distinguish missing evidence from demonstrated falsehood."
+    },
+    {
+      "key": "conclusion_warrant",
+      "short_question": "Which report better justifies its novelty judgment through its comparisons and their limitations?",
+      "full_description": "Which report's novelty conclusion follows more convincingly from its own presented comparisons and their limitations? Assess what prior work already establishes, what the submission adds, and whether the novelty judgment follows. Penalize internal contradictions, unsupported certainty, and unhelpful evasiveness. \"No overlap found\" is not proof of novelty across the literature. A broader scope or additional application is not automatically a scientifically significant contribution. Judge substance, not matching terminology, headings, formats, or verdict labels. Do not treat publication acceptance or rejection as a novelty gold label."
+    },
+    {
+      "key": "reviewer_usefulness",
+      "short_question": "Which report better helps you assess the submission's novelty with reasonable effort?",
+      "full_description": "Which report better helps a reviewer identify the important novelty issues, supporting comparisons, remaining contributions, and open questions with reasonable effort? Consider organization, prioritization, clarity, completeness of decision-relevant information, and unnecessary repetition. Length, brevity, tables, technical detail, or polished wording are not inherently good or bad. Evaluate the supplied report, not an imagined interactive interface."
+    }
+  ],
+  "winner_values": ["A", "B", "tie", "unclear"],
+  "unclear_reasons": [
+    "Insufficient report evidence",
+    "Insufficient domain expertise",
+    "Ambiguous criterion",
+    "Other"
+  ],
+  "reason_max_words": 50
+}
