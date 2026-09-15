@@ -61,7 +61,7 @@ def build_plan(config_path: str) -> dict:
             })
     return {
         "config_path": config_path,
-        "rubric_path": "final_evaluation/prompts/novelty_report_judge_v2.txt",
+        "rubric_path": "final_evaluation/prompts/novelty_report_judge_v3.txt",
         "model": "gpt-5.6-terra", "effort": "medium",
         "calls": calls,
     }
@@ -89,7 +89,7 @@ def execute_plan(plan: dict, out_dir: str) -> None:
     sys.path.insert(0, str(REPO_ROOT / "eval"))
     import pilot_judge  # the existing, already-tested judge harness
 
-    rubric = (FE_ROOT / "prompts" / "novelty_report_judge_v2.txt").read_text(encoding="utf-8")
+    rubric = (FE_ROOT / "prompts" / "novelty_report_judge_v3.txt").read_text(encoding="utf-8")
     llm = pilot_judge.make_llm()
 
     out_path = Path(out_dir) / "judge_calls.jsonl"

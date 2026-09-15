@@ -281,7 +281,7 @@ def _build_export(db: Session, study_id: str) -> bytes:
 
         try:
             from pathlib import Path
-            rubric_path = Path(__file__).resolve().parents[3] / "prompts" / "novelty_report_judge_v2.txt"
+            rubric_path = Path(__file__).resolve().parents[3] / "prompts" / "novelty_report_judge_v3.txt"
             z.writestr("rubric.txt", rubric_path.read_text(encoding="utf-8"))
         except Exception:
             pass

@@ -27,8 +27,8 @@ study:
   id: main_study_v1          # placeholder -- must differ from dashboard_pilot_v1
   title: "Novelty report comparison -- main study"
   is_pilot: false
-  rubric_version: novelty_report_judge_v2   # must match the pilot unless a new version is deliberately frozen
-  instructions_version: human_instructions_v1
+  rubric_version: novelty_report_judge_v3   # must match the pilot unless a new version is deliberately frozen
+  instructions_version: human_instructions_v2
   ui_version: dashboard_v1
   assignment_seed: 43
   order_seed_base: 100

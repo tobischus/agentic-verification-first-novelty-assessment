@@ -81,6 +81,31 @@ def seed_pilot(config_path: str = "final_evaluation/config/pilot.yaml") -> dict:
                                  assignment_seed=cfg["study"]["assignment_seed"], status="draft")
             db.add(study)
             db.flush()
+        else:
+            # A rubric/instructions revision has to reach an already-seeded study, but it
+            # must never rewrite the version a finalised answer was given under. So the
+            # update happens only while no FinalResponse exists for this study; after
+            # that, the mismatch is reported and the stored versions stay as they are --
+            # the stale study is then the one to close and re-seed under a NEW id.
+            wanted = {"rubric_version": cfg["study"]["rubric_version"],
+                     "instructions_version": cfg["study"]["instructions_version"],
+                     "ui_version": cfg["study"]["ui_version"]}
+            drift = {k: (getattr(study, k), v) for k, v in wanted.items() if getattr(study, k) != v}
+            if drift:
+                n_final = (db.query(models.FinalResponse)
+                          .join(models.Assignment,
+                                models.Assignment.id == models.FinalResponse.assignment_id)
+                          .filter(models.Assignment.study_id == sid).count())
+                if n_final == 0:
+                    for k, (_old, new) in drift.items():
+                        setattr(study, k, new)
+                    summary["versions_updated"] = {k: f"{o} -> {n}" for k, (o, n) in drift.items()}
+                else:
+                    summary["version_drift_kept"] = {
+                        k: f"stored {o!r} != config {n!r}" for k, (o, n) in drift.items()}
+                    summary["version_drift_note"] = (
+                        f"{n_final} finalised response(s) exist -- stored versions left "
+                        "untouched so those answers keep the version they were given under.")
 
         report_ids: dict[tuple[str, str], str] = {}
         for paper_key, pcfg in cfg["papers"].items():

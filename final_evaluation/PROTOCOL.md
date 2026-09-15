@@ -55,14 +55,35 @@ against ratings collected on the earlier one.
 
 ## 3. Rubric
 
-`prompts/novelty_report_judge_v2.txt`, sha256
-`4b839942e7d178a9327d85ea000bc2095c4e8e15c57ff0622c13b73fca0deacc` — a verbatim copy of
-`eval/prompts/novelty_report_judge_v1.txt` as it stood on 2026-09-15, which already
-contained the three agreed substitutions (shared topics/methods; what prior work
-establishes; judge substance not terminology). No criterion was added, removed or
-weighted. `prompts/criteria.json` carries the same five descriptions for the human UI and
-must not diverge; `rubric_version = novelty_report_judge_v2` is stored on every study and
-exported with every response.
+**Current: `prompts/novelty_report_judge_v3.txt`**, sha256
+`567819a36c0561411a5f5e4f3c1c17affd96c6984238fce69dad8edd3cec4ffa`.
+`prompts/criteria.json` carries the same five descriptions for the human UI and must not
+diverge; `rubric_version = novelty_report_judge_v3` is stored on every study and exported
+with every response.
+
+Version history (a revision never rewrites the version a finalised answer was given
+under — `seed-pilot` updates a study's stored version only while it has no finalised
+response, and reports the mismatch instead of overwriting once it has):
+
+- **v2** (2026-09-15), sha256 `4b839942e7d178a9327d85ea000bc2095c4e8e15c57ff0622c13b73fca0deacc`
+  — a verbatim copy of `eval/prompts/novelty_report_judge_v1.txt` as it stood that day,
+  which already contained the three agreed substitutions (shared topics/methods; what
+  prior work establishes; judge substance not terminology).
+- **v3** (2026-09-15) — adds two help sentences to `submission_fidelity` and nothing
+  else: assess descriptions of the submission *throughout both reports, including the
+  comparisons, not only the extracted claims*, and *identical extracted claim text is not
+  by itself a reason to choose tie*. Same five criteria, no weights, no other wording
+  touched. Applied to the judge prompt and `criteria.json` together, so E1 and E2 read
+  the same rubric.
+
+The human instructions are versioned in the same way: **`human_instructions_v2`**
+(2026-09-15) replaces v1's "Do not favor matching terminology…" sentence with "Do not
+prefer terminology, format, length, or positive or negative judgments by themselves.
+Consider clarity and effort when assessing reviewer usefulness.", and adds "Verification
+labels are system claims, not independent validation." Everything else is v1 verbatim.
+A participant's consent record stores the sha256 of the text they actually saw
+(`Participant.consent_instructions_sha256`), so a later revision cannot retroactively
+claim they consented to it.
 
 Five criteria, judged independently, no overall winner, no numeric scale:
 `submission_fidelity`, `comparison_specificity`, `presented_evidence`,

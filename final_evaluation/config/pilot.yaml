@@ -8,8 +8,8 @@ study:
   id: dashboard_pilot_v1
   title: "Novelty report comparison -- development pilot"
   is_pilot: true
-  rubric_version: novelty_report_judge_v2
-  instructions_version: human_instructions_v1
+  rubric_version: novelty_report_judge_v3
+  instructions_version: human_instructions_v2
   ui_version: dashboard_v1
   assignment_seed: 43        # A/B orientation
   order_seed_base: 100       # per-rater order seed = order_seed_base + participant ordinal

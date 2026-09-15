@@ -1,12 +1,12 @@
 {
-  "rubric_version": "novelty_report_judge_v2",
-  "source_prompt_sha256": "4b839942e7d178a9327d85ea000bc2095c4e8e15c57ff0622c13b73fca0deacc",
-  "note": "Short questions are the exact wording from PROTOCOL section 8. Full descriptions are copied verbatim from prompts/novelty_report_judge_v2.txt's CRITERIA section (the human rubric must not diverge from the judge rubric). This file has no criteria, weights, or wording the prompt file does not also carry.",
+  "rubric_version": "novelty_report_judge_v3",
+  "source_prompt_sha256": "567819a36c0561411a5f5e4f3c1c17affd96c6984238fce69dad8edd3cec4ffa",
+  "note": "Short questions are the exact wording from PROTOCOL section 8. Full descriptions are copied verbatim from prompts/novelty_report_judge_v3.txt's CRITERIA section (the human rubric must not diverge from the judge rubric). This file has no criteria, weights, or wording the prompt file does not also carry. v3 (2026-09-15) adds two help sentences to submission_fidelity only -- same five criteria, no weights, everything else unchanged from v2.",
   "criteria": [
     {
       "key": "submission_fidelity",
       "short_question": "Which report more accurately represents the submission's contributions, methods, assumptions, and limitations?",
-      "full_description": "Which report more faithfully represents the submission's central contributions, methods, assumptions, and scope? Check against the submission. Consider consequential omissions, misattributions, and distortions. Do not evaluate the factual accuracy of unavailable prior-work papers."
+      "full_description": "Which report more faithfully represents the submission's central contributions, methods, assumptions, and scope? Check against the submission. Consider consequential omissions, misattributions, and distortions. Assess descriptions of the submission throughout both reports, including the comparisons -- not only the extracted claims. Identical or near-identical extracted claim text is not by itself a reason to choose tie; the reports may still describe the submission differently elsewhere. Do not evaluate the factual accuracy of unavailable prior-work papers."
     },
     {
       "key": "comparison_specificity",

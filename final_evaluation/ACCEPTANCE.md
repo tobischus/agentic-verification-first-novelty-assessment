@@ -130,12 +130,10 @@ overwrites an existing file.
 
 ## 4. Open items — not done, and not claimed to be
 
-1. **No real-browser click-through.** The flows above were driven over real HTTP with a
-   cookie/CSRF client, and the built frontend, its assets and the PDF byte-serving were
-   verified; but no automated GUI browser was available in this environment, so nobody
-   has yet *visually* confirmed the rendered layout, the PDF highlight jump, or the
-   overlay at 1366×768. That walkthrough (and the screenshots the brief asks for) is the
-   first thing to do manually — §6 of `SETUP_HOSTING.md` is the same checklist.
+1. ~~**No real-browser click-through.**~~ **Done on 2026-09-15** — see §5 below. What
+   remains unverified by machine is subjective legibility (font sizes, colour contrast,
+   how the two panels feel side by side on a real 1366×768 laptop); the flow, the
+   rendering and the PDF jump are now checked in a real Chrome.
 2. **Supabase and PostgreSQL are implemented but not live-tested.** `SupabaseStorage`,
    the Postgres URL handling, pooling and `upload-assets` are written against the
    documented APIs and the schema is dialect-neutral, but there was no Supabase project
@@ -169,7 +167,53 @@ overwrites an existing file.
    `private/test_study.sqlite`; `private/local_study.sqlite` holds the seeded study with
    zero responses, ready for the real R01/R02 walkthrough.
 
-## 5. Untouched by this work
+## 5. Browser walkthrough — 2026-09-15 (dashboard + instructions revision)
+
+Real Chrome (system install, driven by Playwright; Playwright's own Chromium build is not
+downloaded on this machine), viewport 1366×768, against `cli serve` on the local pilot
+database. 22 of 22 checks passed.
+
+The check is reproducible: `final_evaluation/tests/browser_check.py` (run it with the
+dashboard serving, e.g. `python final_evaluation/tests/browser_check.py <shot-dir>`). Its
+screenshots are in `final_evaluation/results/pilot/browser_check_2026-09-15/` — ten
+images including element shots of a verified and an unverified quote. That directory is
+**gitignored** like the rest of `results/`: the images are study screens, so they stay
+local rather than being published with the code.
+
+| Checked in the browser | Result |
+|---|---|
+| Instructions show v2's replaced sentence, the added "Verification labels…" sentence, and no longer the v1 sentence | pass |
+| Background questions asked once, with the new wording | pass |
+| Second task on the **same paper** does not ask again and shows the stored answers | pass |
+| ✓ count equals verified-quote count; unverified quotes get "–" | pass (300 verified / 6 unverified, ticks and dashes match) |
+| "⤴ PDF" is a separate control, and never appears on a quote with no target | pass (87 jump controls) |
+| Contents navigation present; per-source comparisons collapsed by default and expandable with full content | pass (47 sections) |
+| No validation errors before interaction; errors appear after a submit attempt | pass |
+| Autosave reaches "Saved"; draft and chosen option survive a reload | pass |
+| Submit reaches the confirmation page | pass |
+
+**Two real defects the walkthrough found, both fixed:**
+
+1. A page reload on a task returned to the task list instead of the task being rated.
+   The draft was never lost (the server holds it), but "refresh and carry on" looked
+   like lost work. `App.jsx` now restores the open task from `history.state` on mount.
+2. The background answers were only written at submit time, so a reload before
+   submitting discarded them and asked again. They are now saved the moment both are
+   answered (`TaskRate.saveFamiliarity`); the endpoint still refuses to overwrite an
+   existing answer, so an early save cannot change what an earlier task recorded.
+
+Full suite after the change, against a **fresh** throwaway database
+(`private/test_study2.sqlite`, server on :8012): `21 passed`.
+
+**Noticed, not changed (outside this brief):** `create-participants` derives a new
+participant's `ordinal` from the number of participants already in the study, so creating
+R03 in a later batch gave it ordinal 5, not 3. Ordinal parity drives A/B orientation, so a
+participant added in a later batch can end up sharing orientations with an earlier one
+instead of mirroring them. It does not affect the frozen R01/R02 pilot assignment, and
+touching assignment logic is exactly what must not happen silently — flagged here for a
+decision.
+
+## 6. Untouched by this work
 
 The assessment pipeline (`src/novelty_assessment/**`), retrieval, evidence checking and
 every existing review result. The only interaction is read-only: `import-pilot` imports

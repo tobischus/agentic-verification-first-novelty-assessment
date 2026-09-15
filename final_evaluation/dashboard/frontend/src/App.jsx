@@ -34,8 +34,20 @@ export default function App() {
 
   useEffect(() => {
     refreshMe().then((d) => {
-      if (d) setView(d.role === 'admin' ? 'admin' : d.consented ? 'tasks' : 'instructions')
-      else setView('login')
+      if (!d) { setView('login'); return }
+      if (d.role === 'admin') { setView('admin'); return }
+      if (!d.consented) { setView('instructions'); return }
+      // A reload must come back to the task that was open, not to the list: the draft
+      // itself is safe either way (the server holds it), but landing somewhere else
+      // makes "refresh and carry on" feel like the work was lost. The browser keeps
+      // history.state across a reload, so the task being rated is still known here.
+      const s = window.history.state
+      if (s && s.view === 'rate' && s.assignmentId) {
+        setActiveAssignmentId(s.assignmentId)
+        setView('rate')
+        return
+      }
+      setView('tasks')
     })
   }, [refreshMe])
 
