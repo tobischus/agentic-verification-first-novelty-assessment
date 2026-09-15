@@ -143,8 +143,33 @@ textarea { resize: vertical; }
 .fe-report-body { flex: 1; overflow: auto; padding: 12px 16px; }
 .fe-report-body .study-pdf-pane { height: 100%; }
 
-.fe-form { margin: 0 12px 24px; }
+.fe-form { margin: 0 12px 24px; scroll-margin-top: 12px; }
+.fe-form-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.fe-form-head h2 { margin: 0; }
 .fe-fam { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 18px; }
+.fe-fam-intro { grid-column: 1 / -1; font-size: 12.5px; }
+.fe-fam.carried {
+  display: block; font-size: 13px; background: #f7f9fc; border: 1px solid var(--line);
+  border-radius: 8px; padding: 8px 12px;
+}
+.fe-fam-carried-label { color: var(--muted); }
+
+/* Validation messages appear only after the field was touched or Submit was pressed --
+   see TaskRate.jsx's `showFor`. */
+.fe-field-error {
+  color: var(--warn); font-size: 12.5px; margin: 6px 0 0; padding-left: 18px;
+}
+.fe-problems-summary { color: var(--warn); font-size: 13px; margin-bottom: 10px; }
+
+/* Always-reachable rating form. */
+.fe-jump-form {
+  position: fixed; right: 18px; bottom: 18px; z-index: 40;
+  border-radius: 999px; padding: 10px 16px; box-shadow: 0 2px 10px rgba(0,0,0,.18);
+}
+.fe-jump-badge {
+  display: inline-block; margin-left: 8px; background: #fff; color: var(--warn);
+  border-radius: 999px; padding: 0 7px; font-size: 12px; font-weight: 700;
+}
 .fe-criterion { border-top: 1px solid var(--line); padding: 14px 0; }
 .fe-criterion-q { font-weight: 600; margin-bottom: 8px; }
 .fe-criterion-full summary { cursor: pointer; color: var(--accent); font-size: 12.5px; }
@@ -185,8 +210,36 @@ textarea { resize: vertical; }
 .rz-quote.qjump { cursor: pointer; }
 .rz-quote.qjump:hover { background: #eef3fb; border-left-color: var(--accent); }
 .rz-quote.active { background: #fff6d6; border-left-color: #e0a92b; }
+/* A quote with no stored verbatim check is visibly a different thing from a checked
+   one -- see ReportRenderer.jsx's "two different things, two different marks". */
+.rz-quote.unverified { border-left-style: dashed; background: #fbfbfc; }
 .rz-qmark { color: var(--ok); margin-right: 6px; font-weight: 700; }
+.rz-qmark-none { color: var(--muted); font-weight: 400; }
 .rz-qtext { font-style: italic; }
+.rz-qjump {
+  margin-left: 8px; padding: 1px 8px; font-size: 11.5px; line-height: 1.6;
+  border: 1px solid var(--line); border-radius: 999px; background: #fff;
+  color: var(--accent); cursor: pointer; white-space: nowrap; vertical-align: middle;
+}
+.rz-qjump:hover { border-color: var(--accent); background: #eef3ff; }
+
+/* Contents + collapsible per-source comparisons. Folding never removes content. */
+.rr-toc {
+  border: 1px solid var(--line); border-radius: 8px; background: #fbfcfe;
+  padding: 6px 10px; margin-bottom: 12px; font-size: 12.5px;
+}
+.rr-toc summary { cursor: pointer; font-weight: 600; }
+.rr-toc ul { list-style: none; margin: 6px 0 2px; padding-left: 0; }
+.rr-toc li { margin: 2px 0; }
+.rr-toc .rr-toc-l2 { padding-left: 12px; }
+.rr-toc button.link { text-align: left; }
+.rr-detail { border: 1px solid var(--line); border-radius: 8px; margin: 8px 0; background: #fff; }
+.rr-detail > summary {
+  cursor: pointer; padding: 7px 10px; font-weight: 600; font-size: 13px;
+  background: #f7f9fc; border-radius: 8px;
+}
+.rr-detail[open] > summary { border-bottom: 1px solid var(--line); border-radius: 8px 8px 0 0; }
+.rr-detail-body { padding: 4px 12px 10px; }
 
 /* --- PDF pane -------------------------------------------------------------- */
 .study-pdf-pane { display: flex; flex-direction: column; height: 100%; background: #fff; }

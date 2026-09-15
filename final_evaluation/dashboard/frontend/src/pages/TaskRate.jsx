@@ -41,11 +41,18 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
   const [focusId, setFocusId] = useState(null)
   const [familiarity, setFamiliarity] = useState({ familiarity: '', read_before: null })
   const [famNeeded, setFamNeeded] = useState(false)
+  const [famJustRecorded, setFamJustRecorded] = useState(false)
   const [issueOpen, setIssueOpen] = useState(false)
   const [issueText, setIssueText] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  // Validation is computed from the first keystroke, but only SHOWN for fields the
+  // person has actually touched, or after they press Submit -- a form that lights up
+  // red before anything was filled in reads as broken rather than as guidance.
+  const [touched, setTouched] = useState({})
+  const [submitAttempted, setSubmitAttempted] = useState(false)
   const submitKeyRef = useRef(idempotencyKey())
   const saveTimer = useRef(null)
+  const formRef = useRef(null)
   const readOnly = task?.status === 'submitted'
 
   // --- load task + both reports ------------------------------------------------- //
@@ -117,8 +124,34 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
     }
   }, [assignmentId, revision, readOnly, me.participant_id])
 
+  const markTouched = (key) => setTouched((t) => (t[key] ? t : { ...t, [key]: true }))
+
+  // Persist the background answers as soon as BOTH are given, not at submit time: they
+  // are not part of the criteria draft, so a reload in between used to discard them and
+  // ask again. The endpoint refuses to overwrite an existing answer, so an early save
+  // cannot change what a previous task on this paper already recorded.
+  const saveFamiliarity = useCallback(async (next) => {
+    if (readOnly || !next.familiarity || next.read_before === null) return
+    try {
+      await api.setFamiliarity({ paper_id: task.paper.paper_id, ...next })
+      setFamNeeded(false)
+      setFamJustRecorded(true)
+    } catch (e) {
+      onError(String(e.message || e))
+    }
+  }, [readOnly, task, onError])
+
+  const updateFamiliarity = (patch) => {
+    setFamiliarity((f) => {
+      const next = { ...f, ...patch }
+      saveFamiliarity(next)
+      return next
+    })
+  }
+
   const updateCriterion = (key, patch) => {
     if (readOnly) return
+    markTouched(key)
     const next = { ...criteria, [key]: { ...(criteria[key] || {}), ...patch } }
     setCriteria(next)
     setSaveState('unsaved')
@@ -141,29 +174,41 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
   }, [saveState])
 
   // --- validation + submit ------------------------------------------------------ //
-  const problems = useMemo(() => {
-    const out = []
+  // Per criterion, so a message can sit next to the field it is about instead of in one
+  // list at the bottom; `problems` (the flat list) is still what gates submission.
+  const fieldProblems = useMemo(() => {
+    const out = {}
     for (const c of CRITERIA) {
       const v = criteria[c.key] || {}
-      if (!v.winner) out.push(`${c.key}: choose an option`)
-      if (!(v.reason || '').trim()) out.push(`${c.key}: reason required`)
-      else if (wordCount(v.reason) > 50) out.push(`${c.key}: reason is over 50 words`)
-      if (v.winner === 'unclear' && !v.unclear_reason) out.push(`${c.key}: select why it is unclear`)
-    }
-    if (famNeeded && (!familiarity.familiarity || familiarity.read_before === null)) {
-      out.push('answer the two questions about this paper')
+      const msgs = []
+      if (!v.winner) msgs.push('Choose A, B, Tie or Unclear.')
+      if (!(v.reason || '').trim()) msgs.push('A short reason is required.')
+      else if (wordCount(v.reason) > 50) msgs.push('The reason is over 50 words.')
+      if (v.winner === 'unclear' && !v.unclear_reason) msgs.push('Select why this is unclear.')
+      if (msgs.length) out[c.key] = msgs
     }
     return out
-  }, [criteria, famNeeded, familiarity])
+  }, [criteria])
+
+  const famProblem = famNeeded && (!familiarity.familiarity || familiarity.read_before === null)
+    ? 'Answer both background questions about this paper.' : null
+
+  const problems = useMemo(() => {
+    const out = Object.entries(fieldProblems).flatMap(([k, v]) => v.map((m) => `${k}: ${m}`))
+    if (famProblem) out.push(famProblem)
+    return out
+  }, [fieldProblems, famProblem])
+
+  const showFor = (key) => (submitAttempted || touched[key]) && fieldProblems[key]
 
   const doSubmit = async () => {
-    if (problems.length || readOnly) return
+    if (readOnly) return
+    if (problems.length) { setSubmitAttempted(true); return }
     setSubmitting(true)
     try {
-      if (famNeeded) {
-        await api.setFamiliarity({ paper_id: task.paper.paper_id, ...familiarity })
-        setFamNeeded(false)
-      }
+      // Familiarity is saved the moment both answers are given (see saveFamiliarity);
+      // this is only the belt-and-braces path for a save that failed earlier.
+      if (famNeeded) await saveFamiliarity(familiarity)
       await flushSave(criteria)
       const r = await api.submitTask(assignmentId, {
         criteria, expected_revision: revision + 1, idempotency_key: submitKeyRef.current,
@@ -207,7 +252,7 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
           <StudyPdfPane url={rep.url} highlights={[]} title={`Report ${side.toUpperCase()} (PDF)`} />
         )}
         {rep?.type === 'markdown' && (
-          <ReportRenderer text={rep.text} quoteIndex={rep.quoteIndex}
+          <ReportRenderer text={rep.text} quoteIndex={rep.quoteIndex} idPrefix={side}
                          activeId={focusId} onPick={openSubmissionAt} />
         )}
       </div>
@@ -264,15 +309,31 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
         {reportPanel('b', reports.b)}
       </div>
 
-      <div className="fe-form fe-card">
-        <h2>Your assessment</h2>
+      <div className="fe-form fe-card" ref={formRef} id="fe-rating-form">
+        <div className="fe-form-head">
+          <h2>Your assessment</h2>
+          <button type="button" className="link"
+                 onClick={() => document.querySelector('.fe-reports')?.scrollIntoView({ behavior: 'smooth' })}>
+            ↑ Back to the reports
+          </button>
+        </div>
 
-        {famNeeded && (
+        {/* Asked once per person and paper. On any further comparison of the SAME paper
+            the stored answers are carried over and shown read-only -- see
+            models.PaperFamiliarity (unique on participant x paper) and the backend's
+            /api/familiarity, which refuses to overwrite an existing answer. */}
+        {famNeeded ? (
           <div className="fe-fam">
+            <div className="fe-fam-intro muted">
+              Two background questions about this paper. You will be asked these only once
+              per paper — later comparisons of the same paper reuse your answers.
+            </div>
             <div className="fe-field">
-              <label>How familiar are you with this paper's research area?</label>
-              <select value={familiarity.familiarity} disabled={readOnly}
-                     onChange={(e) => setFamiliarity((f) => ({ ...f, familiarity: e.target.value }))}>
+              <label htmlFor="fam-area">
+                Before starting this study, how familiar were you with this paper’s research area?
+              </label>
+              <select id="fam-area" value={familiarity.familiarity} disabled={readOnly}
+                     onChange={(e) => updateFamiliarity({ familiarity: e.target.value })}>
                 <option value="">Select…</option>
                 <option value="low">Low</option>
                 <option value="moderate">Moderate</option>
@@ -280,17 +341,29 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
               </select>
             </div>
             <div className="fe-field">
-              <label>Have you read this submission before?</label>
-              <select value={familiarity.read_before === null ? '' : String(familiarity.read_before)}
+              <label htmlFor="fam-read">Had you read this submission before starting this study?</label>
+              <select id="fam-read" value={familiarity.read_before === null ? '' : String(familiarity.read_before)}
                      disabled={readOnly}
-                     onChange={(e) => setFamiliarity((f) => ({ ...f, read_before: e.target.value === 'true' }))}>
+                     onChange={(e) => updateFamiliarity({ read_before: e.target.value === 'true' })}>
                 <option value="">Select…</option>
                 <option value="true">Yes</option>
                 <option value="false">No</option>
               </select>
             </div>
+            {submitAttempted && famProblem && <div className="fe-field-error">{famProblem}</div>}
           </div>
-        )}
+        ) : familiarity.familiarity ? (
+          <div className="fe-fam carried">
+            <span className="fe-fam-carried-label">
+              {famJustRecorded
+                ? 'Background recorded for this paper (you will not be asked again):'
+                : 'Background for this paper (from your earlier task):'}
+            </span>{' '}
+            familiarity with the research area before the study:{' '}
+            <strong>{familiarity.familiarity}</strong>; had read this submission before the study:{' '}
+            <strong>{familiarity.read_before ? 'yes' : 'no'}</strong>.
+          </div>
+        ) : null}
 
         {CRITERIA.map((c) => {
           const v = criteria[c.key] || {}
@@ -332,7 +405,7 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
               <div className="fe-field">
                 <label>Reason / decisive observation <span className="muted">(required, max 50 words)</span></label>
                 <textarea rows={2} value={v.reason || ''} disabled={readOnly}
-                         onBlur={saveNow}
+                         onBlur={() => { markTouched(c.key); saveNow() }}
                          onChange={(e) => updateCriterion(c.key, { reason: e.target.value })} />
                 <div className={'fe-wordcount' + (wc > 50 ? ' over' : '')}>{wc}/50 words</div>
               </div>
@@ -342,16 +415,24 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
                       onBlur={saveNow}
                       onChange={(e) => updateCriterion(c.key, { locator: e.target.value })} />
               </div>
+              {!readOnly && showFor(c.key) && (
+                <ul className="fe-field-error">
+                  {fieldProblems[c.key].map((m, mi) => <li key={mi}>{m}</li>)}
+                </ul>
+              )}
             </div>
           )
         })}
 
         {!readOnly && (
           <div className="fe-submit-row">
-            {problems.length > 0 && (
-              <ul className="fe-problems">{problems.map((p, i) => <li key={i}>{p}</li>)}</ul>
+            {submitAttempted && problems.length > 0 && (
+              <div className="fe-problems-summary">
+                {problems.length} field{problems.length === 1 ? '' : 's'} still need attention —
+                see the messages above.
+              </div>
             )}
-            <button disabled={problems.length > 0 || submitting} onClick={doSubmit}>
+            <button disabled={submitting} onClick={doSubmit}>
               {submitting ? 'Submitting…' : 'Submit'}
             </button>
           </div>
@@ -363,6 +444,15 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
           </div>
         )}
       </div>
+
+      {/* Reachable from anywhere on the page without scrolling for it. */}
+      {!readOnly && (
+        <button type="button" className="fe-jump-form"
+               onClick={() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+          ▤ Rating form
+          {submitAttempted && problems.length > 0 && <span className="fe-jump-badge">{problems.length}</span>}
+        </button>
+      )}
 
       {showSubmission && (
         <div className="fe-overlay" onClick={(e) => { if (e.target.className === 'fe-overlay') setShowSubmission(false) }}>
