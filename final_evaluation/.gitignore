@@ -12,6 +12,11 @@ results/
 inputs/
 manifests/
 
+# Study materials derived from the database (report texts per task, named by system
+# pair) -- local reference only; the repository is public and raters must stay blind.
+task_texts/
+archive/
+
 # Frontend build artefacts and dependencies
 dashboard/frontend/node_modules/
 dashboard/frontend/dist/

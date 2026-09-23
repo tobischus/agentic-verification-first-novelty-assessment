@@ -165,6 +165,47 @@ def consent(body: ConsentBody, db: Session = Depends(get_db),
 
 
 # --------------------------------------------------------------------------- #
+# Reading gate: in a non-pilot study, a paper's tasks open only after the participant
+# has read the plain submission and confirmed it (models.PaperReading). Enforced here,
+# not only in the UI, so the gate holds for any client. The pilot keeps its old flow --
+# its frozen responses were collected without the step.
+# --------------------------------------------------------------------------- #
+
+def _reading_required(db: Session, participant: models.Participant) -> bool:
+    study = db.query(models.Study).get(participant.study_id)
+    return bool(study) and not study.is_pilot
+
+
+def _reading(db: Session, participant_id: str, paper_id: str) -> models.PaperReading | None:
+    return (db.query(models.PaperReading)
+            .filter(models.PaperReading.participant_id == participant_id,
+                    models.PaperReading.paper_id == paper_id).first())
+
+
+def _gate_open(db: Session, participant: models.Participant, paper_id: str) -> bool:
+    if not _reading_required(db, participant):
+        return True
+    r = _reading(db, participant.id, paper_id)
+    return r is not None and r.confirmed_at is not None
+
+
+def _enforce_gate(db: Session, participant: models.Participant, a: models.Assignment) -> None:
+    """A submitted task stays viewable read-only; anything else waits for the reading."""
+    if a.status == "submitted":
+        return
+    paper_id = db.query(models.Task.paper_id).filter(models.Task.id == a.task_id).scalar()
+    if not _gate_open(db, participant, paper_id):
+        raise HTTPException(409, {"error": "read_submission_first", "paper_id": paper_id})
+
+
+def _owns_paper(db: Session, participant: models.Participant, paper_id: str) -> bool:
+    return (db.query(models.Assignment)
+            .join(models.Task, models.Task.id == models.Assignment.task_id)
+            .filter(models.Assignment.participant_id == participant.id,
+                    models.Task.paper_id == paper_id).first()) is not None
+
+
+# --------------------------------------------------------------------------- #
 # Task list + detail
 # --------------------------------------------------------------------------- #
 
@@ -190,13 +231,18 @@ def list_tasks(db: Session = Depends(get_db),
            .join(models.Paper, models.Paper.id == models.Task.paper_id)
            .filter(models.Assignment.participant_id == participant.id)
            .order_by(models.Assignment.order_index.asc()).all())
+    required = _reading_required(db, participant)
+    confirmed = {r.paper_id for r in db.query(models.PaperReading).filter(
+        models.PaperReading.participant_id == participant.id,
+        models.PaperReading.confirmed_at.isnot(None))}
     out = []
     for a, t, paper in rows:
         out.append({
             "assignment_id": a.id, "paper_id": paper.id, "paper_title": paper.title,
             "status": a.status, "order_index": a.order_index, "is_practice": a.is_practice,
+            "paper_read_confirmed": paper.id in confirmed,
         })
-    return {"tasks": out}
+    return {"tasks": out, "reading_required": required}
 
 
 @router.get("/tasks/{assignment_id}")
@@ -206,6 +252,7 @@ def get_task(assignment_id: str, db: Session = Depends(get_db),
                                            models.Assignment.participant_id == participant.id).first()
     if a is None:
         raise HTTPException(404, "task not found")
+    _enforce_gate(db, participant, a)
     t = db.query(models.Task).get(a.task_id)
     paper = db.query(models.Paper).get(t.paper_id)
     rep_a_id, rep_b_id = ((t.report_a_id, t.report_b_id) if a.orientation == "forward"
@@ -248,6 +295,8 @@ def set_familiarity(body: FamiliarityBody, db: Session = Depends(get_db),
                     participant: models.Participant = Depends(current_participant)):
     if body.familiarity not in ("low", "moderate", "high"):
         raise HTTPException(400, "invalid familiarity value")
+    if not _owns_paper(db, participant, body.paper_id):
+        raise HTTPException(404, "paper not found")
     existing = (db.query(models.PaperFamiliarity)
                .filter(models.PaperFamiliarity.participant_id == participant.id,
                        models.PaperFamiliarity.paper_id == body.paper_id).first())
@@ -258,6 +307,83 @@ def set_familiarity(body: FamiliarityBody, db: Session = Depends(get_db),
                                    familiarity=body.familiarity, read_before=body.read_before))
     db.commit()
     return {"ok": True, "already_recorded": False}
+
+
+# --------------------------------------------------------------------------- #
+# Reading the submission (once per participant x paper, non-pilot studies)
+# --------------------------------------------------------------------------- #
+
+def _reading_view(db: Session, participant: models.Participant, paper: models.Paper) -> dict:
+    fam = (db.query(models.PaperFamiliarity)
+           .filter(models.PaperFamiliarity.participant_id == participant.id,
+                   models.PaperFamiliarity.paper_id == paper.id).first())
+    r = _reading(db, participant.id, paper.id)
+    return {
+        "paper": _paper_view(db, paper),
+        "reading_required": _reading_required(db, participant),
+        "familiarity": ({"familiarity": fam.familiarity, "read_before": fam.read_before}
+                        if fam else None),
+        "reading": ({"opened_at": r.opened_at.isoformat() if r.opened_at else None,
+                     "confirmed_at": r.confirmed_at.isoformat() if r.confirmed_at else None}
+                    if r else None),
+    }
+
+
+def _owned_paper_or_404(db: Session, participant: models.Participant, paper_id: str) -> models.Paper:
+    paper = db.query(models.Paper).filter(models.Paper.id == paper_id,
+                                          models.Paper.study_id == participant.study_id).first()
+    if paper is None or not _owns_paper(db, participant, paper_id):
+        raise HTTPException(404, "paper not found")
+    return paper
+
+
+@router.get("/papers/{paper_id}/reading")
+def get_reading(paper_id: str, db: Session = Depends(get_db),
+                participant: models.Participant = Depends(current_participant)):
+    paper = _owned_paper_or_404(db, participant, paper_id)
+    return _reading_view(db, participant, paper)
+
+
+@router.post("/papers/{paper_id}/reading/open", dependencies=[Depends(require_csrf)])
+def open_reading(paper_id: str, db: Session = Depends(get_db),
+                 participant: models.Participant = Depends(current_participant)):
+    """Records the FIRST visit to the reading page; later visits change nothing."""
+    paper = _owned_paper_or_404(db, participant, paper_id)
+    if _reading(db, participant.id, paper.id) is None:
+        db.add(models.PaperReading(id=models.new_id(), study_id=participant.study_id,
+                                   participant_id=participant.id, paper_id=paper.id))
+        db.commit()
+    return _reading_view(db, participant, paper)
+
+
+class ReadingConfirmBody(BaseModel):
+    active_ms: int = Field(default=0, ge=0, le=7 * 24 * 3600 * 1000)
+
+
+@router.post("/papers/{paper_id}/reading/confirm", dependencies=[Depends(require_csrf)])
+def confirm_reading(paper_id: str, body: ReadingConfirmBody, db: Session = Depends(get_db),
+                    participant: models.Participant = Depends(current_participant)):
+    """Unlocks the paper's tasks. The background questions come first on the reading page,
+    so they must be answered before the confirmation counts. Confirming again is a no-op
+    that keeps the first timestamp."""
+    paper = _owned_paper_or_404(db, participant, paper_id)
+    fam = (db.query(models.PaperFamiliarity)
+           .filter(models.PaperFamiliarity.participant_id == participant.id,
+                   models.PaperFamiliarity.paper_id == paper.id).first())
+    if fam is None:
+        raise HTTPException(422, "answer the two background questions first")
+    r = _reading(db, participant.id, paper.id)
+    if r is None:
+        r = models.PaperReading(id=models.new_id(), study_id=participant.study_id,
+                                participant_id=participant.id, paper_id=paper.id)
+        db.add(r)
+    if r.confirmed_at is None:
+        r.confirmed_at = datetime.now(timezone.utc)
+        r.active_ms = body.active_ms
+        _audit(db, participant.study_id, participant.id, "paper_read_confirmed",
+               {"paper_id": paper.id, "active_ms": body.active_ms})
+    db.commit()
+    return _reading_view(db, participant, paper)
 
 
 # --------------------------------------------------------------------------- #
@@ -273,8 +399,6 @@ def _validate_criteria(criteria: dict, require_complete: bool) -> list[str]:
         if require_complete or winner or reason:
             if winner not in WINNER_VALUES:
                 problems.append(f"{key}: winner must be one of {sorted(WINNER_VALUES)}")
-            if require_complete and not reason:
-                problems.append(f"{key}: reason is required")
             if reason and len(reason.split()) > 50:
                 problems.append(f"{key}: reason exceeds 50 words")
             if winner == "unclear":
@@ -309,6 +433,7 @@ def save_draft(assignment_id: str, body: DraftBody, db: Session = Depends(get_db
         raise HTTPException(404, "task not found")
     if a.status == "submitted":
         raise HTTPException(409, "task already submitted -- draft cannot be changed")
+    _enforce_gate(db, participant, a)
     if a.revision != body.expected_revision:
         return Response(status_code=409, content=json.dumps({
             "error": "revision_conflict", "server_revision": a.revision, "server_draft": a.draft,
@@ -359,6 +484,7 @@ def submit_task(assignment_id: str, body: SubmitBody, db: Session = Depends(get_
 
     if a.status == "submitted":
         raise HTTPException(409, "task already submitted")
+    _enforce_gate(db, participant, a)
     if a.revision != body.expected_revision:
         raise HTTPException(409, {"error": "revision_conflict", "server_revision": a.revision})
 

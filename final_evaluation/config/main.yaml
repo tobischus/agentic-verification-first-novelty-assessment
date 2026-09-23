@@ -1,0 +1,110 @@
+# Main study -- the TEN human-rated papers. `import-pilot --config .../main.yaml`,
+# `validate-inputs`, `seed-pilot` and `create-participants` all read this file.
+#
+# main_study_v2 (2026-09-23) replaces main_study_v1 before any rating was collected (no
+# participant code had been handed out; v1 held 0 responses). The only design change: the
+# human study compares the full system (`agent`) with the three external systems; the
+# agent-vs-linear comparison and all other pairings are evaluated by E1 (LLM judge) and by
+# run metrics instead. Reason, recorded in PROTOCOL.md section 5: agent and linear share
+# claims, prior-work pool, renderer and summary model, reach the same verdict on 41 of 43
+# claims, and differ mainly inside folded comparison detail -- a full-report A/B judgement
+# of them costs a rater the most time for the least decidable difference. v1 stays in the
+# database, closed, with its history (manifests/main/CONTENT_VERSIONS.md).
+
+# Writes to final_evaluation/{inputs,manifests}/main/ instead of the pilot's, whose frozen
+# files are cited by ratings already collected and must not move.
+inputs_dir: main
+
+study:
+  id: main_study_v2
+  title: "Novelty report comparison -- main study"
+  is_pilot: false
+  rubric_version: novelty_report_judge_v4
+  instructions_version: human_instructions_v2
+  ui_version: dashboard_v1
+  assignment_seed: 43
+  order_seed_base: 100
+
+systems:
+  - agent
+  - linear
+  - opennovelty
+  - deepreviewer
+  - afzal
+
+papers:
+  agentgym_rl:
+    title: "AgentGym-RL: Training LLM Agents for Long-Horizon Decision Making through Multi-Turn Reinforcement Learning"
+  astabench:
+    title: "AstaBench: Rigorous Benchmarking of AI Agents with a Scientific Research Suite"
+  editbench:
+    title: "EDIT-Bench: Evaluating LLM Abilities to Perform Real-World Instructed Code Edits"
+  hubble:
+    title: "Hubble: A Model Suite to Advance the Study of LLM Memorization"
+  language_confusion_gate:
+    title: "Language Confusion Gate: Language-Aware Decoding through Model Self-Distillation"
+  llms_get_lost_in_multi_turn_conversation:
+    title: "LLMs Get Lost in Multi-Turn Conversation"
+  mixing_mechanisms:
+    title: "Mixing Mechanisms: How Language Models Retrieve Bound Entities In-Context"
+  output_supervision_can_obfuscate_the_chain_of:
+    title: "Output Supervision Can Obfuscate the Chain of Thought"
+  the_art_of_scaling_reinforcement_learning:
+    title: "The Art of Scaling Reinforcement Learning Compute for LLMs"
+  train_before_test_harmonizes_language_model:
+    title: "Train-before-Test Harmonizes Language Model Rankings"
+
+# The 20 tasks, fixed here BEFORE any main-study judge (E1) result is seen --
+# PROTOCOL.md section 5. `pair` lists the two system ids in CANONICAL (alphabetical) order;
+# which one a rater sees as "A" is decided per participant by security.orientation_for.
+#
+# Construction (deterministic, not hand-picked): papers in the order above, numbered
+# i = 0..9; each paper gets two tasks, agent vs each external system EXCEPT
+# [afzal, deepreviewer, opennovelty][i % 3]. Result: agent-afzal 6, agent-deepreviewer 7,
+# agent-opennovelty 7; no paper repeats a pairing.
+tasks:
+  - paper: agentgym_rl
+    pair: [agent, deepreviewer]
+  - paper: agentgym_rl
+    pair: [agent, opennovelty]
+  - paper: astabench
+    pair: [afzal, agent]
+  - paper: astabench
+    pair: [agent, opennovelty]
+  - paper: editbench
+    pair: [afzal, agent]
+  - paper: editbench
+    pair: [agent, deepreviewer]
+  - paper: hubble
+    pair: [agent, deepreviewer]
+  - paper: hubble
+    pair: [agent, opennovelty]
+  - paper: language_confusion_gate
+    pair: [afzal, agent]
+  - paper: language_confusion_gate
+    pair: [agent, opennovelty]
+  - paper: llms_get_lost_in_multi_turn_conversation
+    pair: [afzal, agent]
+  - paper: llms_get_lost_in_multi_turn_conversation
+    pair: [agent, deepreviewer]
+  - paper: mixing_mechanisms
+    pair: [agent, deepreviewer]
+  - paper: mixing_mechanisms
+    pair: [agent, opennovelty]
+  - paper: output_supervision_can_obfuscate_the_chain_of
+    pair: [afzal, agent]
+  - paper: output_supervision_can_obfuscate_the_chain_of
+    pair: [agent, opennovelty]
+  - paper: the_art_of_scaling_reinforcement_learning
+    pair: [afzal, agent]
+  - paper: the_art_of_scaling_reinforcement_learning
+    pair: [agent, deepreviewer]
+  - paper: train_before_test_harmonizes_language_model
+    pair: [agent, deepreviewer]
+  - paper: train_before_test_harmonizes_language_model
+    pair: [agent, opennovelty]
+
+participants:
+  count: 2          # two raters, each assigned all 20 tasks -> 40 ratings
+  prefix: "M"
+  test: false

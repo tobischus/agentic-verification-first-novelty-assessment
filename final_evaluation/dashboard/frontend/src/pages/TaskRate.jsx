@@ -1,21 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, idempotencyKey } from '../api.js'
 import { clearLocalDraft, loadLocalDraft, saveLocalDraft } from '../outbox.js'
-import ReportRenderer from '../components/ReportRenderer.jsx'
+import ReportRenderer, { DIM, claimColor } from '../components/ReportRenderer.jsx'
+import { claimOfPassages } from '../components/assessmentStyle.js'
 import StudyPdfPane from '../components/StudyPdfPane.jsx'
 import { colorFor } from '../vendor/pdf/PdfViewer.jsx'
 
+// The five criteria, in form order. Their wording -- the short question and the full
+// description -- comes from /criteria.json (a copy of prompts/criteria.json, synced by
+// `cli build-frontend`), the same file the judge rubric is checked against; a second copy
+// of the questions here once drifted from it (rubric v3: "limitations" vs "scope").
 const CRITERIA = [
-  { key: 'submission_fidelity',
-    q: "Which report more accurately represents the submission's contributions, methods, assumptions, and limitations?" },
-  { key: 'comparison_specificity',
-    q: 'Which report provides more concrete and decision-relevant comparisons with prior work?' },
-  { key: 'presented_evidence',
-    q: 'Which report better supports its important statements with relevant, attributable evidence or explanations?' },
-  { key: 'conclusion_warrant',
-    q: 'Which report better justifies its novelty judgment through its comparisons and their limitations?' },
-  { key: 'reviewer_usefulness',
-    q: "Which report better helps you assess the submission's novelty with reasonable effort?" },
+  { key: 'submission_fidelity' },
+  { key: 'comparison_specificity' },
+  { key: 'presented_evidence' },
+  { key: 'conclusion_warrant' },
+  { key: 'reviewer_usefulness' },
 ]
 const WINNERS = [
   { v: 'A', label: 'A is better' },
@@ -32,6 +32,7 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
   const [task, setTask] = useState(null)
   const [criteria, setCriteria] = useState({})
   const [fullDescriptions, setFullDescriptions] = useState({})
+  const [questions, setQuestions] = useState({})
   const [revision, setRevision] = useState(0)
   const [saveState, setSaveState] = useState('saved') // saved | unsaved | saving | error
   const [savedAt, setSavedAt] = useState(null)
@@ -42,8 +43,6 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
   const [familiarity, setFamiliarity] = useState({ familiarity: '', read_before: null })
   const [famNeeded, setFamNeeded] = useState(false)
   const [famJustRecorded, setFamJustRecorded] = useState(false)
-  const [issueOpen, setIssueOpen] = useState(false)
-  const [issueText, setIssueText] = useState('')
   const [submitting, setSubmitting] = useState(false)
   // Validation is computed from the first keystroke, but only SHOWN for fields the
   // person has actually touched, or after they press Submit -- a form that lights up
@@ -89,6 +88,11 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
         const [ra, rb] = await Promise.all([load(t.report_a), load(t.report_b)])
         if (alive) setReports({ a: ra, b: rb })
       } catch (e) {
+        if (e.data?.detail?.error === 'read_submission_first') {
+          onError('Please read the submission for this paper first.')
+          onBack()
+          return
+        }
         onError(String(e.message || e))
       }
     })()
@@ -96,8 +100,12 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
   }, [assignmentId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    fetch('/criteria.json').then((r) => r.json())
-      .then((d) => setFullDescriptions(Object.fromEntries(d.criteria.map((c) => [c.key, c.full_description]))))
+    // no-store: a copy the browser cached before a rubric change would show the old wording
+    fetch('/criteria.json', { cache: 'no-store' }).then((r) => r.json())
+      .then((d) => {
+        setFullDescriptions(Object.fromEntries(d.criteria.map((c) => [c.key, c.full_description])))
+        setQuestions(Object.fromEntries(d.criteria.map((c) => [c.key, c.short_question])))
+      })
       .catch(() => {})
   }, [])
 
@@ -182,8 +190,7 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
       const v = criteria[c.key] || {}
       const msgs = []
       if (!v.winner) msgs.push('Choose A, B, Tie or Unclear.')
-      if (!(v.reason || '').trim()) msgs.push('A short reason is required.')
-      else if (wordCount(v.reason) > 50) msgs.push('The reason is over 50 words.')
+      if (wordCount(v.reason) > 50) msgs.push('The reason is over 50 words.')
       if (v.winner === 'unclear' && !v.unclear_reason) msgs.push('Select why this is unclear.')
       if (msgs.length) out[c.key] = msgs
     }
@@ -233,15 +240,54 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
 
   if (!task) return <div className="fe-page">Loading task…</div>
 
-  const submissionHighlights = (() => {
-    const seen = new Map()
-    for (const rep of [reports.a, reports.b]) {
-      for (const q of rep?.quoteIndex?.submission || []) if (!seen.has(q.id)) seen.set(q.id, q)
+  // Each report numbers its own quotes ("sub#0", "sub#1", ...), so the same id means a
+  // different passage in report A and report B. Highlights are therefore keyed by the
+  // passage TEXT (one id per distinct passage), and each panel's local ids are translated
+  // to those -- a click in report B used to land on report A's passage of the same number.
+  const { submissionHighlights, toGlobal } = (() => {
+    const byText = new Map()
+    const toGlobal = { a: new Map(), b: new Map() }
+    for (const side of ['a', 'b']) {
+      for (const q of reports[side]?.quoteIndex?.submission || []) {
+        if (!byText.has(q.text)) byText.set(q.text, `q${byText.size}`)
+        toGlobal[side].set(q.id, byText.get(q.text))
+      }
     }
-    return [...seen.values()].map((q) => ({ id: q.id, text: q.text, color: colorFor(0) }))
+    // One colour per claim, as on the claim text in the panels (claimColor). Both reports
+    // of a task number the paper's claims alike (same claim extraction), so a passage's
+    // claim is read from whichever panel quotes it -- a claim's own anchor first, then
+    // the first claim a passage is quoted under.
+    const claimOf = new Map()
+    for (const anchorsOnly of [true, false]) {
+      for (const side of ['a', 'b']) {
+        const rep = reports[side]
+        if (rep?.type !== 'markdown' || !rep.quoteIndex) continue
+        const anchors = new Set(Object.values(rep.quoteIndex.claim_anchors || {}).map((x) => x.id))
+        for (const [local, n] of claimOfPassages(rep.text, rep.quoteIndex)) {
+          const g = toGlobal[side].get(local)
+          if (g && anchors.has(local) === anchorsOnly && !claimOf.has(g)) claimOf.set(g, n)
+        }
+      }
+    }
+    // Every quoted passage of both reports is marked, so the one just jumped to is drawn
+    // at full strength and the rest at a pale tint of their own claim's colour.
+    return {
+      submissionHighlights: [...byText.entries()].map(([text, id]) => {
+        const color = claimOf.has(id) ? claimColor(claimOf.get(id)) : colorFor(0)
+        return { id, text, color: focusId && id !== focusId ? color + DIM : color }
+      }),
+      toGlobal,
+    }
   })()
-
-  const openSubmissionAt = (target) => { setFocusId(target.id); setShowSubmission(true) }
+  // The panel compares against its own ids: give it the local id of the focused passage.
+  const localActive = (side) => {
+    for (const [local, global] of toGlobal[side]) if (global === focusId) return local
+    return null
+  }
+  const openSubmissionAt = (side) => (target) => {
+    setFocusId(toGlobal[side].get(target.id) || null)
+    setShowSubmission(true)
+  }
 
   const reportPanel = (side, rep) => (
     <div className="fe-report-panel">
@@ -253,7 +299,7 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
         )}
         {rep?.type === 'markdown' && (
           <ReportRenderer text={rep.text} quoteIndex={rep.quoteIndex} idPrefix={side}
-                         activeId={focusId} onPick={openSubmissionAt} />
+                         activeId={localActive(side)} onPick={openSubmissionAt(side)} />
         )}
       </div>
     </div>
@@ -272,7 +318,6 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
         </div>
         <div className="fe-topbar-actions">
           <button className="link" onClick={() => setShowSubmission(true)}>View submission</button>
-          <button className="link" onClick={() => setIssueOpen((v) => !v)}>Report technical issue / pause</button>
         </div>
       </div>
 
@@ -290,17 +335,6 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
               await flushSave(conflict.mine)
             }}>Keep my version</button>
           </div>
-        </div>
-      )}
-
-      {issueOpen && (
-        <div className="fe-card">
-          <label>Describe the problem (this is stored separately and does not affect your ratings)</label>
-          <textarea value={issueText} onChange={(e) => setIssueText(e.target.value)} rows={3} />
-          <button disabled={!issueText.trim()} onClick={async () => {
-            await api.reportIssue({ message: issueText, assignment_id: assignmentId })
-            setIssueText(''); setIssueOpen(false)
-          }}>Send</button>
         </div>
       )}
 
@@ -357,7 +391,7 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
             <span className="fe-fam-carried-label">
               {famJustRecorded
                 ? 'Background recorded for this paper (you will not be asked again):'
-                : 'Background for this paper (from your earlier task):'}
+                : 'Background for this paper (recorded earlier):'}
             </span>{' '}
             familiarity with the research area before the study:{' '}
             <strong>{familiarity.familiarity}</strong>; had read this submission before the study:{' '}
@@ -370,7 +404,7 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
           const wc = wordCount(v.reason)
           return (
             <div className="fe-criterion" key={c.key}>
-              <div className="fe-criterion-q">{c.q}</div>
+              <div className="fe-criterion-q">{questions[c.key] || 'Loading…'}</div>
               {fullDescriptions[c.key] && (
                 <details className="fe-criterion-full">
                   <summary>Full criterion description</summary>
@@ -403,17 +437,11 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
                 </div>
               )}
               <div className="fe-field">
-                <label>Reason / decisive observation <span className="muted">(required, max 50 words)</span></label>
+                <label>Reason / decisive observation <span className="muted">(optional, max 50 words)</span></label>
                 <textarea rows={2} value={v.reason || ''} disabled={readOnly}
                          onBlur={() => { markTouched(c.key); saveNow() }}
                          onChange={(e) => updateCriterion(c.key, { reason: e.target.value })} />
                 <div className={'fe-wordcount' + (wc > 50 ? ' over' : '')}>{wc}/50 words</div>
-              </div>
-              <div className="fe-field">
-                <label>Locator <span className="muted">(optional: report/submission, page, section or line id)</span></label>
-                <input type="text" value={v.locator || ''} disabled={readOnly}
-                      onBlur={saveNow}
-                      onChange={(e) => updateCriterion(c.key, { locator: e.target.value })} />
               </div>
               {!readOnly && showFor(c.key) && (
                 <ul className="fe-field-error">

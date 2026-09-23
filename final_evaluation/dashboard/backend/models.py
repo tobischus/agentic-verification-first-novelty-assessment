@@ -59,7 +59,7 @@ class Study(Base):
 
 class Paper(Base):
     __tablename__ = "papers"
-    id: Mapped[str] = mapped_column(String(80), primary_key=True)  # f"{study_id}::{paper_key}"
+    id: Mapped[str] = mapped_column(String(160), primary_key=True)  # f"{study_id}::{paper_key}"
     study_id: Mapped[str] = mapped_column(ForeignKey("studies.id"), index=True)
     paper_key: Mapped[str] = mapped_column(String(80))  # e.g. "graphrag_when_to_use"
     title: Mapped[str] = mapped_column(String(400))
@@ -95,7 +95,7 @@ class Report(Base):
     participant (see api schemas) -- only used server-side for canonical ordering,
     the admin export, and E1/E2 analysis."""
     __tablename__ = "reports"
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    id: Mapped[str] = mapped_column(String(160), primary_key=True)  # f"{paper_id}::{system_id}" -- 64 was too short (PostgreSQL enforces it, SQLite does not)
     study_id: Mapped[str] = mapped_column(ForeignKey("studies.id"), index=True)
     paper_id: Mapped[str] = mapped_column(ForeignKey("papers.id"), index=True)
     system_id: Mapped[str] = mapped_column(String(40))  # agent|linear|opennovelty|deepreviewer|afzal
@@ -119,7 +119,7 @@ class Task(Base):
     Assignment (see below), independently for each rater.
     """
     __tablename__ = "tasks"
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    id: Mapped[str] = mapped_column(String(160), primary_key=True)
     study_id: Mapped[str] = mapped_column(ForeignKey("studies.id"), index=True)
     paper_id: Mapped[str] = mapped_column(ForeignKey("papers.id"), index=True)
     system_a: Mapped[str] = mapped_column(String(40))
@@ -191,7 +191,7 @@ class FinalResponse(Base):
     __tablename__ = "final_responses"
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     assignment_id: Mapped[str] = mapped_column(ForeignKey("assignments.id"), index=True, unique=True)
-    criteria: Mapped[dict] = mapped_column(JSON)  # {key: {winner, reason, unclear_reason?, locator?}}
+    criteria: Mapped[dict] = mapped_column(JSON)  # {key: {winner, reason?, unclear_reason?, locator? (pilot only)}}
     receipt_id: Mapped[str] = mapped_column(String(64), unique=True)
     # Indexed, NOT globally unique: an idempotency key is only meaningful within one
     # assignment (the replay check in submit_task compares it against THIS assignment's
@@ -216,6 +216,24 @@ class PaperFamiliarity(Base):
     read_before: Mapped[bool] = mapped_column(Boolean)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     __table_args__ = (UniqueConstraint("participant_id", "paper_id", name="uq_familiarity_once"),)
+
+
+class PaperReading(Base):
+    """The per-paper reading step of a non-pilot study: before any task of a paper opens,
+    the participant reads (or skims) the plain submission and confirms it. One row per
+    (participant, paper). `opened_at` is the first visit to the reading page,
+    `confirmed_at` the confirmation that unlocks the paper's tasks, `active_ms` the time
+    the page was visible and focused as measured in the browser -- recorded, never used to
+    block anyone."""
+    __tablename__ = "paper_readings"
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    study_id: Mapped[str] = mapped_column(ForeignKey("studies.id"), index=True)
+    participant_id: Mapped[str] = mapped_column(ForeignKey("participants.id"), index=True)
+    paper_id: Mapped[str] = mapped_column(ForeignKey("papers.id"), index=True)
+    opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    active_ms: Mapped[int] = mapped_column(Integer, default=0)
+    __table_args__ = (UniqueConstraint("participant_id", "paper_id", name="uq_paper_reading_once"),)
 
 
 class Session_(Base):

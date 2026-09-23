@@ -1,12 +1,12 @@
 {
-  "rubric_version": "novelty_report_judge_v3",
-  "source_prompt_sha256": "567819a36c0561411a5f5e4f3c1c17affd96c6984238fce69dad8edd3cec4ffa",
-  "note": "Short questions are the exact wording from PROTOCOL section 8. Full descriptions are copied verbatim from prompts/novelty_report_judge_v3.txt's CRITERIA section (the human rubric must not diverge from the judge rubric). This file has no criteria, weights, or wording the prompt file does not also carry. v3 (2026-09-15) adds two help sentences to submission_fidelity only -- same five criteria, no weights, everything else unchanged from v2.",
+  "rubric_version": "novelty_report_judge_v4",
+  "source_prompt_sha256": "fcacd68e51234ae1749bf64bfe29efbeb2e1ab7847ec3740eb0cabd8b2d9e0f6",
+  "note": "Short questions are the wording the rating form shows (TaskRate.jsx reads them from this file). Full descriptions are copied verbatim from prompts/novelty_report_judge_v4.txt's CRITERIA section (the human rubric must not diverge from the judge rubric). v4 (2026-09-23) rewords submission_fidelity only -- it asks what the submission contributes and where to look, instead of 'contributions, methods, assumptions, and limitations', which novelty reports do not systematically cover; the other four criteria are unchanged from v3. The short question of conclusion_warrant drops 'and their limitations' (2026-09-23, ambiguous whose limitations); the short question is form wording only -- the full description and the judge prompt are unchanged, so the rubric stays v4.",
   "criteria": [
     {
       "key": "submission_fidelity",
-      "short_question": "Which report more accurately represents the submission's contributions, methods, assumptions, and limitations?",
-      "full_description": "Which report more faithfully represents the submission's central contributions, methods, assumptions, and scope? Check against the submission. Consider consequential omissions, misattributions, and distortions. Assess descriptions of the submission throughout both reports, including the comparisons -- not only the extracted claims. Identical or near-identical extracted claim text is not by itself a reason to choose tie; the reports may still describe the submission differently elsewhere. Do not evaluate the factual accuracy of unavailable prior-work papers."
+      "short_question": "Which report more accurately describes what the submission contributes?",
+      "full_description": "Which report more accurately describes what the submission contributes? Wherever a report describes the submission (its list of contributions or claims, its summary, and its comparisons), check the description against the submission. Consider whether the central contributions are captured, whether they are stated accurately (not inflated, narrowed, or attributed to the wrong part of the work), and whether an important contribution is missing. Identical or near-identical text in both reports is not by itself a reason to choose tie; the reports may still describe the submission differently elsewhere. Do not evaluate the accuracy of statements about prior work."
     },
     {
       "key": "comparison_specificity",
@@ -20,7 +20,7 @@
     },
     {
       "key": "conclusion_warrant",
-      "short_question": "Which report better justifies its novelty judgment through its comparisons and their limitations?",
+      "short_question": "Which report better justifies its novelty judgment through its comparisons?",
       "full_description": "Which report's novelty conclusion follows more convincingly from its own presented comparisons and their limitations? Assess what prior work already establishes, what the submission adds, and whether the novelty judgment follows. Penalize internal contradictions, unsupported certainty, and unhelpful evasiveness. \"No overlap found\" is not proof of novelty across the literature. A broader scope or additional application is not automatically a scientifically significant contribution. Judge substance, not matching terminology, headings, formats, or verdict labels. Do not treat publication acceptance or rejection as a novelty gold label."
     },
     {
@@ -29,7 +29,12 @@
       "full_description": "Which report better helps a reviewer identify the important novelty issues, supporting comparisons, remaining contributions, and open questions with reasonable effort? Consider organization, prioritization, clarity, completeness of decision-relevant information, and unnecessary repetition. Length, brevity, tables, technical detail, or polished wording are not inherently good or bad. Evaluate the supplied report, not an imagined interactive interface."
     }
   ],
-  "winner_values": ["A", "B", "tie", "unclear"],
+  "winner_values": [
+    "A",
+    "B",
+    "tie",
+    "unclear"
+  ],
   "unclear_reasons": [
     "Insufficient report evidence",
     "Insufficient domain expertise",

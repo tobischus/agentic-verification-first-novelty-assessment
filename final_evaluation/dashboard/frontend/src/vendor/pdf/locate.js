@@ -38,35 +38,37 @@ export function words(text) {
 export function pageTokens(textContent) {
   const items = textContent.items || []
   const tokens = []
-  let carry = ''            // partial word held over from a hyphenated line break
-  let carryItem = -1
+  let carry = null          // partial word held over from a hyphenated line break
 
+  // Each token also records where it sits inside its item's (ligature-expanded) string,
+  // `from`/`to`, so a highlight can start and end inside a line rather than cover it whole.
+  // A word joined across a hyphenated break keeps both halves: item/from/to on the first
+  // line (hyphen included), item2/from2/to2 on the second.
   items.forEach((item, idx) => {
     const raw = expand(item.str || '')
     if (!raw) return
     const hyphenated = item.hasEOL && /[-‐]$/.test(raw)
     const body = hyphenated ? raw.slice(0, -1) : raw
-    const parts = body.toLowerCase().match(/[a-z0-9]+/g) || []
+    const parts = [...body.toLowerCase().matchAll(/[a-z0-9]+/g)]
 
-    parts.forEach((w, i) => {
-      const first = i === 0
-      if (first && carry) {
-        tokens.push({ w: carry + w, item: carryItem, item2: idx })
-        carry = ''
-        carryItem = -1
+    parts.forEach((m, i) => {
+      const w = m[0]
+      const from = m.index
+      const to = m.index + w.length
+      if (i === 0 && carry) {
+        tokens.push({ ...carry, w: carry.w + w, item2: idx, from2: from, to2: to })
+        carry = null
         return
       }
-      tokens.push({ w, item: idx })
+      tokens.push({ w, item: idx, from, to })
     })
 
     if (hyphenated && parts.length) {
       // the last word of this item continues on the next line
-      const last = tokens.pop()
-      carry = last.w
-      carryItem = last.item
+      carry = { ...tokens.pop(), to: raw.length }
     }
   })
-  if (carry) tokens.push({ w: carry, item: carryItem })
+  if (carry) tokens.push(carry)
   return tokens
 }
 
@@ -123,32 +125,95 @@ export function findWindow(tokens, quoteWords) {
   while (start <= end && !inQuote.has(tokens[start].w)) start++
   while (end >= start && !inQuote.has(tokens[end].w)) end--
   if (start > end) return null
+
+  // Order-free scoring lets the window begin a few words early on words the quote also
+  // uses further on -- "... based on its position in context. In this work, ..." for a
+  // quote that starts "In this work" and later says "in context" -- and, being exactly
+  // as wide as the quote, then end the same few words short. Where the page has the
+  // quote's own first (last) three words in sequence close by, the range snaps to them.
+  // Where it does not (the extractions disagree there), the trimmed window stands.
+  const K = 3
+  if (m > K) {
+    const slack = Math.max(8, Math.ceil(m * 0.4))
+    const seqAt = (i, ws) => i >= 0 && ws.every((w, k) => tokens[i + k] && tokens[i + k].w === w)
+    const nearest = (from, ok) => {
+      for (let d = 0; d <= slack; d++) {
+        if (ok(from + d)) return from + d
+        if (d && ok(from - d)) return from - d
+      }
+      return null
+    }
+    const head = quoteWords.slice(0, K)
+    const tail = quoteWords.slice(-K)
+    const s = nearest(start, (i) => seqAt(i, head))
+    const e = nearest(end, (j) => seqAt(j - K + 1, tail))
+    if (s != null) start = s
+    if (e != null && e >= start) end = e
+  }
   return { start, end, score: best.score }
+}
+
+// A 2D context for measuring text, made once; false where there is none (no DOM).
+let measureCtx = null
+function measurer() {
+  if (measureCtx === null) {
+    try { measureCtx = document.createElement('canvas').getContext('2d') || false } catch { measureCtx = false }
+  }
+  return measureCtx
+}
+
+/** How far into `str` character `i` starts, as a share of the whole string's width. */
+function widthShare(str, i, fontFamily) {
+  if (i <= 0) return 0
+  if (i >= str.length) return 1
+  const c = measurer()
+  if (c) {
+    c.font = `100px ${fontFamily || 'serif'}`
+    const whole = c.measureText(str).width
+    if (whole > 0) return c.measureText(str.slice(0, i)).width / whole
+  }
+  return i / str.length
 }
 
 /**
  * Rectangles covering a token range, in unscaled PDF page coordinates.
  *
- * A rectangle per text item rather than per character: pdf.js gives a width for the whole
- * item but no per-glyph advances, so any sub-item boundary would be an estimate placed
- * over real text. Whole items occasionally highlight a few words either side of the
- * quote, which is visibly approximate rather than quietly wrong.
+ * pdf.js gives each text item (often a whole line) a width but no per-glyph advances.
+ * An item the quote covers completely gets its full rectangle. An item it covers only in
+ * part -- the line a quote starts or ends in the middle of -- is cut at the quote's first
+ * or last character, placed by that character's share of the item's width as measured in
+ * the item's generic font family. That is an estimate of a few points at most; a whole
+ * line, which this used to draw, marked words outside the quote as quoted.
  */
 export function rectsForRange(textContent, tokens, start, end, viewportAt1, Util) {
-  const used = new Set()
+  const spans = new Map()      // item index -> [from, to) the quote covers in it
+  const cover = (idx, from, to) => {
+    if (idx == null || idx < 0) return
+    const s = spans.get(idx)
+    spans.set(idx, s ? [Math.min(s[0], from), Math.max(s[1], to)] : [from, to])
+  }
   for (let i = start; i <= end; i++) {
-    used.add(tokens[i].item)
-    if (tokens[i].item2 != null) used.add(tokens[i].item2)
+    const t = tokens[i]
+    cover(t.item, t.from ?? 0, t.to ?? Infinity)
+    if (t.item2 != null) cover(t.item2, t.from2 ?? 0, t.to2 ?? Infinity)
   }
   const rects = []
-  for (const idx of used) {
+  for (const [idx, [from, rawTo]] of spans) {
     const item = (textContent.items || [])[idx]
     if (!item || !item.transform) continue
     const tx = Util.transform(viewportAt1.transform, item.transform)
     const height = Math.hypot(tx[2], tx[3]) || item.height || 10
     const width = (item.width || 0) * (viewportAt1.scale || 1)
     if (width <= 0) continue
-    rects.push({ left: tx[4], top: tx[5] - height, width, height })
+    const str = expand(item.str || '')
+    // A closing mark right after the last word belongs to the quote's visual end.
+    let to = Math.min(rawTo, str.length)
+    while (to < str.length && /[.,;:!?)\]”’"']/.test(str[to])) to++
+    const family = textContent.styles?.[item.fontName]?.fontFamily
+    const a = widthShare(str, from, family)
+    const b = widthShare(str, to, family)
+    if (b <= a) continue
+    rects.push({ left: tx[4] + width * a, top: tx[5] - height, width: width * (b - a), height })
   }
   return mergeRows(rects)
 }

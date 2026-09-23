@@ -120,6 +120,27 @@ textarea { resize: vertical; }
   display: grid; grid-template-columns: 120px 1fr auto; align-items: center; gap: 12px;
   border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; background: #fbfcfe;
 }
+/* Reading step (non-pilot study): one row above a paper's tasks, the tasks locked until
+   it is done -- see PaperRead.jsx. */
+.fe-read-row {
+  display: grid; grid-template-columns: 120px 1fr auto; align-items: center; gap: 12px;
+  border: 1px dashed var(--accent); border-radius: 8px; padding: 8px 12px; background: #f3f6ff;
+}
+.fe-read-row.done { border-style: solid; border-color: var(--line); background: #fbfcfe; }
+.fe-task-row.locked { opacity: 0.6; }
+.fe-read { display: flex; flex-direction: column; min-height: 100vh; }
+.fe-read-title { font-weight: 600; font-size: 13.5px; text-align: center; }
+.fe-read-intro, .fe-read-confirm, .fe-read-wait { margin: 12px 12px 0; }
+.fe-read-intro h1 { font-size: 18px; margin: 0 0 6px; }
+.fe-read-pdf {
+  margin: 12px; height: 78vh; min-height: 480px; border: 1px solid var(--line);
+  border-radius: 10px; overflow: hidden; background: #fff;
+}
+.fe-read-confirm {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  margin-bottom: 24px;
+}
+.fe-read-confirm .fe-checkbox { margin: 0; }
 .fe-status { font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); }
 .fe-status-not_started { background: #f1f3f7; }
 .fe-status-in_progress { background: #fff6e0; border-color: #f0d9b8; }
@@ -241,6 +262,284 @@ textarea { resize: vertical; }
 .rr-detail[open] > summary { border-bottom: 1px solid var(--line); border-radius: 8px 8px 0 0; }
 .rr-detail-body { padding: 4px 12px 10px; }
 
+/* --- assessment colour + the blocks of one comparison ----------------------- */
+/* Mirrors components/assessmentStyle.js, which decides WHICH classes an assessment gets;
+   this decides what they look like, and is the same block in both apps' stylesheets.
+   Two dimensions, deliberately not collapsed into one: the TINT is how much overlap was
+   found, the OUTLINE is whether an evidence check materially carried it. Dashed means it
+   did not, or that none was run -- missing evidence must not look like a secured result,
+   the same reason the export prints both halves of "partial overlap · insufficient
+   evidence" instead of just the first. */
+.as {
+  --as-ink: #42526b;
+  --as-bg: #f1f3f8;
+  --as-edge: #cfd7e6;
+  --as-line: solid;
+}
+.as-partial,
+.vd-uncertain {
+  --as-ink: #8a5200;
+  --as-bg: #fff4e0;
+  --as-edge: #efd3a6;
+}
+.as-weak,
+.vd-unchallenged {
+  --as-ink: #1d6b41;
+  --as-bg: #eef7f1;
+  --as-edge: #bfdfcb;
+}
+.as-same,
+.as-substantial,
+.vd-challenged {
+  --as-ink: #96122c;
+  --as-bg: #fdeef1;
+  --as-edge: #eeb9c4;
+}
+.ev-nonmaterial,
+.ev-insufficient,
+.ev-nocheck {
+  --as-line: dashed;
+}
+/* A non-overlapping degree whose evidence check nonetheless found material overlap is
+   exactly the case battle_export._conflict() reports under "Unresolved assessment
+   conflicts". The green of a settled "no overlap" would misread it, so it takes the
+   neutral, dashed treatment instead: the conflict is unresolved, not decided. The
+   mirror case (an overlap degree with nonmaterial evidence) keeps its stronger tint --
+   understating a strong finding would be the opposite error -- and is already marked
+   dashed by its evidence class above. */
+.as-weak.ev-material {
+  --as-ink: #4d5666;
+  --as-bg: #f3f4f7;
+  --as-edge: #b9bfcc;
+  --as-line: dashed;
+}
+
+.as-pill {
+  display: inline-block;
+  padding: 1px 9px;
+  border-radius: 999px;
+  font-weight: 700;
+  line-height: 1.55;
+  color: var(--as-ink);
+  background: var(--as-bg);
+  border: 1px var(--as-line) var(--as-edge);
+}
+summary .as-pill {
+  margin-left: 8px;
+  font-weight: 600;
+  font-size: 11.5px;
+}
+.as-assess {
+  margin-top: 10px;
+}
+
+/* An assessment cell in the overview tables, plus the row marker for the papers that
+   were asked to stand out there: substantial overlap or stronger. In a table of ~60
+   cells, tinting the "no overlap" ones too would wash the whole grid and leave nothing
+   standing out, so there the tint is dropped and only the ink and the evidence outline
+   remain -- the strong and partial findings are the ones that get a background. */
+td.as-cell {
+  color: var(--as-ink);
+  background: var(--as-bg);
+  font-weight: 600;
+  border-left: 3px var(--as-line) var(--as-edge);
+}
+td.as-cell.as-weak,
+td.as-cell.as-unknown {
+  background: none;
+}
+td.as-cell.as-weak.ev-material {
+  background: var(--as-bg);
+}
+td.as-cell a {
+  color: inherit;
+}
+.as-cell-row {
+  background: #fdf6f8;
+}
+.as-cell-row > td:first-child {
+  border-left: 3px solid #96122c;
+  font-weight: 700;
+}
+
+/* Every assessment in the overview tables jumps to the comparison it names. */
+.as-jump {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-decoration-color: var(--as-edge);
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.as-jump:hover {
+  text-decoration-style: solid;
+  text-decoration-color: currentColor;
+}
+.as-flash {
+  animation: as-flash 1.5s ease-out;
+}
+@keyframes as-flash {
+  0%,
+  30% {
+    box-shadow: 0 0 0 3px #f3cf6a;
+  }
+  100% {
+    box-shadow: 0 0 0 3px rgba(243, 207, 106, 0);
+  }
+}
+
+/* The blocks of one comparison, tinted apart: what the prior paper does (folded), what
+   the comparison argues, the evidence pairs the check accepted, the candidates it set
+   aside (folded), and the check's own record (folded). Folding drops no text. */
+.blk {
+  --blk-edge: #dde2ec;
+  --blk-bg: #fff;
+  --blk-ink: inherit;
+  margin: 9px 0;
+  border: 1px solid var(--blk-edge);
+  border-left: 3px var(--blk-line, solid) var(--blk-edge);
+  border-radius: 0 7px 7px 0;
+  background: var(--blk-bg);
+}
+.blk > summary {
+  cursor: pointer;
+  padding: 5px 10px;
+  font-weight: 700;
+  font-size: 12.5px;
+  color: var(--blk-ink);
+}
+.blk[open] > summary {
+  border-bottom: 1px solid var(--blk-edge);
+}
+.blk > div {
+  padding: 4px 12px 8px;
+}
+.blk-priorwork {
+  --blk-edge: #c6cfe0;
+  --blk-bg: #f6f8fc;
+  --blk-ink: #3c4a63;
+}
+.blk-comparison {
+  --blk-edge: #b9c8ee;
+  --blk-bg: #f9fbff;
+  --blk-ink: #2b3f6b;
+}
+.blk-pairs {
+  --blk-edge: #b3dcc3;
+  --blk-bg: #f8fcf9;
+  --blk-ink: #1d6b41;
+}
+.blk-unused {
+  --blk-edge: #d8dbe2;
+  --blk-bg: #fbfbfc;
+  --blk-ink: #5d6779;
+  --blk-line: dashed;
+}
+.blk-check {
+  --blk-edge: #cabfe8;
+  --blk-bg: #faf8fe;
+  --blk-ink: #4a3d77;
+}
+/* --- report layout v4: claims, comparisons, folds ---------------------------- */
+/* assessmentStyle.groupReport decides the structure; this is how it looks, the same in
+   both apps. A claim is one closed card whose row already says what the reader needs to
+   choose whether to open it; a comparison is a framed section; folds reuse .blk. */
+.lay-claim {
+  margin: 12px 0;
+  border: 1px solid #cdd6e6;
+  border-radius: 9px;
+  background: #fff;
+}
+.lay-claim > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 10px 14px 10px 32px;
+  position: relative;
+  border-radius: 9px;
+  background: #f6f8fc;
+}
+.lay-claim > summary::-webkit-details-marker { display: none; }
+.lay-claim > summary::before {
+  content: "▸";
+  position: absolute;
+  left: 12px;
+  top: 11px;
+  color: #5a6a86;
+}
+.lay-claim[open] > summary::before { content: "▾"; }
+.lay-claim[open] > summary {
+  border-bottom: 1px solid #cdd6e6;
+  border-radius: 9px 9px 0 0;
+}
+.lay-claim > summary > * { margin: 3px 0; }
+.lay-claim > summary h2,
+.lay-claim > summary h3 { font-size: 15px; margin: 0 0 4px; }
+.lay-claim-body { padding: 6px 16px 14px; }
+.lay-verdict { display: inline-block; margin-right: 14px; }
+/* v4.4: the claim text in a claim's row links to its anchor passage in the submission PDF. */
+.claim-jump { color: inherit; text-decoration: underline dotted #8a94a6; text-underline-offset: 3px; cursor: pointer; }
+.claim-jump:hover { text-decoration: underline solid #2f5bd3; }
+.claim-jump.active { background: #fff5c2; }
+.claim-jump-mark { font-size: 0.82em; color: #2f5bd3; white-space: nowrap; }
+.lay-open {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 6px 0;
+  padding: 5px 9px;
+  border-radius: 6px;
+  background: #fff7e6;
+  border: 1px solid #f0d49b;
+  color: #6b4a00;
+}
+.lay-open-mark {
+  flex: none;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: #d9a52b;
+  color: #fff;
+  font-weight: 800;
+  font-size: 11.5px;
+  line-height: 17px;
+  text-align: center;
+  margin-top: 1px;
+}
+.lay-cmp {
+  margin: 16px 0;
+  padding: 10px 14px 6px;
+  border: 1px solid #dfe5ef;
+  border-top: 3px solid #7d93bd;
+  border-radius: 4px 4px 8px 8px;
+  background: #fff;
+}
+.lay-cmp > h4,
+.lay-cmp > h5 { margin-top: 2px; }
+.lay-fold > .lay-fold-summary { font-weight: 700; }
+.lay-fold-body { padding: 4px 12px 8px; }
+.blk-check { --blk-edge: #cabfe8; --blk-bg: #faf8fe; --blk-ink: #4a3d77; }
+.blk-full { --blk-edge: #b9c8ee; --blk-bg: #f9fbff; --blk-ink: #2b3f6b; }
+.blk-passages { --blk-edge: #b3dcc3; --blk-bg: #f8fcf9; --blk-ink: #1d6b41; }
+.blk-coverage { --blk-edge: #d8dbe2; --blk-bg: #fbfbfc; --blk-ink: #5d6779; }
+.blk-legend,
+.blk-matrix,
+.blk-meta { --blk-edge: #c6cfe0; --blk-bg: #f6f8fc; --blk-ink: #3c4a63; }
+/* --- end of the shared assessment block ----------------------------------- */
+
+/* The claim text carries a soft wash of the colour its passages have in the submission
+   PDF (ReportRenderer's claimColor), full strength while its anchor is the one shown; a
+   quoted submission passage carries a swatch of the same colour. */
+.claim-jump.claim-colored {
+  background: color-mix(in srgb, var(--claim-color) 38%, transparent);
+  border-radius: 3px; padding: 1px 3px;
+  box-decoration-break: clone; -webkit-box-decoration-break: clone;
+}
+.claim-jump.claim-colored.active { background: var(--claim-color); }
+.qswatch {
+  display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+  margin: 0 6px 0 0; vertical-align: baseline;
+}
+
 /* --- PDF pane -------------------------------------------------------------- */
 .study-pdf-pane { display: flex; flex-direction: column; height: 100%; background: #fff; }
 .study-pdf-bar {
@@ -250,7 +549,31 @@ textarea { resize: vertical; }
 .study-pdf-title { font-weight: 700; font-size: 13px; }
 .study-pdf-search { display: flex; gap: 6px; flex: 1; max-width: 420px; }
 .study-pdf-search input { max-width: none; }
-.study-pdf-pane .pdfpane, .study-pdf-pane > div:last-child { flex: 1; min-height: 0; overflow: auto; }
+.study-pdf-pane .pdfpane, .study-pdf-pane > div:last-child { flex: 1; min-height: 0; overflow: hidden; }
+/* The viewer scrolls `.pdfscroll` to a passage (PdfViewer's focus effect). It has to be the
+   element that actually scrolls: with the pane scrolling instead, every "show in PDF" jump
+   was a no-op and the document stayed on page 1. */
+.study-pdf-pane .pdfpane { display: flex; flex-direction: column; }
+.study-pdf-pane .pdfscroll { flex: 1 1 auto; min-height: 0; overflow: auto; position: relative; }
+
+/* The vendored viewer (vendor/pdf/PdfViewer.jsx) ships no styles of its own: in the main
+   app these rules live in frontend/src/styles.css. Without them a highlight box is an
+   ordinary block below the page canvas rather than laid over the text, so every quote was
+   "located" and none was visibly marked. Copied from frontend/src/styles.css. */
+.pdfpane { background: #f6f7f9; }
+.pdftools {
+  display: flex; align-items: center; gap: 10px; padding: 6px 10px;
+  border-bottom: 1px solid var(--line); background: #fff; flex: 0 0 auto;
+}
+.pdfzoom { font-variant-numeric: tabular-nums; font-size: 12px; color: #4b5563; min-width: 42px; text-align: center; }
+.pdfhits { font-size: 12px; }
+.pdfopen { margin-left: auto; }
+.study-pdf-pane .pdfscroll { padding: 8px; }
+.pdfpages { width: fit-content; margin: 0 auto; }
+.pdfloading { padding: 24px; text-align: center; }
+.pdfpage { position: relative; margin: 0 auto 14px; background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.16); }
+.pdfpage canvas { display: block; }
+.pdfhl { position: absolute; pointer-events: none; border-radius: 2px; mix-blend-mode: multiply; opacity: 0.85; }
 
 .fe-overlay {
   position: fixed; inset: 0; background: rgba(18, 24, 38, 0.55); z-index: 60;

@@ -73,10 +73,14 @@ def create_app() -> FastAPI:
             # Never intercept the API or the docs-less openapi route.
             if full_path.startswith("api/"):
                 return JSONResponse(status_code=404, content={"error": "not_found"})
+            # index.html and the unhashed files (criteria.json) must be revalidated on every
+            # load, or a browser keeps showing an old form after a rebuild; /assets/* carry a
+            # content hash in their names and may be cached.
+            revalidate = {"Cache-Control": "no-cache"}
             candidate = FRONTEND_DIST / full_path
             if full_path and candidate.is_file():
-                return FileResponse(candidate)
-            return FileResponse(FRONTEND_DIST / "index.html")
+                return FileResponse(candidate, headers=revalidate)
+            return FileResponse(FRONTEND_DIST / "index.html", headers=revalidate)
     else:
         @app.get("/")
         def no_frontend():

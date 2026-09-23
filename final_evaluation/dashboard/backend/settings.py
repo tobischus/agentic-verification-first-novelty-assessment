@@ -14,7 +14,15 @@ from pathlib import Path
 
 try:
     from dotenv import load_dotenv
-    load_dotenv(Path(__file__).resolve().parents[2] / ".env")  # final_evaluation/.env
+    # final_evaluation/.env by default; ENV_FILE picks another one, e.g. the cloud
+    # settings in final_evaluation/.env.cloud for CLI commands against Supabase, so the
+    # local .env (and the local study) stays untouched.
+    _env_file = os.getenv("ENV_FILE")
+    if _env_file and not Path(_env_file).is_file():
+        raise SystemExit(f"ENV_FILE={_env_file} does not exist")
+    load_dotenv(Path(_env_file) if _env_file else Path(__file__).resolve().parents[2] / ".env")
+except SystemExit:
+    raise
 except Exception:
     pass
 
@@ -61,10 +69,8 @@ class Settings:
             problems.append("ACCESS_CODE_PEPPER is not set (any long random string, "
                             "distinct from SESSION_SECRET).")
         if self.is_production:
-            if not self.study_contact:
-                problems.append("STUDY_CONTACT is not set. The login page must show a real "
-                                "contact address before going online -- this is a "
-                                "configuration error, not something to invent a value for.")
+            # STUDY_CONTACT is optional: the login page no longer shows a contact line
+            # (raters are recruited personally and contact the study author directly).
             if self.storage_backend == "supabase":
                 for name, val in (("SUPABASE_URL", self.supabase_url),
                                   ("SUPABASE_SERVICE_ROLE_KEY", self.supabase_service_role_key),

@@ -39,7 +39,7 @@ COPY final_evaluation/PROTOCOL.md ./final_evaluation/PROTOCOL.md
 COPY --from=frontend /app/frontend/dist ./final_evaluation/dashboard/frontend/dist
 
 # Render provides $PORT. APP_ENV=production makes settings.py refuse to start without
-# SESSION_SECRET / ACCESS_CODE_PEPPER / STUDY_CONTACT / a non-SQLite DATABASE_URL.
+# SESSION_SECRET / ACCESS_CODE_PEPPER / a non-SQLite DATABASE_URL.
 ENV APP_ENV=production STORAGE_BACKEND=supabase PORT=10000
 EXPOSE 10000
 CMD ["sh", "-c", "python -m uvicorn final_evaluation.dashboard.backend.app:create_app --factory --host 0.0.0.0 --port ${PORT}"]

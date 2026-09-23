@@ -81,7 +81,9 @@ def _check_anchor_resolution(paper: str, system: str, text_path: Path, qidx_path
 
 def run(study: str, config_path: str = "final_evaluation/config/pilot.yaml") -> dict:
     cfg = yaml.safe_load((REPO_ROOT / config_path).read_text(encoding="utf-8"))
-    manifest_path = FE_ROOT / "manifests" / "pilot" / "reports.json"
+    # The manifest of the study this config describes (`inputs_dir`, as import_pilot and
+    # seed_pilot use it) -- a fixed "pilot" here reported every main-study paper missing.
+    manifest_path = FE_ROOT / "manifests" / (cfg.get("inputs_dir") or "pilot") / "reports.json"
     findings: list = []
     result = {"study": study, "papers": {}, "findings": findings}
 

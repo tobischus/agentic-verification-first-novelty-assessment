@@ -186,6 +186,10 @@ def _build_export(db: Session, study_id: str) -> bytes:
         models.Assignment, models.Assignment.id == models.FinalResponse.assignment_id).filter(
         models.Assignment.study_id == study_id)}
     issues = db.query(models.TechnicalIssue).filter(models.TechnicalIssue.study_id == study_id).all()
+    familiarity = db.query(models.PaperFamiliarity).filter(
+        models.PaperFamiliarity.study_id == study_id).all()
+    readings = {(r.participant_id, r.paper_id): r for r in db.query(models.PaperReading).filter(
+        models.PaperReading.study_id == study_id)}
 
     ratings_jsonl_lines = []
     long_rows = []  # one row per task x rater x criterion
@@ -281,7 +285,8 @@ def _build_export(db: Session, study_id: str) -> bytes:
 
         try:
             from pathlib import Path
-            rubric_path = Path(__file__).resolve().parents[3] / "prompts" / "novelty_report_judge_v3.txt"
+            rubric_path = (Path(__file__).resolve().parents[3] / "prompts"
+                           / f"{study.rubric_version if study else 'novelty_report_judge_v3'}.txt")
             z.writestr("rubric.txt", rubric_path.read_text(encoding="utf-8"))
         except Exception:
             pass
@@ -300,10 +305,44 @@ def _build_export(db: Session, study_id: str) -> bytes:
                        i.created_at.isoformat(), i.resolved])
         z.writestr("technical_issues.csv", out.getvalue())
 
+        # One row per participant x paper: the two background answers (asked once per
+        # paper) and, in a non-pilot study, the reading step before the paper's tasks.
+        out = io.StringIO(); w = csv.writer(out)
+        w.writerow(["participant_code", "is_test_participant", "paper_id", "familiarity",
+                    "read_before", "familiarity_at", "reading_opened_at", "reading_confirmed_at",
+                    "reading_active_ms"])
+        keys = {(f.participant_id, f.paper_id) for f in familiarity} | set(readings)
+        fam_by = {(f.participant_id, f.paper_id): f for f in familiarity}
+        for pid, paper_id in sorted(keys):
+            if pid not in participants or paper_id not in papers:
+                continue
+            f = fam_by.get((pid, paper_id)); r = readings.get((pid, paper_id))
+            w.writerow([participants[pid].code_display, participants[pid].is_test,
+                        papers[paper_id].paper_key,
+                        f.familiarity if f else "", f.read_before if f else "",
+                        f.created_at.isoformat() if f else "",
+                        r.opened_at.isoformat() if r and r.opened_at else "",
+                        r.confirmed_at.isoformat() if r and r.confirmed_at else "",
+                        r.active_ms if r else ""])
+        z.writestr("paper_background.csv", out.getvalue())
+
         out = io.StringIO(); w = csv.writer(out)
         w.writerow(["participant_code", "submitted", "total_assigned"])
         w.writerows(completion_rows)
         z.writestr("completion.csv", out.getvalue())
+
+        # The raters' own background (asked once, at consent) -- needed to describe the
+        # rater pool; the codes stay pseudonymous.
+        out = io.StringIO(); w = csv.writer(out)
+        w.writerow(["participant_code", "is_test_participant", "review_experience",
+                    "system_involvement", "system_involvement_note", "consent_at",
+                    "consent_instructions_sha256"])
+        for pt in sorted(participants.values(), key=lambda x: x.code_display):
+            w.writerow([pt.code_display, pt.is_test, pt.review_experience or "",
+                        pt.system_involvement or "", _csv_safe(pt.system_involvement_note),
+                        pt.consent_at.isoformat() if pt.consent_at else "",
+                        pt.consent_instructions_sha256 or ""])
+        z.writestr("participants.csv", out.getvalue())
 
     return buf.getvalue()
 
