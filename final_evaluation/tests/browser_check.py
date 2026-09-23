@@ -21,6 +21,7 @@ It reads a participant code from private/participant_codes__*.csv and never prin
 Point it at a THROWAWAY database if you do not want a real submitted response.
 """
 import csv
+import os
 import re
 import sys
 import time
@@ -28,10 +29,13 @@ from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
-BASE = "http://127.0.0.1:8010"
+# Point both at a THROWAWAY database, never the study one: this check submits a task.
+BASE = os.environ.get("CHECK_BASE", "http://127.0.0.1:8010")
 SHOT = Path(sys.argv[1] if len(sys.argv) > 1 else "shots")
 SHOT.mkdir(parents=True, exist_ok=True)
-CODES = Path("final_evaluation/private/participant_codes__dashboard_pilot_v1__local_study.csv")
+CODES = Path(os.environ.get(
+    "CHECK_CODES",
+    "final_evaluation/private/participant_codes__dashboard_pilot_v1__local_study.csv"))
 
 code = None
 with open(CODES, encoding="utf-8") as fh:
@@ -133,7 +137,10 @@ with sync_playwright() as p:
     check("report: per-source comparisons are collapsible, collapsed by default",
           n_details > 0 and open_details == 0, f"{n_details} sections, {open_details} open")
     if n_details:
-        details.nth(0).locator("summary").click()
+        # "> summary": a comparison now also contains the summaries of its own folded
+        # blocks (prior work summary, unused pairs, evidence-check record), so a bare
+        # "summary" matches several. See browser_check_layout.py for those.
+        details.nth(0).locator("> summary").click()
         page.wait_for_timeout(300)
         check("report: a collapsed comparison opens with its content",
               page.locator(".rr-detail[open] .rr-detail-body").count() >= 1)

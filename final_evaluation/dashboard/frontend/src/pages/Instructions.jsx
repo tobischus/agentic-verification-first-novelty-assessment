@@ -16,7 +16,7 @@ export default function Instructions({ me, onConsented, onLogout }) {
   const [err, setErr] = useState('')
 
   useEffect(() => {
-    fetch('/instructions.txt').then((r) => r.text()).then(async (t) => {
+    fetch('/instructions.txt', { cache: 'no-store' }).then((r) => r.text()).then(async (t) => {
       setText(t)
       const enc = new TextEncoder().encode(t)
       const digest = await crypto.subtle.digest('SHA-256', enc)
@@ -48,9 +48,9 @@ export default function Instructions({ me, onConsented, onLogout }) {
         <pre className="fe-instructions-text">{text || 'Loading…'}</pre>
 
         <div className="fe-practice-note">
-          A short practice walkthrough of the interface (task list, report panels, the
-          rating form) is available from the task list after you continue -- it is
-          separate from your six scored tasks and does not count as one of them.
+          How it works: for each paper you first read (or skim) the submission, then
+          compare its reports in that paper's comparison tasks. Your answers are saved as
+          you go; you can stop at any time and continue later with the same access code.
         </div>
 
         <label className="fe-checkbox">

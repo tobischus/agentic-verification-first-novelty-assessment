@@ -58,7 +58,13 @@ def _put_asset(db, backend: storage.StorageBackend, study_id: str, kind: str,
 
 def seed_pilot(config_path: str = "final_evaluation/config/pilot.yaml") -> dict:
     cfg = yaml.safe_load((REPO_ROOT / config_path).read_text(encoding="utf-8"))
-    manifest = json.loads((FE_ROOT / "manifests" / "pilot" / "reports.json").read_text(encoding="utf-8"))
+    # The manifest of the study this config describes, not the pilot's. `inputs_dir` is
+    # the same key import_pilot writes under, so a study is seeded from exactly the files
+    # that were frozen for it -- seeding the main study off the pilot's manifest would
+    # look up its papers in the wrong report set and fail, or worse, bind the wrong file.
+    study_dir = cfg.get("inputs_dir") or "pilot"
+    manifest = json.loads(
+        (FE_ROOT / "manifests" / study_dir / "reports.json").read_text(encoding="utf-8"))
     if manifest.get("blockers"):
         raise RuntimeError(f"reports.json has {len(manifest['blockers'])} blocker(s) -- "
                           "run validate-inputs and fix them before seeding")
@@ -292,3 +298,110 @@ def create_admin(study_id: str, display: str = "ADMIN") -> dict:
         admin_path = admin_path.with_name(f"{admin_path.stem}__{stamp}{admin_path.suffix}")
     admin_path.write_text(f"{full_code}\n", encoding="utf-8")
     return {"created": True, "code_path": str(admin_path)}
+
+
+def refresh_reports(config_path: str, systems=("agent", "linear"), dry_run: bool = False) -> dict:
+    """Point a study's reports at the content of its CURRENT manifest -- only where no one
+    has rated against the old content.
+
+    seed_pilot() never touches an existing Report, deliberately: a report a rater has seen
+    must not change underneath their rating. A FinalResponse does not store which content
+    version it rated, so the only guarantee that it stays tied to what was shown is that
+    the report under its task is never replaced. This is the one sanctioned way to replace
+    one, and it refuses whenever that guarantee would break:
+
+      kept   any task using the report has a FinalResponse, or a non-test participant has
+             started it or left a draft -- the old content stays, and the result says why.
+      swap   otherwise: the new asset is stored beside the old one (assets are content-
+             addressed, so the old bytes stay retrievable by their id), the Report row
+             points at it, and an audit event records old and new content_version.
+
+    Test participants' drafts do not block a swap -- they are excluded from the analysis
+    and exist to look at the study -- but each affected one is listed.
+    """
+    cfg = yaml.safe_load((REPO_ROOT / config_path).read_text(encoding="utf-8"))
+    study_dir = cfg.get("inputs_dir") or "pilot"
+    manifest = json.loads(
+        (FE_ROOT / "manifests" / study_dir / "reports.json").read_text(encoding="utf-8"))
+    if manifest.get("blockers"):
+        raise RuntimeError(f"reports.json has {len(manifest['blockers'])} blocker(s)")
+    sid = cfg["study"]["id"]
+
+    settings = get_settings()
+    engine = db_mod.make_engine(settings.database_url)
+    Session = db_mod.make_session_factory(engine)
+    backend = storage.backend_from_env()
+    db = Session()
+    summary = {"study": sid, "dry_run": dry_run, "replaced": [], "unchanged": [],
+               "kept_because_rated": [], "test_drafts_affected": []}
+    try:
+        people = {p.id: p for p in db.query(models.Participant)
+                  .filter(models.Participant.study_id == sid)}
+        all_tasks = db.query(models.Task).filter(models.Task.study_id == sid).all()
+        for paper_key, entry in manifest["papers"].items():
+            paper = (db.query(models.Paper).filter(models.Paper.study_id == sid,
+                                                   models.Paper.paper_key == paper_key).first())
+            if paper is None:
+                continue
+            for system_id in systems:
+                r = (entry.get("systems") or {}).get(system_id) or {}
+                if not r or r.get("blocker"):
+                    continue
+                rep = db.query(models.Report).filter(
+                    models.Report.id == f"{paper.id}::{system_id}").first()
+                if rep is None:
+                    continue
+                tag = f"{paper_key}/{system_id}"
+                if rep.content_version == r["content_version"]:
+                    summary["unchanged"].append(tag)
+                    continue
+                task_ids = [t.id for t in all_tasks if rep.id in (t.report_a_id, t.report_b_id)]
+                assigns = (db.query(models.Assignment)
+                           .filter(models.Assignment.task_id.in_(task_ids)).all()
+                           if task_ids else [])
+                finals = ({f.assignment_id for f in db.query(models.FinalResponse).filter(
+                    models.FinalResponse.assignment_id.in_([a.id for a in assigns]))}
+                    if assigns else set())
+                blocking = [a for a in assigns if a.id in finals or (
+                    not people[a.participant_id].is_test
+                    and (a.status != "not_started" or a.draft))]
+                if blocking:
+                    summary["kept_because_rated"].append(
+                        {"report": tag, "content_version": rep.content_version,
+                         "assignments": [(people[a.participant_id].code_display, a.status,
+                                          a.id in finals) for a in blocking]})
+                    continue
+                for a in assigns:
+                    if people[a.participant_id].is_test and (a.status != "not_started" or a.draft):
+                        summary["test_drafts_affected"].append(
+                            (tag, people[a.participant_id].code_display, a.status))
+                row = {"report": tag, "old": rep.content_version, "new": r["content_version"]}
+                if not dry_run:
+                    content_entry = r.get("text_file") or r.get("content_file")
+                    content_kind = "markdown" if r["view_type"] == "markdown" else "pdf"
+                    content_asset = _put_asset(db, backend, sid, content_kind, content_entry,
+                                               f"{paper_key}/{system_id}")
+                    qidx_id = None
+                    if r.get("quote_index_file"):
+                        qidx_id = _put_asset(db, backend, sid, "json", r["quote_index_file"],
+                                             f"{paper_key}/{system_id}.quote_index").id
+                    row["old_asset"] = rep.content_asset_id
+                    row["new_asset"] = content_asset.id
+                    rep.content_asset_id = content_asset.id
+                    rep.quote_index_asset_id = qidx_id
+                    rep.content_version = r["content_version"]
+                    rep.imported_at = datetime.now(timezone.utc)
+                    db.add(models.AuditEvent(
+                        id=models.new_id(), study_id=sid, actor="cli:refresh-reports",
+                        event_type="report_content_replaced",
+                        payload={**row, "manifest_git_head": manifest.get("git_head"),
+                                 "reason": "no final response and no started or drafted "
+                                           "assignment by a non-test participant"}))
+                summary["replaced"].append(row)
+        if dry_run:
+            db.rollback()
+        else:
+            db.commit()
+    finally:
+        db.close()
+    return summary

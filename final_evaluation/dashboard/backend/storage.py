@@ -62,7 +62,8 @@ class LocalStorage(StorageBackend):
         dest_dir.mkdir(parents=True, exist_ok=True)
         dest = dest_dir / f"{asset_id}__{src_path.name}"
         shutil.copyfile(src_path, dest)
-        return str(dest.relative_to(self.root))
+        # POSIX separators: a key written on Windows must still resolve on Linux.
+        return dest.relative_to(self.root).as_posix()
 
     def resolve(self, storage_key: str, content_type: str) -> ResolvedAsset:
         p = self.root / storage_key
@@ -85,10 +86,13 @@ class SupabaseStorage(StorageBackend):
         self.base = url.rstrip("/")
         self.key = service_role_key
         self.bucket = bucket
-        self._client = httpx.Client(timeout=30.0, headers={
-            "Authorization": f"Bearer {self.key}",
-            "apikey": self.key,
-        })
+        # A legacy service_role key is a JWT and goes on both headers; a new secret key
+        # (sb_secret_...) goes on `apikey` only -- Supabase: "Send publishable and secret
+        # keys on the apikey header, not on Authorization: Bearer".
+        headers = {"apikey": self.key}
+        if self.key.startswith("eyJ"):
+            headers["Authorization"] = f"Bearer {self.key}"
+        self._client = httpx.Client(timeout=30.0, headers=headers)
 
     def put(self, study_id: str, asset_id: str, src_path: Path, content_type: str) -> str:
         key = f"{study_id}/{asset_id}__{src_path.name}"

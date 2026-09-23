@@ -1,4 +1,12 @@
-# Hosting the pilot for free: Render Free + Supabase Free
+# Hosting the study for free: Render Free + Supabase Free
+
+> **Main study (`main_study_v2`).** Use `--config final_evaluation/config/main.yaml` and
+> `--study main_study_v2` wherever a command below names the pilot. The cloud database is
+> a *new* database: participant codes created locally do **not** work there -- create
+> M01/M02 (and the PV01 test account) against the cloud database and hand out those codes.
+> Checked 2026-09-23 on a fresh local database: `init-db` + `seed-pilot --config main.yaml`
+> build 10 papers, 50 reports, 20 tasks and 90 assets (43.4 MB, largest file 11.9 MB --
+> inside Supabase Free's 1 GB / 50 MB limits).
 
 Everything below is a manual step **you** perform — this repository creates no accounts,
 accepts no terms, and enables no paid plan. Nothing here is required for local use.
@@ -22,102 +30,119 @@ spin-down, and backups are a manual CLI step you run daily during an active stud
 
 ## 1. Supabase project
 
-1. Create a free Supabase account and a project; choose an **EU region** if your data
-   protection expectations call for one.
-2. Storage → **New bucket** → name it (e.g. `study-assets`) → **keep it private**
-   (public = off). Never make it public: assets are served only through the study API.
-3. Project Settings → Database → **Connection string** → use the **Session pooler / 
-   Transaction pooler** URI (port 6543), not the direct 5432 connection: free-tier
-   projects have very few direct connections, and this app deliberately opens a small
-   pool (`pool_size=3`, `pool_pre_ping`, `pool_recycle=300` — see `backend/db.py`).
-   Convert it to SQLAlchemy form:
-   `postgresql+psycopg2://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:6543/postgres?sslmode=require`
-4. Project Settings → API → copy the **service_role** key. It is server-side only; it
-   must never appear in the frontend, in git, or in a browser request.
+1. Create a free Supabase account and a project (plan Free, region **Central EU
+   (Frankfurt)**). Choose a database password of letters and digits only -- it goes into
+   a URL, where special characters would need escaping -- and keep it.
+2. Storage → **New bucket** → `study-assets` → **public off**. Never make it public:
+   assets are served only through the study API (short-lived signed URLs).
+3. **Connect** (top of the project page) → connection string, type URI, method
+   **Transaction pooler** (port 6543), not the direct connection (IPv6 only on Free).
+   Replace `[YOUR-PASSWORD]`, change the scheme to `postgresql+psycopg2://` and append
+   `?sslmode=require`:
+   `postgresql+psycopg2://postgres.<ref>:<password>@aws-<n>-eu-central-1.pooler.supabase.com:6543/postgres?sslmode=require`
+4. Project Settings → **API Keys** → a **secret key** (`sb_secret_...`) or the legacy
+   `service_role` key. Server-side only: never in the frontend, in git or in a browser.
+   Both kinds work (`storage.py` sends a secret key on `apikey` only, as Supabase asks).
+5. The **Project URL** `https://<ref>.supabase.co`.
 
-## 2. Local .env pointing at the cloud
+## 2. The cloud settings file
 
-Do not put secrets on the command line. Put them in `final_evaluation/.env`:
+Keep the local `.env` as it is (it runs the local study). Put the cloud values in
+`final_evaluation/.env.cloud` (gitignored and dockerignored by `.env.*`):
 
 ```
 APP_ENV=production
-DATABASE_URL=postgresql+psycopg2://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:6543/postgres?sslmode=require
-SESSION_SECRET=<32+ random bytes, hex>
-ACCESS_CODE_PEPPER=<a different 32+ random bytes, hex>
+DATABASE_URL=postgresql+psycopg2://postgres.<ref>:<password>@aws-<n>-eu-central-1.pooler.supabase.com:6543/postgres?sslmode=require
+SESSION_SECRET=<python -c "import secrets;print(secrets.token_hex(32))">
+ACCESS_CODE_PEPPER=<a second, different token_hex(32)>
 STORAGE_BACKEND=supabase
 SUPABASE_URL=https://<ref>.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=<service_role key>
+SUPABASE_SERVICE_ROLE_KEY=<secret key>
 SUPABASE_BUCKET=study-assets
-PUBLIC_BASE_URL=https://<your-service>.onrender.com
-STUDY_CONTACT=<a real address you monitor>
 ```
 
-`STUDY_CONTACT` is mandatory in production — the app refuses to start without it rather
-than showing participants a login page with no way to report a problem.
+A CLI command reads it when `ENV_FILE` points at it (`settings.py`):
+`$env:ENV_FILE = "final_evaluation/.env.cloud"` in PowerShell; `Remove-Item Env:ENV_FILE`
+afterwards. **`ACCESS_CODE_PEPPER` must be identical here and on Render** -- the codes
+are hashed with it when you create them locally and checked with it on Render.
 
-## 3. Migrate the cloud database and upload assets
+## 3. Build the study in the cloud database
 
-```
-python -m final_evaluation.cli init-db                                   # creates the schema in Supabase
-python -m final_evaluation.cli seed-pilot                                # study, papers, reports, tasks
-python -m final_evaluation.cli upload-assets --study dashboard_pilot_v1  # local files -> private bucket
-```
-
-`upload-assets` prints total size, the largest file, and **stops without uploading
-anything** if a file would exceed 50 MB or the total would exceed 1 GB. It does not
-upgrade a plan and does not shorten content to fit — if it stops, decide what to do
-yourself.
-
-It requires the study to have been seeded **locally first** (`STORAGE_BACKEND=local`),
-because it re-reads and re-hashes the exact bytes the local pilot ran against before
-uploading them.
-
-## 4. Participants and admin against the cloud database
+With `ENV_FILE` set, from the repository root:
 
 ```
-python -m final_evaluation.cli create-participants --study dashboard_pilot_v1 --count 2
-python -m final_evaluation.cli create-admin        --study dashboard_pilot_v1
+python -m final_evaluation.cli init-db
+python -m final_evaluation.cli seed-pilot --config final_evaluation/config/main.yaml
+python -m final_evaluation.cli upload-assets --study main_study_v2
 ```
 
-Run these **locally** with the cloud `DATABASE_URL` — no Render shell is needed, and the
-codes file and the optional name key stay on your machine.
+With `STORAGE_BACKEND=supabase`, `seed-pilot` already uploads every file into the bucket
+(it reads the local frozen inputs); `upload-assets` then reports 0 files to upload and is
+only a check. Expected: 10 papers, 50 reports, 20 tasks, 90 files (43 MB).
+
+## 4. Participants and admin
+
+Still with `ENV_FILE` set:
+
+```
+python -m final_evaluation.cli create-participants --study main_study_v2 --count 2 --prefix M --not-test --config final_evaluation/config/main.yaml
+python -m final_evaluation.cli create-participants --study main_study_v2 --count 1 --prefix PV --config final_evaluation/config/main.yaml
+python -m final_evaluation.cli create-admin --study main_study_v2
+```
+
+The codes are written once to `final_evaluation/private/` (file names carry the cloud
+host). These are the codes to hand out; the local ones do not work in the cloud.
 
 ## 5. Deploy to Render
 
-1. Push this repository to a **private** Git repository. `inputs/`, `manifests/`,
-   `private/`, `results/`, `backups/` and `.env` are gitignored; verify with
-   `git status --porcelain` before the first push.
-2. Render → New → **Web Service** → connect the repo → it will pick up
-   `final_evaluation/render.yaml` (Docker runtime, free plan, Frankfurt region,
-   health check `/api/health`, autoDeploy off).
-3. Enter the eight `sync: false` environment variables in Render's dashboard with the
-   same values as your local `.env`.
-4. Deploy, then confirm `https://<service>.onrender.com/api/health` returns
+The image is built from the Git repository, so everything under `final_evaluation/` that
+the Dockerfile copies must be committed and pushed first (`inputs/`, `private/`,
+`manifests/`, `.env*` stay out -- they are gitignored). Then:
+
+1. Render → **New → Web Service** → connect the GitHub repository (or "Public Git
+   Repository" with its URL) → branch = the pushed branch.
+2. Language **Docker**; Region **Frankfurt**; Instance type **Free**.
+3. Advanced: Dockerfile Path `final_evaluation/Dockerfile`, Docker Build Context
+   Directory `.` (the repository root), Health Check Path `/api/health`, Auto-Deploy
+   **off** (no redeploy during a live study).
+4. Environment variables: the eight lines of `.env.cloud`, same values.
+5. Create; the first build takes a few minutes. Then
+   `https://<service>.onrender.com/api/health` must answer
    `{"ok": true, "app_env": "production", "storage_backend": "supabase"}`.
+
+Verified locally on 2026-09-24 without a cloud account: the image builds from a
+copy of exactly these files; the container in `APP_ENV=production` against PostgreSQL 16
+passes the whole rater flow (consent, reading step, PDF, autosave, reload, submit,
+re-login, admin export with A/B mapped to systems, umlauts intact) and backup/restore
+round-trips. Not verified: Supabase Storage itself -- `seed-pilot` in step 3 is its first
+real use and fails loudly on a wrong key or bucket.
 
 ## 6. Full online test before sharing the URL
 
 Do all of this yourself, once, before anyone else sees the link:
 
-1. Open the URL in a **fresh browser profile**; log in with a real participant code.
-2. Accept the instructions, open a task, open the submission PDF, page and search in it.
+1. Open the URL in a **private window**; log in with the **PV01** code.
+2. Accept the instructions, read a submission, open a task, open the submission PDF,
+   page and search in it.
 3. Enter answers; watch the status go *Unsaved changes* → *Saving…* → *Saved at …*.
 4. Reload the page: the answers must come back from the server.
-5. Submit; note the receipt id.
+5. Submit.
 6. **Wait 20+ minutes** (Render free spins down), then reload: after the ~1 minute cold
    start the submitted task must still be there. This is the test that the data is in
    Supabase and not on Render's ephemeral disk.
-7. Log in as admin, download the export, and open it.
+7. Log in with the admin code, download the export, and open it.
 
-Then distribute the URL and the individual codes yourself.
+PV01 is a test participant (`is_test`); its answers stay in the export marked as test and
+are excluded from the analysis. Then send each rater the URL and their own code.
 
 ## 7. Backups during the study
 
 Free Supabase includes **no automatic database backups**. Run this daily while the study
-is active and once immediately after it ends:
+is active and once immediately after it ends (with `ENV_FILE` pointing at `.env.cloud`,
+otherwise it backs up the local database):
 
 ```
-python -m final_evaluation.cli backup --study dashboard_pilot_v1 --out final_evaluation/backups/pilot_backup.zip
+python -m final_evaluation.cli backup --study main_study_v2 --out final_evaluation/backups/main_backup.zip
 ```
 
 Existing files are never overwritten — a timestamp is appended and the actual path is

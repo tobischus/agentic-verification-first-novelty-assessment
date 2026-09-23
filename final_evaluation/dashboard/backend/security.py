@@ -73,7 +73,21 @@ LOCKOUT = timedelta(minutes=15)
 
 
 def is_locked(locked_until: datetime | None) -> bool:
-    return bool(locked_until and locked_until > datetime.now(timezone.utc))
+    """Whether the lockout is still running.
+
+    SQLite gives the value back NAIVE even though the column is DateTime(timezone=True);
+    PostgreSQL keeps the offset. Comparing a naive value against an aware `now` raises
+    TypeError, which FastAPI turns into a 500 -- so on SQLite, every login attempt after
+    a first lockout crashed instead of being refused, and the participant could never get
+    back in even after the 15 minutes had passed. A naive value was written by
+    lockout_after_failure() in UTC, so it is read as UTC. Same normalisation as
+    deps.py's session-expiry check.
+    """
+    if not locked_until:
+        return False
+    if locked_until.tzinfo is None:
+        locked_until = locked_until.replace(tzinfo=timezone.utc)
+    return locked_until > datetime.now(timezone.utc)
 
 
 def lockout_after_failure(failed_logins: int) -> datetime | None:
