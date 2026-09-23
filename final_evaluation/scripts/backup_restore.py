@@ -31,7 +31,7 @@ FE_ROOT = Path(__file__).resolve().parents[1]
 # Backup order (safe for both dump and restore in this sequence).
 TABLES = [models.Study, models.Asset, models.Paper, models.Report, models.Task,
          models.Participant, models.Session_, models.Assignment, models.FinalResponse,
-         models.PaperFamiliarity, models.AuditEvent, models.TechnicalIssue]
+         models.PaperFamiliarity, models.PaperReading, models.AuditEvent, models.TechnicalIssue]
 
 
 def _row_to_dict(row) -> dict:

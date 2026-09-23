@@ -134,14 +134,25 @@ export default function PdfViewer({ url, highlights = [], focusId = null, onLoca
     setScale((sc) => Math.min(3, Math.max(0.4, +(sc + d).toFixed(2))))
   }
 
+  // Colour is taken from the CURRENT highlights, not from `located`: locating is keyed on
+  // id and text only (see above), so a colour change -- the jumped-to passage turning
+  // strong, the rest pale -- would otherwise never reach the page. Keyed on the colours
+  // themselves for the same reason as `key`: the array is new on every parent render.
+  const colorKey = highlights.map((h) => `${h.id}:${h.color || ''}`).join('|')
   const byPage = useMemo(() => {
+    const colorOf = new Map(highlights.map((h) => [h.id, h.color]))
     const m = new Map()
-    for (const h of located) {
+    // The focused passage first: PdfPage draws a line shared by several passages once, in
+    // the colour of the first, and a jump target overlapping another quote would
+    // otherwise show its opening lines in that other quote's colour.
+    const ordered = [...located].sort((a, b) => (b.id === focusId) - (a.id === focusId))
+    for (const h of ordered) {
       if (!m.has(h.pageIndex)) m.set(h.pageIndex, [])
-      m.get(h.pageIndex).push(h)
+      m.get(h.pageIndex).push({ ...h, color: colorOf.get(h.id) ?? h.color })
     }
     return m
-  }, [located])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [located, colorKey, focusId])
 
   // ------------------------------- focus ---------------------------------- //
   useEffect(() => {

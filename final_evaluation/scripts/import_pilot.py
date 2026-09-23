@@ -37,6 +37,13 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 FE_ROOT = REPO_ROOT / "final_evaluation"
 SRC_NOVELTY = REPO_ROOT / "src" / "novelty_assessment"
 
+#: Which subdirectory of inputs/ and manifests/ this import writes to. The pilot's own
+#: name is the default, so a call that does not set it behaves exactly as before; run()
+#: sets it from the study config's `inputs_dir`. Without this the main study's import
+#: would overwrite the pilot's frozen inputs, which are cited by already-collected
+#: ratings and must not move.
+_STUDY_DIR = "pilot"
+
 
 def _sha256_bytes(b: bytes) -> str:
     return hashlib.sha256(b).hexdigest()
@@ -62,7 +69,7 @@ def _load_battle_export():
 
 
 def _out_dir(paper: str) -> Path:
-    d = FE_ROOT / "inputs" / "pilot" / paper
+    d = FE_ROOT / "inputs" / _STUDY_DIR / paper
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -75,8 +82,15 @@ def _write(paper: str, name: str, content: bytes) -> dict:
 
 
 def _import_rendered(be, paper: str, system: str, spec: dict) -> dict:
+    # A run that has not happened yet leaves no artifact. Report that as a blocker so the
+    # manifest says which (paper, system) is still missing, instead of aborting the whole
+    # import over the first one.
+    if not spec.get("artifact_a"):
+        return {"blocker": "no `artifact_a` in the source entry"}
     artifact_a = REPO_ROOT / spec["artifact_a"]
-    artifact_b = REPO_ROOT / spec["artifact_b"]
+    if not artifact_a.is_file():
+        return {"blocker": f"not run yet: {spec['artifact_a']} does not exist"}
+    artifact_b = REPO_ROOT / (spec.get("artifact_b") or spec["artifact_a"])
     variant = spec["variant"]
     text = be.build(str(REPO_ROOT / "data"), paper, variant=variant)
     qidx = be.quote_index(str(REPO_ROOT / "data"), paper, variant=variant)
@@ -115,10 +129,35 @@ def _import_native_pdf(paper: str, system: str, spec: dict) -> dict:
 
 
 def _import_deepreviewer(paper: str, system: str, spec: dict) -> dict:
+    """A completed DeepReviewer job's own output, markdown or their native PDF.
+
+    `file:` decides which: `final_report.md` is the review as text, `final_report.pdf`
+    their rendered report. A `.pdf` is shown the same way OpenNovelty's is -- their
+    layout and branding, no re-rendering by this repository.
+
+    One thing to know before naming a PDF here: DeepReviewer's OWN `final_report.pdf`
+    merges the review with the full annotated submission (measured: 47 pages over a
+    34-page paper). `eval/deepreviewer_review_pdf.py` re-renders the same report through
+    their builder with the merge skipped, writing `final_report_review_only.pdf` beside
+    it; that is the file to name for a study where the submission is already shown
+    separately and report length is a presentation variable.
+    """
+    # `job_dir` is left as a TODO in a generated sources file until the job has actually
+    # been run, so an absent key means "not run yet" and belongs in the manifest.
+    if not spec.get("job_dir"):
+        return {"blocker": "no `job_dir` in the source entry -- DeepReviewer has not run "
+                           "for this paper"}
     src = REPO_ROOT / spec["job_dir"] / spec["file"]
     if not src.is_file():
         return {"blocker": f"missing file: {spec['job_dir']}/{spec['file']}"}
     data = src.read_bytes()
+    if src.suffix.lower() == ".pdf":
+        f = _write(paper, f"{system}.pdf", data)
+        return {"view_type": "pdf", "text_file": None, "content_file": f,
+               "content_version": f"deepreviewer_native_pdf:{f['sha256'][:16]}",
+               "provenance": {"kind": "deepreviewer_job", "job_dir": spec["job_dir"],
+                              "file": spec["file"], "view": "native pdf",
+                              "note": spec.get("resolution_note", "").strip()}}
     f = _write(paper, f"{system}.md", data)
     return {"view_type": "markdown", "text_file": f,
            "content_version": f"deepreviewer_native:{f['sha256'][:16]}",
@@ -152,17 +191,30 @@ def _import_concat_text(paper: str, system: str, spec: dict) -> dict:
 
 
 def _import_submission(paper: str, spec: dict) -> dict:
+    """The submission PDF, plus the frozen text the E1 judge reads.
+
+    Both are recorded as blockers rather than raised when unresolved: a source the study
+    has not settled yet (the main study's submission text comes from DeepReviewer's MinerU
+    output, which does not exist until those jobs run) must show up in the manifest next to
+    the others, not stop the remaining papers from importing at all.
+    """
     out = {}
-    pdf_src = REPO_ROOT / spec["pdf"]
-    if pdf_src.is_file():
-        out["pdf_file"] = _write(paper, "submission.pdf", pdf_src.read_bytes())
+    pdf_rel = spec.get("pdf")
+    if not pdf_rel:
+        out["pdf_blocker"] = "no `pdf:` in the submission source entry"
+    elif (REPO_ROOT / pdf_rel).is_file():
+        out["pdf_file"] = _write(paper, "submission.pdf", (REPO_ROOT / pdf_rel).read_bytes())
     else:
-        out["pdf_blocker"] = f"missing file: {spec['pdf']}"
-    text_src = REPO_ROOT / spec["text"]
-    if text_src.is_file():
-        out["text_file"] = _write(paper, "submission.txt", text_src.read_bytes())
+        out["pdf_blocker"] = f"missing file: {pdf_rel}"
+
+    text_rel = spec.get("text")
+    if not text_rel:
+        out["text_blocker"] = ("no `text:` in the submission source entry -- the E1 judge "
+                               "input is unresolved for this paper")
+    elif (REPO_ROOT / text_rel).is_file():
+        out["text_file"] = _write(paper, "submission.txt", (REPO_ROOT / text_rel).read_bytes())
     else:
-        out["text_blocker"] = f"missing file: {spec['text']}"
+        out["text_blocker"] = f"missing file: {text_rel}"
     return out
 
 
@@ -196,9 +248,28 @@ def _import_opennovelty_e1_text(paper: str, pdf_spec: dict) -> dict:
     return {"e1_text_file": f, "needs_manual_equivalence_check": True}
 
 
+def _import_deepreviewer_e1_text(paper: str, spec: dict) -> dict:
+    """E1's text for a DeepReviewer report that E2 shows as a PDF.
+
+    Unlike OpenNovelty's, this needs no extractor and carries no equivalence caveat: the
+    PDF is rendered FROM `final_report.md` by their own builder, so the markdown is the
+    report's source rather than a reading of its output. E1 and E2 therefore see the same
+    content by construction -- `needs_manual_equivalence_check` is False for that reason,
+    not as an assumption.
+    """
+    md = REPO_ROOT / spec["job_dir"] / "final_report.md"
+    if not md.is_file():
+        return {"blocker": f"missing E1 source: {spec['job_dir']}/final_report.md"}
+    f = _write(paper, "deepreviewer.e1_text.md", md.read_bytes())
+    return {"e1_text_file": f, "needs_manual_equivalence_check": False,
+            "note": "source markdown of the rendered PDF, not an extraction from it"}
+
+
 def run(sources_path: str, config_path: str = "final_evaluation/config/pilot.yaml") -> dict:
+    global _STUDY_DIR
     sources = yaml.safe_load((REPO_ROOT / sources_path).read_text(encoding="utf-8"))
     cfg = yaml.safe_load((REPO_ROOT / config_path).read_text(encoding="utf-8"))
+    _STUDY_DIR = cfg.get("inputs_dir") or "pilot"
     be = _load_battle_export()
 
     manifest = {"generated_at": datetime.now(timezone.utc).isoformat(), "git_head": _git_head(),
@@ -224,14 +295,17 @@ def run(sources_path: str, config_path: str = "final_evaluation/config/pilot.yam
                 result = _import_concat_text(paper, system, spec)
             else:
                 result = {"blocker": f"unknown source kind: {kind}"}
+            # A report E2 shows as a PDF still needs text for E1.
             if kind == "native_pdf" and system == "opennovelty":
                 result["e1"] = _import_opennovelty_e1_text(paper, spec)
+            elif kind == "deepreviewer_job" and result.get("view_type") == "pdf":
+                result["e1"] = _import_deepreviewer_e1_text(paper, spec)
             entry["systems"][system] = result
             if result.get("blocker"):
                 manifest["blockers"].append(f"{paper}/{system}: {result['blocker']}")
         manifest["papers"][paper] = entry
 
-    out_path = FE_ROOT / "manifests" / "pilot" / "reports.json"
+    out_path = FE_ROOT / "manifests" / _STUDY_DIR / "reports.json"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=1), encoding="utf-8")
     return manifest
@@ -255,4 +329,4 @@ def print_report(manifest: dict) -> None:
             print(f"  - {b}")
     else:
         print("\nNo blockers.")
-    print(f"\nwritten: final_evaluation/manifests/pilot/reports.json")
+    print(f"\nwritten: final_evaluation/manifests/{_STUDY_DIR}/reports.json")

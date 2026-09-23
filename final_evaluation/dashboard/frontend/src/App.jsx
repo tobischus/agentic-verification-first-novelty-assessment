@@ -5,6 +5,7 @@ import Login from './pages/Login.jsx'
 import Instructions from './pages/Instructions.jsx'
 import TaskList from './pages/TaskList.jsx'
 import TaskRate from './pages/TaskRate.jsx'
+import PaperRead from './pages/PaperRead.jsx'
 import Done from './pages/Done.jsx'
 import Admin from './pages/Admin.jsx'
 
@@ -19,6 +20,7 @@ export default function App() {
   const [me, setMe] = useState(undefined) // undefined = loading, null = logged out
   const [view, setView] = useState('login') // login | instructions | tasks | rate | done | admin
   const [activeAssignmentId, setActiveAssignmentId] = useState(null)
+  const [activePaperId, setActivePaperId] = useState(null)
   const [err, setErr] = useState('')
 
   const refreshMe = useCallback(async () => {
@@ -47,6 +49,11 @@ export default function App() {
         setView('rate')
         return
       }
+      if (s && s.view === 'read' && s.paperId) {
+        setActivePaperId(s.paperId)
+        setView('read')
+        return
+      }
       setView('tasks')
     })
   }, [refreshMe])
@@ -54,13 +61,15 @@ export default function App() {
   const go = useCallback((next, extra = {}) => {
     setView(next)
     if (extra.assignmentId !== undefined) setActiveAssignmentId(extra.assignmentId)
-    window.history.pushState({ view: next, assignmentId: extra.assignmentId ?? null }, '')
+    if (extra.paperId !== undefined) setActivePaperId(extra.paperId)
+    window.history.pushState({ view: next, assignmentId: extra.assignmentId ?? null,
+                               paperId: extra.paperId ?? null }, '')
   }, [])
 
   useEffect(() => {
     const onPop = (e) => {
       const s = e.state
-      if (s) { setView(s.view); setActiveAssignmentId(s.assignmentId ?? null) }
+      if (s) { setView(s.view); setActiveAssignmentId(s.assignmentId ?? null); setActivePaperId(s.paperId ?? null) }
     }
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
@@ -83,7 +92,9 @@ export default function App() {
 
   return (
     <div className="fe-app">
-      <div className="fe-pilot-banner">{PILOT_BANNER}</div>
+      {/* Only in a pilot study: main-study raters were shown "excluded from final study"
+          on every page while doing the study's counted work. */}
+      {me?.is_pilot && <div className="fe-pilot-banner">{PILOT_BANNER}</div>}
       {err && <div className="fe-error-bar">{err} <button className="link" onClick={() => setErr('')}>dismiss</button></div>}
       {view === 'login' && <Login onLoggedIn={onLoggedIn} />}
       {view === 'instructions' && me && (
@@ -93,6 +104,7 @@ export default function App() {
         <TaskList
           me={me}
           onOpenTask={(id) => go('rate', { assignmentId: id })}
+          onReadPaper={(paperId) => go('read', { paperId })}
           onLogout={onLogout}
           onError={setErr}
         />
@@ -102,6 +114,14 @@ export default function App() {
           me={me}
           assignmentId={activeAssignmentId}
           onDone={() => go('done')}
+          onBack={() => go('tasks')}
+          onError={setErr}
+        />
+      )}
+      {view === 'read' && me && activePaperId && (
+        <PaperRead
+          paperId={activePaperId}
+          onDone={() => go('tasks')}
           onBack={() => go('tasks')}
           onError={setErr}
         />
