@@ -64,15 +64,16 @@ export const api = {
   computeClaim: (id, claimId) => j('POST', `/submissions/${id}/review/claim/${claimId}`),
   // live progress of the running agent: {status, step, max_steps, trajectory[], cost, review?}
   claimLive: (id, claimId) => j('GET', `/submissions/${id}/review/claim/${claimId}/live`, undefined, 8000),
-  agentCost: (id) => j('GET', `/submissions/${id}/agent-cost`),
-  // aggregate token/cost across the whole run (document processing, claims,
-  // retrieval, review) -- shown as the same cost badge on every tab
-  pipelineCost: (id) => j('GET', `/submissions/${id}/pipeline-cost`),
   // cross-claim summary: overlapping prior work per claim (no verdict)
   reviewSummary: (id) => j('GET', `/submissions/${id}/review/summary`),
   // overall novelty conclusion (LLM-synthesised from the gathered evidence)
   reviewConclusion: (id) => j('GET', `/submissions/${id}/review/conclusion`),
   generateConclusion: (id) => j('POST', `/submissions/${id}/review/conclusion`),
+  // the claim-level assessment the export prints under a claim; a no-op when current
+  ensureClaimAssessment: (id, claimId) =>
+    j('POST', `/submissions/${id}/review/claim/${claimId}/assessment`, undefined, 120000),
+  // after the last claim: every claim assessment current + the paper-level novelty summary
+  finalizeReview: (id) => j('POST', `/submissions/${id}/review/finalize`, undefined, 300000),
 
   async report(id) {
     const r = await fetch(`${BASE}/submissions/${id}/report`)

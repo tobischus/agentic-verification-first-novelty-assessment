@@ -24,9 +24,13 @@ export default function Upload({ onUploaded }) {
   const onDrop = (e) => { e.preventDefault(); setDragOver(false); start(e.dataTransfer.files?.[0]) }
 
   return (
-    <div className="panel">
-      <div className="step-label">STEP 1</div>
-      <h2>Upload Research Paper</h2>
+    <div className="panel upload-panel">
+      <div className="eyebrow">Document</div>
+      <h2>Upload a paper</h2>
+      <p className="muted lede">
+        The PDF is parsed, its contribution claims are extracted, and the prior work it builds
+        on is retrieved. You can check and correct each step before the review starts.
+      </p>
       <div
         className={'dropzone big' + (dragOver ? ' over' : '') + (busy ? ' busy' : '')}
         onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
@@ -47,8 +51,8 @@ export default function Upload({ onUploaded }) {
           <div className="dz-main">Uploading…</div>
         ) : (
           <>
-            <div className="dz-main">Drag &amp; drop a PDF, or <span className="browse">browse</span></div>
-            <div className="dz-sub">Supports PDF up to 50 MB</div>
+            <div className="dz-main">Drop a PDF here, or <span className="browse">browse</span></div>
+            <div className="dz-sub">PDF, up to 50 MB</div>
           </>
         )}
       </div>

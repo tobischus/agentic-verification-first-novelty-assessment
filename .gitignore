@@ -165,3 +165,5 @@ emnlp_23_sen*.csv
 
 # render snapshots taken around behaviour-preserving refactors (eval/render_snapshot.py)
 /.snapshots/
+
+/related_work

@@ -82,6 +82,49 @@ def overlapping(comparisons: Iterable[dict]) -> List[dict]:
     return [c for c in (comparisons or []) if is_overlap(c)]
 
 
+def evidence_status(comparison: dict) -> str:
+    """The evidence check's own verdict on this comparison, normalised; "" if none ran."""
+    return str(((comparison or {}).get("evidence_check") or {}).get("status") or "").strip().lower()
+
+
+def degree_confirmed(comparison: dict) -> bool:
+    """Whether the evidence check confirmed the overlap the comparison proposed.
+
+    The check answers TWO questions and a summary that merges them misreports the record:
+    `status == "material"` says the stored pairs establish a substantive shared element,
+    while `proposed_degree_supported` says whether that element carries the overlap AT THE
+    PROPOSED DEGREE for this claim. A comparison can be the first without being the second
+    -- the check then names what is missing in `unresolved_question` -- and showing it as
+    an established overlap claims more than was found.
+
+    For a proposed none/superficial the field is null by construction (check_evidence
+    normalises it), so this is False there: those propose no overlap to confirm. Callers
+    that want "a shared element was found at all", irrespective of degree, should test
+    `evidence_status(c) == "material"` instead -- the two are deliberately separate, and
+    the gap between them is exactly what must not be summarised away.
+    """
+    return (evidence_status(comparison) == "material"
+            and ((comparison or {}).get("evidence_check") or {})
+            .get("proposed_degree_supported") is True)
+
+
+def conflicts(comparison: dict) -> bool:
+    """Whether the proposed degree and the evidence check disagree about this comparison.
+
+    Two independent steps write these fields: the comparison proposes how much of the
+    claim the prior paper delivers, the evidence check rules on whether stored passages
+    actually carry that. Either can contradict the other and neither silently wins -- the
+    reader is shown both halves. This predicate is what makes such a pair findable: the
+    export keeps every conflicting comparison inspectable even when its degree alone would
+    not qualify, and the paper-level synthesis lists them as decision-relevant, precisely
+    so a proposed `substantial` without material evidence is never summarised as an
+    established overlap.
+    """
+    overlap = degree(comparison) in OVERLAP_DEGREES
+    status = evidence_status(comparison)
+    return (overlap and status == "nonmaterial") or (not overlap and status == "material")
+
+
 # ---------------------------------------------------------------- ordering --
 def degree_rank(deg: str) -> int:
     return DEGREE_RANK.get((deg or "").lower(), UNRANKED)

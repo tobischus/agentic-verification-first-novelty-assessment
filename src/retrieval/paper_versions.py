@@ -28,6 +28,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import threading
 import time
 import xml.etree.ElementTree as ET
 from calendar import monthrange
@@ -173,6 +174,24 @@ class PinnedVersion:
         return asdict(self)
 
 
+#: ARXIV_DELAY_S was only ever applied BETWEEN the two calls one paper can need, never
+#: between papers -- so resolving a pool fired one request per paper back to back and
+#: earned a 429 whose penalty window outlasted the run. The gate below enforces the same
+#: interval across every call from this process instead.
+_ARXIV_MAX_ATTEMPTS = 4
+_arxiv_gate = threading.Lock()
+_arxiv_last_call = 0.0
+
+
+def _arxiv_wait() -> None:
+    global _arxiv_last_call
+    with _arxiv_gate:
+        gap = time.monotonic() - _arxiv_last_call
+        if gap < ARXIV_DELAY_S:
+            time.sleep(ARXIV_DELAY_S - gap)
+        _arxiv_last_call = time.monotonic()
+
+
 def _arxiv_query(id_list: List[str], session: Optional[requests.Session] = None,
                  timeout: int = 30) -> List[dict]:
     """Atom entries for the given (possibly version-suffixed) arXiv ids.
@@ -180,17 +199,48 @@ def _arxiv_query(id_list: List[str], session: Optional[requests.Session] = None,
     arXiv answers a versioned id with that version's own metadata -- its date in `updated`
     and, importantly, the abstract as it read at that version. Several ids in one call, so
     a whole version history costs one request rather than one per version.
+
+    Paced and retried, because the caller cannot tell the difference afterwards. A failure
+    here is recorded as `unresolved`, and `tools._add_pool_paper` then refuses the paper as
+    evidence on THIS and every later run -- `_pin_is_stale` only re-resolves when the
+    cutoff changes, not when the lookup merely failed. So a few seconds of HTTP 429 used to
+    remove a paper from the review permanently and silently. Measured once: 48 of 208
+    pooled papers across ten submissions, including the most relevant prior work for two
+    of them.
     """
     get = (session or requests).get
-    try:
-        res = get(_ARXIV_API,
-                  params={"id_list": ",".join(id_list), "max_results": len(id_list)},
-                  timeout=timeout)
-    except Exception as e:
-        logger.debug("arXiv query failed for %s: %s", id_list, type(e).__name__)
-        return []
-    if res.status_code != 200:
-        logger.debug("arXiv query for %s: HTTP %s", id_list, res.status_code)
+    res = None
+    for attempt in range(1, _ARXIV_MAX_ATTEMPTS + 1):
+        _arxiv_wait()
+        try:
+            res = get(_ARXIV_API,
+                      params={"id_list": ",".join(id_list), "max_results": len(id_list)},
+                      timeout=timeout)
+        except Exception as e:
+            logger.debug("arXiv query failed for %s: %s", id_list, type(e).__name__)
+            if attempt == _ARXIV_MAX_ATTEMPTS:
+                return []
+            time.sleep(ARXIV_DELAY_S * attempt)
+            continue
+        if res.status_code not in (429, 503):
+            break
+        if attempt == _ARXIV_MAX_ATTEMPTS:
+            logger.warning("arXiv still rate-limiting after %d attempts (%s) -- these "
+                           "papers will be recorded unresolved and refused as evidence "
+                           "until they are re-resolved", _ARXIV_MAX_ATTEMPTS, id_list[:2])
+            return []
+        # Honour Retry-After when arXiv sends one; otherwise back off geometrically.
+        try:
+            delay = float(res.headers.get("Retry-After", "") or 0)
+        except ValueError:
+            delay = 0.0
+        delay = max(delay, ARXIV_DELAY_S * (2 ** attempt))
+        logger.info("arXiv HTTP %s -- waiting %.0fs before retry %d/%d",
+                    res.status_code, delay, attempt + 1, _ARXIV_MAX_ATTEMPTS)
+        time.sleep(delay)
+    if res is None or res.status_code != 200:
+        logger.debug("arXiv query for %s: HTTP %s", id_list,
+                     res.status_code if res is not None else "no response")
         return []
     try:
         root = ET.fromstring(res.content)

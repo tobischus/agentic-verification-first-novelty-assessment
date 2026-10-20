@@ -39,6 +39,16 @@ def _content_type_for(kind: str, path: Path) -> str:
     return guess or "application/octet-stream"
 
 
+def _study_config(config_path: str) -> dict:
+    """A study config -- never an E1-only paper list (config/e1_extra.yaml), whose papers
+    must not reach the study database."""
+    cfg = yaml.safe_load((REPO_ROOT / config_path).read_text(encoding="utf-8"))
+    if cfg.get("e1_only"):
+        raise SystemExit(f"{config_path} is E1-only (e1_only: true) -- it is never seeded "
+                         "into a study; use it with import-pilot, validate-inputs and plan-e1.")
+    return cfg
+
+
 def _put_asset(db, backend: storage.StorageBackend, study_id: str, kind: str,
               file_entry: dict, source_note: str) -> models.Asset:
     src = FE_ROOT / file_entry["path"]
@@ -57,7 +67,7 @@ def _put_asset(db, backend: storage.StorageBackend, study_id: str, kind: str,
 
 
 def seed_pilot(config_path: str = "final_evaluation/config/pilot.yaml") -> dict:
-    cfg = yaml.safe_load((REPO_ROOT / config_path).read_text(encoding="utf-8"))
+    cfg = _study_config(config_path)
     # The manifest of the study this config describes, not the pilot's. `inputs_dir` is
     # the same key import_pilot writes under, so a study is seeded from exactly the files
     # that were frozen for it -- seeding the main study off the pilot's manifest would
@@ -204,7 +214,7 @@ def create_participants(study_id: str, count: int, prefix: str = "R", is_test: b
     in the study, using the seeded orientation/order (security.orientation_for /
     block_and_task_order). Re-running with the same count is a no-op for participants and
     assignments that already exist -- see the two `if existing:` early-returns below."""
-    cfg = yaml.safe_load((REPO_ROOT / config_path).read_text(encoding="utf-8"))
+    cfg = _study_config(config_path)
     settings = get_settings()
     engine = db_mod.make_engine(settings.database_url)
     Session = db_mod.make_session_factory(engine)
@@ -319,7 +329,7 @@ def refresh_reports(config_path: str, systems=("agent", "linear"), dry_run: bool
     Test participants' drafts do not block a swap -- they are excluded from the analysis
     and exist to look at the study -- but each affected one is listed.
     """
-    cfg = yaml.safe_load((REPO_ROOT / config_path).read_text(encoding="utf-8"))
+    cfg = _study_config(config_path)
     study_dir = cfg.get("inputs_dir") or "pilot"
     manifest = json.loads(
         (FE_ROOT / "manifests" / study_dir / "reports.json").read_text(encoding="utf-8"))

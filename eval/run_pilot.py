@@ -95,6 +95,12 @@ def run_variant(data_dir: str, sid: str, variant: str, claims: list, model: str,
         pt = cost.get("prompt_tokens", 0)
         ct = cost.get("completion_tokens", 0)
         usd = _usd(model, pt, ct)
+        # The agent measures how many prompt tokens OpenAI served from its own cache
+        # (claim_agent._cache_read) and puts it in `cost["cache"]`. This used to be dropped
+        # here, so every reported figure priced repeated context at the full rate and was an
+        # upper bound with no way to tell by how much. Carried through now: `usd` stays that
+        # upper bound, and the cached count beside it says what it overstates.
+        cache = cost.get("cache") or {}
         comps = res.get("comparisons") or []
 
         entries.append({
@@ -114,7 +120,13 @@ def run_variant(data_dir: str, sid: str, variant: str, claims: list, model: str,
             # Reported per claim, not only in total: the agent's extra calls are spent on
             # particular papers, and an average over claims hides which.
             "run_cost": {"prompt_tokens": pt, "completion_tokens": ct,
-                         "usd": round(usd, 4), "seconds": secs},
+                         "cached_prompt_tokens": cache.get("total_cached_tokens", 0),
+                         "cache_hit_rate": cache.get("hit_rate", 0.0),
+                         "cache_by_role": cache.get("by_role") or {},
+                         # Prices every prompt token at the full rate -- cached ones cost
+                         # less, so this is a ceiling, not the bill.
+                         "usd": round(usd, 4), "usd_is_upper_bound": True,
+                         "seconds": secs},
             "stop_reason": res.get("stop_reason", ""),
         })
         per_claim_b.append({
@@ -131,7 +143,7 @@ def run_variant(data_dir: str, sid: str, variant: str, claims: list, model: str,
         })
         costs.append((claim["id"], usd, secs, len(comps)))
         print(f"  [{variant}] {claim['id']}: {len(comps)} comparisons, "
-              f"${usd:.4f}, {secs}s", flush=True)
+              f"<=${usd:.4f}, {secs}s, cache {cache.get('hit_rate', 0.0):.0%}", flush=True)
 
     a = {
         "submission_id": sid,
@@ -160,6 +172,18 @@ def run_variant(data_dir: str, sid: str, variant: str, claims: list, model: str,
         json.dumps(a, ensure_ascii=False, indent=1), encoding="utf-8")
     (sub / f"{sid}_artifact_b_{variant}.json").write_text(
         json.dumps(b, ensure_ascii=False, indent=1), encoding="utf-8")
+
+    # Step 5b, on the artifacts this variant just wrote. Both variants get the SAME
+    # prompt and model here for the same reason they get the same comparison prompt: the
+    # summary must not become a second way the two systems differ. Failing is not fatal --
+    # the per-claim report stands, and battle_export simply omits the section -- but it is
+    # reported, because a report silently missing its opening summary is easy to miss.
+    try:
+        import paper_synthesis
+        s = paper_synthesis.build(data_dir, sid, variant=variant, model_name=model)
+        print(f"  [{variant}] paper summary: {s['word_count']} words", flush=True)
+    except Exception as e:
+        print(f"  [{variant}] paper summary FAILED: {repr(e)[:160]}", flush=True)
     return a
 
 

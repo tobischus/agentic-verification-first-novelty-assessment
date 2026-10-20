@@ -74,6 +74,22 @@ _DEFAULT_ESTIMATES = {
 }
 
 
+def _paper_summary_after_b(data_dir: str, submission_id: str, model: str,
+                           variant: str = "") -> None:
+    """Step 5b, run wherever Artifact B is: the paper-level summary belongs to it.
+
+    Not a stage of its own, because it is one short call on results that are already
+    complete and it must never leave Artifact B half-written. Failing here is not fatal --
+    the per-claim report stands without the summary, and battle_export simply omits the
+    section -- but it is logged rather than swallowed.
+    """
+    try:
+        import paper_synthesis
+        paper_synthesis.build(data_dir, submission_id, variant=variant, model_name=model)
+    except Exception as e:
+        logger.warning(f"[{submission_id}] paper-level summary skipped: {repr(e)[:160]}")
+
+
 def _fmt_dur(seconds) -> str:
     seconds = int(round(seconds or 0))
     m, s = divmod(seconds, 60)
@@ -254,6 +270,7 @@ class NoveltyPipeline:
             sys.path.insert(0, _HERE)
             from artifact_b import ArtifactBBuilder
             ArtifactBBuilder(model_name=self.model).build(self.data_dir, self.submission_id)
+            _paper_summary_after_b(self.data_dir, self.submission_id, self.model)
 
         elif name == "judge":
             sys.path.insert(0, _HERE)
@@ -684,6 +701,7 @@ class NoveltyPipeline:
             json.dumps(artifact_a, ensure_ascii=False, indent=2), encoding="utf-8"
         )
         ArtifactBBuilder(model_name=self.model).build(self.data_dir, self.submission_id)
+        _paper_summary_after_b(self.data_dir, self.submission_id, self.model)
         Judge(model_name=self.model).judge(self.data_dir, self.submission_id)
         report = build_report(self.data_dir, self.submission_id)
         # Fold the finished agent results + synthesis/judge/report into the per-PDF cache,

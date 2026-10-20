@@ -353,6 +353,7 @@ Do not assign an overall overlap degree in this step.
 {paper}"""
 
 
+
 CONCLUDE_PROMPT = """Determine what ONE prior paper does to the novelty of ONE claimed contribution.
 
 You may use:
@@ -665,7 +666,6 @@ def _fmt_comparison(comparison: dict) -> str:
 
 
 
-
 class EvidenceCheck(BaseModel):
     status: str = Field(
         description="material | nonmaterial | insufficient"
@@ -725,6 +725,19 @@ Perform these checks:
 Identify the actual contribution under review.
 Do not use a neighboring contribution to establish overlap or preserve novelty
 unless its relevance to this claim is explicitly justified.
+
+The submission context below is the same passage selection the comparison was
+built from. Use it to establish what the claim's terms MEAN: a construct the
+comparison names but never defines, the conditions a result is asserted under,
+which component of the work the claim is actually about.
+
+It is context for interpretation, never evidence of overlap. Overlap is
+established only by the grounded pairs. A passage here cannot make a relation
+supported that the pairs do not carry, and it adds nothing about the prior paper.
+
+If the comparison describes this claim in terms the submission context does not
+bear out, say so in reasoning. A description that drifted from the submission is
+a reason to doubt the proposed relation, not a reason to repair it.
 
 2. PAIR VALIDITY
 For each pair, judge what the quoted spans themselves establish.
@@ -858,6 +871,9 @@ reasoning:
 ## Current claim
 {claim}
 
+## Submission context (the passages this claim and the comparison were drawn from)
+{submission_context}
+
 ## Proposed semantic comparison
 {comparison}
 
@@ -865,12 +881,28 @@ reasoning:
 {pairs}
 """
 
+#: Bumped whenever EVIDENCE_CHECK_PROMPT changes what the check is asked to do, and
+#: recorded on every comparison it judges. v2 adds the submission context: until then the
+#: check validated the comparison's own rendering of the claim partly against that same
+#: shortened rendering, so a description that had drifted from the submission had nothing
+#: to be caught against.
+EVIDENCE_CHECK_PROMPT_VERSION = "evidence_check_v2_submission_context"
+
 def check_evidence(
     struct_call: Callable,
     claim_str: str,
     mapping: dict,
     comparison: Optional[dict] = None,
+    submission_context: str = "",
 ) -> dict:
+    """Rule on whether the grounded pairs carry the overlap the comparison asserts.
+
+    `submission_context` is the claim-local submission selection the comparison was
+    built from -- the caller already holds it, and without it the check reads the
+    comparison's account of the claim with no way to tell a faithful summary from one
+    that drifted. It is passed for interpretation only; the prompt states that overlap
+    is still established solely by the pairs, and the verification corpora are untouched.
+    """
     comparison = comparison or {}
     pairs = mapping.get("pairs") or []
 
@@ -906,6 +938,8 @@ def check_evidence(
         EvidenceCheck,
         EVIDENCE_CHECK_PROMPT.format(
             claim=claim_str,
+            submission_context=(submission_context or "").strip()
+            or "(no submission context was supplied for this check)",
             comparison=_fmt_comparison(comparison),
             pairs=_list_pairs(pairs),
         ),

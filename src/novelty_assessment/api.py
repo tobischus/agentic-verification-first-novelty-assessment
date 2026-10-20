@@ -790,6 +790,41 @@ def _assembled_for(sid: str, cid: str):
     return _assemble_claim(ae, meta)
 
 
+def _conclusion_model() -> str:
+    """The model that writes the report's prose (claim assessment, novelty summary): the
+    one the evaluated batch path uses (eval/out/e1_extra/run_all.py), not gpt-4.1."""
+    return os.getenv("NOVELTY_CONCLUSION_MODEL", os.getenv("NOVELTY_MODEL", "gpt-5.6-luna"))
+
+
+def _ensure_claim_assessments(sid: str, only: Optional[str] = None) -> List[str]:
+    """Step 5c for the walkthrough: write per_claim[i].claim_assessment where it is missing
+    or stale, so the Review tab shows the same claim-level assessment the export prints.
+
+    Same module, prompt and settings as the batch path (claim_assessment.build). The source
+    ids it cites (R#) are numbered over every claim computed so far, so a later claim can
+    renumber them and mark an earlier assessment stale -- which is why this checks staleness
+    instead of writing once, and why finalize runs it over all claims again."""
+    import claim_assessment as ca
+    contexts, b_path, b, refs = ca.contexts_for(DATA_DIR, sid)
+    stored = {v.get("claim_id"): v.get("claim_assessment") for v in b.get("per_claim", [])}
+    todo = [x for x in contexts if (only is None or x[0] == only)
+            and x[0] in stored and (not stored[x[0]] or ca.is_stale(stored[x[0]], x[4]))]
+    if not todo:
+        return []
+    assessor = ca.ClaimAssessor(model_name=_conclusion_model())
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        results = list(pool.map(lambda x: assessor.assess(x[4], x[2], x[3], refs), todo))
+    by_id = {x[0]: r for x, r in zip(todo, results)}
+    with _artifact_lock:
+        b = _load_json(b_path) or b  # re-read: a claim worker may have written meanwhile
+        for v in b.get("per_claim", []):
+            if v.get("claim_id") in by_id:
+                v["claim_assessment"] = by_id[v["claim_id"]]
+        b_path.write_text(json.dumps(b, ensure_ascii=False, indent=2), encoding="utf-8")
+    return list(by_id)
+
+
 def _claim_worker(sid: str, cid: str):
     """Run the agent for one claim, streaming progress, then persist evidence + cost.
 
@@ -889,6 +924,19 @@ def _claim_worker(sid: str, cid: str):
                 encoding="utf-8",
             )
 
+        # 4. The claim-level assessment the export prints under this claim (step 5c).
+        #    Not fatal: without it the export falls back to the recorded rationale.
+        _write_live(sid, cid, {"status": "running", "claim_id": cid,
+                               "step": len(entry.get("trajectory", []) or []),
+                               "max_steps": budgets["max_steps"],
+                               "trajectory": entry.get("trajectory", []),
+                               "cost": entry.get("cost", {}),
+                               "last_action": "writing the claim-level assessment"})
+        try:
+            _ensure_claim_assessments(sid, only=cid)
+        except Exception as e:
+            print(f"[{sid}] claim assessment for {cid} skipped: {repr(e)[:160]}")
+
         _persist_claim_cost(sid, cid, entry.get("cost", {}))
         # Fold the just-written Artifact A + cost into the per-PDF cache so a re-upload of
         # this paper restores this claim's agent result instead of recomputing it.
@@ -925,6 +973,50 @@ def compute_claim(sid: str, claim_id: str):
         _claim_running.add((sid, claim_id))
     threading.Thread(target=_claim_worker, args=(sid, claim_id), daemon=True).start()
     return {"status": "running"}
+
+
+@app.post("/submissions/{sid}/review/claim/{claim_id}/assessment")
+def claim_assessment_for(sid: str, claim_id: str):
+    """Make sure a computed claim carries a current claim-level assessment (step 5c).
+    A no-op when it already does; used when the walkthrough opens a claim that was
+    computed earlier or restored from the cache."""
+    a = _load_json(_sub_dir(sid) / f"{sid}_artifact_a.json") or {"claims": []}
+    if not any(e.get("claim_id") == claim_id for e in a.get("claims", [])):
+        raise HTTPException(404, "claim not computed yet")
+    try:
+        return {"status": "done", "generated": _ensure_claim_assessments(sid, only=claim_id)}
+    except Exception as e:
+        raise HTTPException(502, f"claim assessment failed: {repr(e)[:200]}")
+
+
+@app.post("/submissions/{sid}/review/finalize")
+def finalize_review(sid: str):
+    """After the last claim: bring every claim-level assessment up to date, then write the
+    paper-level novelty summary (step 5b) -- the two model-written parts the export prints,
+    with the settings of the evaluated batch path. Idempotent: current parts are kept."""
+    sub = _sub_dir(sid)
+    if _load_json(sub / f"{sid}_artifact_a.json") is None:
+        raise HTTPException(404, "no claims computed yet -- run the claim-level review first")
+    if not os.getenv("OPENAI_API_KEY"):
+        raise HTTPException(500, "OPENAI_API_KEY not set")
+    try:
+        regenerated = _ensure_claim_assessments(sid)
+    except Exception as e:
+        raise HTTPException(502, f"claim assessment failed: {repr(e)[:200]}")
+    import paper_synthesis
+    summary_written = False
+    try:
+        findings, _b_path, b = paper_synthesis.context_for(DATA_DIR, sid)
+        stored = b.get("paper_summary")
+        if not stored or paper_synthesis.is_stale(stored, findings):
+            with _artifact_lock:
+                paper_synthesis.build(DATA_DIR, sid, model_name=_conclusion_model())
+            summary_written = True
+    except Exception as e:
+        raise HTTPException(502, f"novelty summary failed: {repr(e)[:200]}")
+    _snapshot_cache(sid)
+    return {"status": "done", "claims_regenerated": regenerated,
+            "summary_written": summary_written}
 
 
 @app.get("/submissions/{sid}/review/claim/{claim_id}/live")
@@ -1193,6 +1285,12 @@ def generate_conclusion(sid: str):
         b = ArtifactBBuilder(model_name=model).build(DATA_DIR, sid)
     except Exception as e:
         raise HTTPException(502, f"artifact B generation failed: {repr(e)[:200]}")
+    try:
+        import paper_synthesis
+        paper_synthesis.build(DATA_DIR, sid, model_name=model)
+        b = _load_json(sub / f"{sid}_artifact_b.json") or b
+    except Exception:
+        pass  # the per-claim assessment stands without the paper-level summary
     judge = None
     try:
         judge = Judge(model_name=model).judge(DATA_DIR, sid)

@@ -67,7 +67,8 @@ application sends no email and has no invite flow. An optional name↔code key b
 | `serve --host --port` | Runs API + built frontend on one origin |
 | `export --study ID --out X.zip` | The research export (same bytes the admin UI downloads) |
 | `analyze-human --input X.zip [--include-test]` | E2 tallies, agreement, Krippendorff's α |
-| `plan-e1 --config …` | Lists the judge calls; `--execute` (only) runs them |
+| `plan-e1 [--config config/e1_main.yaml]` | Lists the E1 judge calls (all papers × 10 pairs × both orders), readiness and a cost estimate; `--execute` (only) runs them, resumably; `--papers`/`--pairs`/`--limit` narrow a run |
+| `compare-e1 --input X.zip --e1 judge_calls.jsonl` | Human ratings vs. the judge on the same task, same orientation, same rubric and report content |
 | `upload-assets --study ID` | Pushes local assets to Supabase and repoints the DB rows |
 | `backup --study ID --out X.zip` | Operational backup (includes auth tables) |
 | `restore --input X.zip --target-local Y.sqlite` | Restores into a **new** local file |

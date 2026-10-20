@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
 import PublicationDate from './PublicationDate.jsx'
-import PipelineCostBadge from './PipelineCostBadge.jsx'
 import SplitView from '../pdf/SplitView.jsx'
 import PdfViewer, { colorFor } from '../pdf/PdfViewer.jsx'
 
@@ -83,10 +82,8 @@ export default function ClaimsReview({ submissionId, onApproved }) {
   const panel = (
     <div className="panel checkpoint">
       <div className="paper-head">
-        <div className="paper-head-row">
-          <div className="paper-title">{doc?.title || submissionId}</div>
-          <PipelineCostBadge submissionId={submissionId} />
-        </div>
+        <div className="eyebrow">Claims</div>
+        <div className="paper-title">{doc?.title || submissionId}</div>
         <PublicationDate
           submissionId={submissionId}
           date={doc?.publication_date}
@@ -121,13 +118,13 @@ export default function ClaimsReview({ submissionId, onApproved }) {
           <div className="claim-actions">
             {!c._new && c.evidence_quote && (
               <button className="link" onClick={() => toggleOpen(c._key)}>
-                {open[c._key] ? '▾ hide evidence' : '▸ show evidence'}
+                {open[c._key] ? 'Hide evidence' : 'Show evidence'}
               </button>
             )}
             {c._new && <span className="badge">new</span>}
             {!c._new && (
               <button className="link danger" onClick={() => toggleReject(c._key)}>
-                {c._rejected ? 'undo remove' : 'remove'}
+                {c._rejected ? 'Undo remove' : 'Remove'}
               </button>
             )}
           </div>
@@ -138,8 +135,8 @@ export default function ClaimsReview({ submissionId, onApproved }) {
               <div className="evidence-meta">
                 {c.source ? `— ${c.source} ` : ''}
                 {c.evidence_verified
-                  ? <span className="verified">✓ verbatim in paper</span>
-                  : <span className="unverified">⚠ not verbatim-matched</span>}
+                  ? <span className="verified">✓ Verbatim in the paper</span>
+                  : <span className="unverified">Not matched verbatim</span>}
               </div>
             </blockquote>
           )}
@@ -147,8 +144,8 @@ export default function ClaimsReview({ submissionId, onApproved }) {
       ))}
 
       <div className="actions">
-        <button className="secondary" onClick={addClaim}>+ add claim</button>
-        <button disabled={busy} onClick={approve}>{busy ? 'Submitting…' : 'Approve & continue'}</button>
+        <button className="secondary" onClick={addClaim}>Add claim</button>
+        <button disabled={busy} onClick={approve}>{busy ? 'Submitting…' : 'Approve claims'}</button>
       </div>
       {err && <div className="error">{err}</div>}
     </div>

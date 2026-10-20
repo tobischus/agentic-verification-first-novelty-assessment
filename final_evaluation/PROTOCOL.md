@@ -7,8 +7,9 @@ code, not a liberty in the protocol.
 ## 1. Scope and status
 
 **Main study: `main_study_v2`** (seeded 2026-09-23, `config/main.yaml`). Ten papers, the
-full system (`agent`) against the three external systems, 20 tasks, two raters (M01,
-M02) plus one test account (PV01, excluded from analysis). Design and the reason it
+full system (`agent`) against the three external systems, 20 tasks, three raters (M01,
+M02, and M03 added on 2026-10-01, section 5) plus one test account (PV01, excluded from
+analysis). Design and the reason it
 replaced `main_study_v1` before any rating: section 5. Everything below that names only
 the pilot applies to the pilot.
 
@@ -200,7 +201,7 @@ response, and reports the mismatch instead of overwriting once it has):
     The other four criteria are unchanged from v3. Also since 2026-09-23: the rating
     form's short questions come from `criteria.json`, not from a second copy in
     `TaskRate.jsx` (the source of the v3 "limitations"/"scope" mismatch).
-  - *Judge-only sections* (2026-10-01, before any E1 call): a section LENGTH,
+  - *Judge-only sections* (2026-10-01, before any E1 call; section 8a): a section LENGTH,
     COVERAGE AND PRECISION, two procedure sentences and an `inventory` block in the
     response. Never shown to a rater.
 
@@ -274,6 +275,19 @@ ratings; PV01 is a test account. Orientation and order as for the pilot (seed 43
 seed 100 + ordinal): M01 and M02 see every task in opposite order, and the agent report
 is "A" in 11/20 tasks for one rater and 9/20 for the other. No practice task. The pairing
 was fixed before any main-study E1 (LLM judge) result was looked at.
+
+**Third rater M03 (2026-10-01, study author's decision).** Added to the running study on
+the cloud database, after M02 had submitted all 20 tasks and those responses had been
+exported and looked at; M01 had submitted none. Reason: agreement needs at least two
+completed raters, and a third makes the human result less dependent on any single one.
+Same 20 tasks, rubric, instructions and reports; nothing else in the study changed.
+`create-participants --count 3 --prefix M --not-test` created M03 only, with its 20
+assignments; M01, M02 and PV01 kept theirs. The code gives a new participant the ordinal
+"participants already in the study + its number", here 3 + 3 = **6**: orientation as for
+every even ordinal, so M03 sees every task in the same A/B orientation as M02 and the
+opposite of M01 (agent report "A" in 9/20 tasks), and its own task order (order seed 106). The
+ordinal follows from the code, never chosen by hand. Cloud backup immediately before:
+`backups/main_study_v2__cloud__PRE_M03_20261001.zip`.
 
 **Reading step (main study only, 2026-09-23).** A paper's two tasks open only after the
 rater has read the submission once: the task list shows "Read the submission" above them
@@ -355,14 +369,202 @@ data collection is running**. System identity appears only in the downloaded exp
   example: α = 0.7434 vs. the published 0.743.)
 - Bootstrap CIs (1 000 resamples, resampling **papers**) are implemented for the main
   study; with two pilot papers the function reports "not meaningful" instead of a number.
-- E1 comparison is optional, per-orientation, and only where report/submission/rubric
-  versions match. Human and judge votes are never pooled.
+- E1 comparison (`compare-e1`) is per orientation -- a rater who saw X as A is compared
+  with the judge call that saw X as A -- and only where the CRITERIA section of the judge
+  call's rubric equals the one in the export's `rubric.txt` (compared by content) and both
+  reports' `content_version` equal the export's `manifest.json`; everything else is
+  listed as not comparable with its reason. `unclear` on either side is missing.
+  Agreement is also reported on the position-stable judge verdicts (same winner in both
+  orders). Human and judge votes are never pooled.
+
+## 8a. E1 (LLM judge) on the main study
+
+**Design.** `config/e1_main.yaml`, id `e1_main_v5`, results in `results/main/e1/`, as
+designed on 2026-09-14: 20 papers, all five systems, all 10 pairs, each in both orders
+(400 calls), rubric v5 (section 3), judge `gpt-6.1-sol` (effort medium) through
+`eval/pilot_judge.py`. The ten human-rated papers are judged on the same frozen files the
+raters see (`inputs/main/`); the ten further papers are E1 only (`config/e1_extra.yaml`,
+frozen to `inputs/e1_extra/`, refused by `seed-pilot`/`create-participants`). Calls on a
+human task are marked `human_task`; the judge is not told. The execution order is shuffled
+with seed 42. The judge sees the submission text and both reports in full with line ids;
+nothing is shortened, so the longest pairs are long (~348K tokens for astabench
+agent/linear) -- whether they fit the judge's context is checked with a single narrowed
+run before the full one, not by cutting text. The ten further papers were chosen before
+any E1 result was seen; the two pilot papers were used to develop the agent and are not
+among them.
+
+**The judge-only sections of v5** (`prompts/novelty_report_judge_v5.txt`). The raters'
+instructions (`human_instructions_v2`) say "Do not prefer terminology, format, length, or
+positive or negative judgments by themselves"; v5 gives the judge the same rule and says
+how to apply it. The CRITERIA section is the raters' text unchanged. Three additions:
+1. A section LENGTH, COVERAGE AND PRECISION, before CRITERIA, for every criterion: more
+   text, comparisons, sources or quotations are not by themselves better; off-point
+   comparisons (shared topic or generic method only), repetition, evidence that does not
+   support its stated correspondence and self-contradiction count against a report and are
+   not excused by completeness; a missing comparison is a weakness only where the other
+   report examines that contribution with relevant support, and is none where the other
+   report's comparison is itself off-point or unsupported; a stated "no close prior work
+   found" addresses a contribution (its warrant is judged under `conclusion_warrant`);
+   added material earns a preference only if it would change a reviewer's novelty
+   judgment.
+2. PROCEDURE: list the submission's central contributions, take for each the strongest
+   comparison each report offers, base `comparison_specificity`, `presented_evidence`
+   and `conclusion_warrant` mainly on these, then weigh the rest under the section above.
+3. OUTPUT: an `inventory` before `criteria` -- `central_contributions` (at most six) and,
+   per report, `contributions_examined` (all/most/some/none), `off_point_material`,
+   `repetition`, `unsupported_or_contradicted` (low/medium/high). A missing or malformed
+   inventory is a technical error with the same bounded retries as any other.
+
+The rules are symmetric: coverage of a central contribution still counts, so they can go
+against either system.
+
+**Requests -- billing only.** The calls run:
+
+- on the **flex** service tier (same model, half price, slower; capacity 429s are waited
+  out, are not billed and do not count as one of the three attempts);
+- with the **same user text sent as three text parts** with cache breakpoints after the
+  submission and after report A (`pilot_judge.user_parts`). The parts concatenate to the
+  identical string -- checked for all 400 planned calls, and `prompt_sha256` is computed
+  over it -- and a message sent as parts tokenizes identically to the single string
+  (probe: same prompt token count, full cache hit across the two forms);
+- in **`cache_order`**: all calls of a paper back to back, and within a paper the calls
+  that share report A back to back. This adds no randomness: papers, groups and calls
+  keep the relative order of the seed-42 shuffle. A drift of the API can now align with a
+  paper -- whose ten pairs all run within minutes, under the same conditions -- but not
+  with a system; position is still controlled by the two orders.
+
+OpenAI states that prompt caching does not change how output tokens are generated. Each
+record stores `service_tier`, `cache_tokens` (reads), `cache_write_tokens`,
+`system_fingerprint` and `billed_usd`. Prices from the OpenAI price page on 2026-10-01:
+$2.00 input, $0.10 cache read (0.05x), $2.50 cache write, $10.00 output per 1M; flex half;
+above 272K input tokens 2x input, 1.5x output. The cache-write behaviour was measured with
+probe calls for GPT-5.6 only (2026-09-24); the raw counts are stored, so `billed_usd` can
+be recomputed. `--standard` / `--no-cache` restore the standard tier / the pilot's exact
+request.
+
+**Execution (2026-10-01).** 400/400 calls recorded without failure, the first being the
+context check (#219 astabench linear/agent, 276,628 input tokens, valid on the first
+attempt). Billed $15.21; 65% of 28.2M input tokens were cache reads; one call needed a
+retry. The run stopped once when the account's API credit ran out: calls #44 and #172
+failed on all three attempts with `insufficient_quota` (`credit_balance_exhausted`, no
+model output). Both records stay in `judge_calls.jsonl`, which is why `analyze-e1`
+reports 2 technical failures, and both calls succeeded when the same command was resumed
+after the credit was topped up.
+
+**Analysis.** `analyze-e1` reports stability, pairs and the Bradley-Terry fit on the Elo
+scale (1000 = mean of the five systems, +400 = 10:1 odds) with 95% CIs from resampling
+papers, per criterion and pooled over the five criteria, and arena-style online Elo (K=16,
+mean over 1000 game orders) as a check on the ranking. The Elo scale rescales the
+Bradley-Terry fit -- solved by Newton's method -- and adds no test; the pooled rating
+treats the five criteria of one call as separate games and is a summary only. Each rating
+also carries Chatbot Arena's rank (Chiang et al., 2024): 1 + the number of systems whose
+95% CI lies entirely above its own, so systems the data cannot separate share a rank. It
+reads the same CIs and adds no test. `compare-e1` compares the judge with the raters
+(section 8) and names the judge rubric in its output; `figures --e1-dir` draws the
+slides. The inventory is stored and described; no test is run on it.
+
+**Sensitivity analysis -- post hoc, exploratory.** `sensitivity-e1`
+(`evaluation/e1/sensitivity.py`) asks how much of the judge's verdicts is explained by how
+much a report shows: Bradley-Terry with the log length ratio as covariate (all five
+systems), and for agent vs linear -- same renderer -- the log ratio of detailed comparisons
+shown. Both covariates are partly products of each system's design, so the adjusted
+numbers answer "at equal coverage/length", never replace the unadjusted result, and are
+reported next to it. Between our two systems and the three baselines the lengths barely
+overlap (printed with the result), so the five-system adjustment extrapolates there; the
+length slope is also reported from within-group pairs only, where lengths do overlap.
+
+## 8b. Agent vs linear from the run records (2026-09-25) -- post hoc test
+
+Section 5 names the run metrics by which agent and linear are compared (number of
+comparisons, evidence status, quote verification, verdict agreement, cost, time).
+`agent-linear` (`evaluation/agent_linear.py`) computes them for the 20 E1 papers and tests
+them paired by paper. **Status, stated plainly:** the metrics were named on 2026-09-23;
+the test was chosen on 2026-09-25, after the per-paper numbers had been computed once ad
+hoc. Every metric is therefore reported whichever way it
+points, with its p-value both unadjusted and Holm-adjusted across all tested metrics.
+
+- Inputs: exactly the artifacts the frozen reports were rendered from -- every
+  `artifact_a/b_<variant>.json` and report file is sha256-checked against
+  `manifests/<set>/reports.json`; the run refuses on a mismatch. Per-variant numbers come
+  from `eval/run_metrics.py`, the code that wrote the per-paper `__metrics.json` files.
+- Unit: the paper (n = 20). Test: exact two-sided sign test, papers with equal values left
+  out. Metrics that are zero for linear by construction (dismissal, re-entry, and
+  "compared" = recorded minus dismissed) are descriptive only.
+- How a (claim, prior paper) pair ended is read from the run log: dismissed before any
+  comparison / passed the first evidence check / resolved by re-entry / unresolved.
+- **Matched pairs** (added after the all-pairs table was seen): linear's single pass rates
+  most of the pairs the agent dismissed as `none / insufficient`, so counts over all
+  pairs mix how a flow handled a pair with which pairs it chose to handle. The grounding
+  metrics are therefore also reported on the pairs both flows compared. Both blocks are
+  in the Holm family.
+- **Re-entry outcomes** (descriptive): for every pair the agent compared twice, the first
+  and the last turn's proposed degree and evidence status, read from the per-turn trace
+  lines `claim_agent` writes, classify how the pair ended (overlap confirmed / overlap
+  rejected / still in disagreement) and what moved (degree, evidence status, both,
+  neither). A resolution in which only the evidence status moved may reflect the
+  evidence check's run-to-run variance as much as the additional reading; E4 (repeat
+  runs) would separate the two and is not implemented.
+- USD are the runs' list-price estimates, not billed amounts (section 8a); only the ratio
+  between the flows is compared.
+
+**Adjudication of the divergent verdicts (2026-09-25).** Section 5 reports verdict
+disagreements as unresolved in the absence of human adjudication. The four E1-paper claims
+on which the flows disagree (in every case the agent challenged and linear did not) are
+now adjudicated by the study author with `adjudication-packet`
+(`scripts/adjudication_packet.py`, output `results/main/agent_linear/adjudication/`), in
+two stages: Part A shows the claim, the prior paper that makes the challenging side
+challenge, and every verbatim-verified passage pair either flow grounded for it -- pooled,
+without degree, strength or verdict -- and the author records a degree and a
+challenged/not-challenged decision; only then Part B shows both assessments side by side
+as X/Y (seed 2026), and the author records which reads the prior paper more accurately.
+The key is opened last. Blinding is partial (the direction of the divergence is known and
+a single-pass ending is recognisable), and the adjudicator built the system: this is an
+**author adjudication, not an independent one**, reported as such. A case the author marks
+`unsure` stays unresolved.
+
+## 8c. E3, automatic part: source audit (2026-09-27) -- descriptive
+
+`source-audit` (`evaluation/e3/source_audit.py`) reports, for agent and linear on the 20 E1
+papers, the two judge-free metrics the midterm presentation announced -- the **grounding
+rate** (overlap comparisons that show a quote pair) and the **verifiability rate** (proposed
+quote pairs whose two sides the pipeline found in the sources) -- plus the ownership rate
+and an audit of every quote a report shows. The audit does not reuse the pipeline's
+verifier: each quote is looked up again in the source text it was verified against, after
+that text has been tied to the run by its hash (the submission corpus against
+`submission_selection.source_sha256`, the prior-work text against `parsed_text_sha256`).
+A quote counts as exact (case- and whitespace-insensitive substring), near-verbatim
+(rapidfuzz partial_ratio >= 90, the pipeline's own threshold) or not found; a source whose
+text has no recorded hash (abstract + introduction only) is reported as not auditable.
+Added post hoc; it adds no test and compares no system to another --
+the numbers describe what the two flows' reports rest on. Artifacts are sha256-checked
+against the manifests as in section 8b.
+
+## 8d. E3 across systems: OpenNovelty's quotes (added 2026-10-01, after E1 and 8c)
+
+Post hoc and descriptive, no test. Of the three external systems only OpenNovelty shows passages
+from prior work ("Evidence – Original – Candidate" under each "Prior Art Analysis"). DeepReviewer
+2.0 quotes the submission only (16 of 16 quoted spans found in it); Afzal et al. quote the
+authors' phrases, titles and category names, no passage of a prior paper. 
+`evaluation/e3/opennovelty_audit.py` parses OpenNovelty's PDF reports (the candidate's link
+target is read from the PDF), fetches each candidate's full text (arXiv, else the Semantic
+Scholar open-access PDF or the venue's PDF), and looks every candidate passage up with 8c's
+rule (exact or partial_ratio >= 90; a quote elided with "..." is checked piece by piece). The
+candidate's first public date is compared with the submission's `publication_date`. Fetched
+PDFs are cached and their sha256 stored in `results/main/e3/opennovelty_audit.json`.
+
+**Result.** 66 passages in 12 of the 20 papers. 55 of the 56 checkable passages were found
+(10 could not be fetched). 62 candidates are dated: 60 predate the submission; the other 2
+are the submission itself (AgentGym-RL, cited as prior art for its own ScalingInter-RL). For
+comparison, the agent shows 2,750 quotes on all 20 papers (8c). The extraction differs from
+8c (PyMuPDF on the fetched PDF, not the run's hash-pinned parsed text), so the two found-rates
+are close but not identical measurements.
 
 ## 9. What is NOT implemented (and is not claimed to be)
 
-- E3 (source-fidelity checking against prior-work papers) and E4 (repeat-run robustness):
-  directory, README, and input/output schema only. No importer, no analysis, not wired
-  into the CLI.
+- E3's manual part (whether what a report says about prior work -- including absence
+  claims such as "paper X does not do Y", and anything in the external systems' free text
+  -- holds when the prior-work paper is read) and E4 (repeat-run robustness): README and
+  input/output schema only. E3's automatic part is section 8c.
 - Supabase storage and PostgreSQL are implemented and configuration-checked but were not
   exercised against a live Supabase project in this session (see ACCEPTANCE.md).
 - Reviewer annotations that exist only inside DeepReviewer's PDF (on appended submission

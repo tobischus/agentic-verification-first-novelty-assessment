@@ -1,0 +1,53 @@
+# The ten further E1 papers -- judged by the LLM only, never shown to a rater.
+#
+# `e1_only: true` makes seed-pilot, refresh-reports and create-participants refuse this
+# file, so these papers can never end up in the live study database. Used by:
+#
+#   python -m final_evaluation.cli import-pilot --sources final_evaluation/config/sources.e1_extra.yaml --config final_evaluation/config/e1_extra.yaml
+#   python -m final_evaluation.cli validate-inputs --study e1_extra --config final_evaluation/config/e1_extra.yaml
+#
+# which freeze the reports under inputs/e1_extra/ and manifests/e1_extra/ (not inputs/main/,
+# whose files the running human study cites). sources.e1_extra.yaml has the same format as
+# sources.main.yaml.
+#
+# Choosing the papers -- fix the list BEFORE any E1 result is seen, and write down why:
+#   - an OpenNovelty report must exist for the paper (the binding constraint: OpenNovelty's
+#     reports come from its authors; comparison/OpenNovelty/ holds four not yet used);
+#   - same population as the human-rated ten (ICLR 2026 submissions);
+#   - not a development paper: graphrag_when_to_use and transducing_language_models were
+#     used to build and tune the agent and the pilot -- if they are included at all, report
+#     them separately.
+
+e1_only: true
+inputs_dir: e1_extra
+
+systems:
+  - agent
+  - linear
+  - opennovelty
+  - deepreviewer
+  - afzal
+
+# Keys as eval/human_study_prep.py slugs the PDFs in final_evaluation/inputs/main/new 10/paper
+# (fixed 2026-09-24, before any E1 result). Titles from the PDFs' first pages.
+papers:
+  all_code_no_thought:
+    title: "All Code, No Thought: Current Language Models Struggle to Reason in Ciphered Language"
+  beyond_prompt_induced_lies:
+    title: "Beyond Prompt-Induced Lies: Investigating LLM Deception on Benign Prompts"
+  dreamphase:
+    title: "DreamPhase: Offline Imagination and Uncertainty-Guided Planning for Large-Language-Model Agents"
+  embridge:
+    title: "EMBridge: Enhancing Gesture Generalization from EMG Signals through Cross-Modal Representation Learning"
+  ls_merge:
+    title: "LS-Merge: Merging Language Models in Latent Space"
+  mobe:
+    title: "MoBE: Mixture-of-Basis-Experts for Compressing MoE-based LLMs"
+  shoot_first_ask_questions_later:
+    title: "Shoot First, Ask Questions Later? Building Rational Agents that Explore and Act Like People"
+  td_moe:
+    title: "TD-MoE: Tensor Decomposition for MoE Models"
+  trained_on_tokens_calibrated_on_concepts:
+    title: "Trained on Tokens, Calibrated on Concepts: The Emergence of Semantic Calibration in LLMs"
+  why_low_precision_transformer_training_fails:
+    title: "Why Low-Precision Transformer Training Fails: An Analysis on Flash Attention"

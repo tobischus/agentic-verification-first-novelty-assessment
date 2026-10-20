@@ -1,13 +1,18 @@
 :root {
-  --bg: #f6f7f9;
+  --bg: #f7f8fa;
   --panel: #ffffff;
-  --ink: #1c2330;
-  --muted: #5d6b7e;
-  --line: #e2e6ec;
-  --brand: #b3122a;
+  --ink: #1a2233;
+  --muted: #667085;
+  --faint: #98a2b3;
+  --line: #e5e8ee;
+  --line-strong: #d3d8e1;
+  --navy: #1e2761;
+  --navy-hover: #151b47;
+  --brand: #1e2761;
   --ok: #1a7f4b;
   --warn: #b3122a;
-  --accent: #2456c4;
+  --accent: #2f5bd3;
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.03);
 }
 * {
   box-sizing: border-box;
@@ -15,19 +20,23 @@
 body {
   margin: 0;
   font-family:
+    "Segoe UI Variable Text",
+    "Segoe UI",
     -apple-system,
-    Segoe UI,
+    system-ui,
     Roboto,
     Helvetica,
     Arial,
     sans-serif;
   background: var(--bg);
   color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 .app {
   max-width: 1080px;
   margin: 0 auto;
-  padding: 18px 22px 64px;
+  padding: 20px 24px 64px;
 }
 /* A tab showing a document beside the assessment gets the whole window: 1080px is a
    reading measure for ONE column, and splitting it in two leaves neither the prose nor
@@ -36,104 +45,32 @@ body {
    keep today's width. */
 .app:has(.tabpane:not([hidden]) .splitview) {
   max-width: 1760px;
-  padding-left: 14px;
-  padding-right: 14px;
+  padding-left: 16px;
+  padding-right: 16px;
 }
 h2 {
-  font-size: 17px;
-  margin: 0 0 10px;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0 0 6px;
 }
 
-/* ---------- header: title (left) + 4-step stepper (right) ---------- */
+/* ---------- header: title, then the tabs, which are the navigation ---------- */
 .app-header {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 10px;
 }
 .app-title {
-  font-size: 15px;
-  font-weight: 700;
-  line-height: 1.3;
-  max-width: 520px;
-}
-.header-rule {
-  border: 0;
-  border-top: 1px solid var(--line);
-  margin: 12px 0 4px;
-}
-
-.stepper {
-  display: flex;
-  align-items: center;
-  gap: 0;
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-.stepitem {
-  display: flex;
-  align-items: center;
-}
-.stepper .chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  white-space: nowrap;
-  font-size: 12.5px;
-  padding: 5px 11px;
-  border-radius: 999px;
-  background: #eef1f5;
-  color: var(--muted);
-  border: 1px solid var(--line);
-}
-.stepper .stepnum {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  font-size: 11px;
-  font-weight: 700;
-  background: #fff;
-  color: var(--muted);
-  border: 1px solid var(--line);
-}
-.stepper .chip.done {
-  background: #e6f4ec;
-  color: var(--ok);
-  border-color: #bfe3cd;
-}
-.stepper .chip.done .stepnum {
-  background: var(--ok);
-  color: #fff;
-  border-color: var(--ok);
-}
-.stepper .chip.current {
-  background: #eaf0fb;
-  color: var(--accent);
-  border-color: #c5d6f5;
+  font-size: 14.5px;
   font-weight: 600;
+  color: var(--navy);
+  letter-spacing: -0.005em;
 }
-.stepper .chip.current .stepnum {
-  background: var(--accent);
-  color: #fff;
-  border-color: var(--accent);
-}
-.stepper .arrow {
-  margin: 0 8px;
-  color: var(--muted);
-  font-size: 13px;
-}
-
-/* ---------- tab bar (Document / Claims / Related Work / Review) ---------- */
 .tabbar {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin: 14px 0 0;
+  gap: 4px;
   border-bottom: 1px solid var(--line);
 }
 .tabbar .tab {
@@ -142,42 +79,86 @@ h2 {
   border: 0;
   border-bottom: 2px solid transparent;
   border-radius: 0;
-  padding: 8px 14px;
+  margin-bottom: -1px;
+  padding: 9px 14px 10px;
   font-size: 14px;
+  font-weight: 500;
   cursor: pointer;
+  transition: color 0.15s;
 }
 .tabbar .tab:hover:not(.disabled):not(.active) {
+  background: none;
   color: var(--ink);
 }
 .tabbar .tab.active {
-  color: var(--ink);
+  color: var(--navy);
   font-weight: 600;
-  border-bottom-color: var(--accent);
+  border-bottom-color: var(--navy);
 }
-.tabbar .tab.disabled {
-  opacity: 0.4;
-  cursor: default;
+.tabbar .tab.disabled,
+.tabbar .tab:disabled {
+  color: #b9c0cb;
+  opacity: 1;
+  cursor: not-allowed;
 }
 .tabbar .newsub {
   margin-left: auto;
   font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.tabbar .newsub:hover {
+  color: var(--ink);
+  text-decoration: none;
 }
 .tabpane[hidden] {
   display: none;
 }
-.step-label {
-  font-size: 11px;
+.eyebrow {
+  font-size: 11.5px;
+  font-weight: 600;
   letter-spacing: 0.08em;
-  color: var(--muted);
-  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-bottom: 6px;
+}
+.lede {
+  margin: 0 0 16px;
+  font-size: 14px;
+  line-height: 1.55;
+  max-width: 64ch;
+}
+.doc-note {
+  margin: 14px 0 0;
+  font-size: 13.5px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.dot-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--navy);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 .panel {
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 18px 20px;
-  margin-top: 16px;
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  padding: 22px 24px;
+  margin-top: 18px;
 }
 .muted {
   color: var(--muted);
@@ -192,25 +173,45 @@ h2 {
 
 button {
   font: inherit;
-  background: var(--brand);
+  font-size: 14px;
+  font-weight: 600;
+  background: var(--navy);
   color: #fff;
-  border: 0;
+  border: 1px solid transparent;
   border-radius: 8px;
-  padding: 8px 14px;
+  padding: 9px 16px;
   cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s;
+}
+button:hover:not(:disabled) {
+  background: var(--navy-hover);
 }
 button:disabled {
   opacity: 0.5;
   cursor: default;
 }
 button.secondary {
-  background: #eef1f5;
+  background: #fff;
   color: var(--ink);
+  border-color: var(--line-strong);
+}
+button.secondary:hover:not(:disabled) {
+  background: #f4f6f9;
 }
 button.link {
   background: none;
   color: var(--accent);
+  border: 0;
   padding: 0;
+  font-weight: 500;
+}
+button.link:hover:not(:disabled) {
+  background: none;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 input[type="text"],
 textarea,
@@ -218,10 +219,16 @@ input[type="file"] {
   font: inherit;
   width: 100%;
   padding: 8px 10px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   border-radius: 8px;
   margin: 6px 0;
   background: #fff;
+}
+input[type="text"]:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--navy);
+  box-shadow: 0 0 0 3px rgba(30, 39, 97, 0.1);
 }
 textarea {
   min-height: 60px;
@@ -406,8 +413,9 @@ textarea {
 
 /* upload dropzone */
 .dropzone {
-  border: 2px dashed var(--line);
+  border: 1.5px dashed var(--line-strong);
   border-radius: 10px;
+  background: #fafbfc;
   padding: 28px 16px;
   text-align: center;
   color: var(--muted);
@@ -418,9 +426,10 @@ textarea {
     background 0.15s,
     color 0.15s;
 }
+.dropzone:hover,
 .dropzone.over {
-  border-color: var(--accent);
-  background: #eef3fd;
+  border-color: var(--navy);
+  background: #f5f6fb;
   color: var(--ink);
 }
 .dropzone.has-file {
@@ -435,8 +444,9 @@ textarea {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 48px 20px;
+  padding: 56px 20px;
   border-radius: 12px;
+  margin-top: 4px;
 }
 .dropzone.busy {
   opacity: 0.7;
@@ -446,8 +456,9 @@ textarea {
   color: var(--muted);
   margin-bottom: 4px;
 }
+.dropzone:hover .upload-icon,
 .dropzone.over .upload-icon {
-  color: var(--accent);
+  color: var(--navy);
 }
 .dropzone .dz-main {
   font-size: 15px;
@@ -465,23 +476,38 @@ textarea {
 /* claims checkpoint */
 .paper-head {
   border-bottom: 1px solid var(--line);
-  padding-bottom: 12px;
-  margin-bottom: 14px;
+  padding-bottom: 14px;
+  margin-bottom: 16px;
 }
 .paper-title {
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 600;
-  line-height: 1.3;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
 }
 .paper-date {
   font-size: 13px;
-  margin-top: 5px;
+  margin-top: 6px;
+  color: var(--muted);
 }
 .checkpoint .claim {
   border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 12px;
+  border-left-width: 3px;
+  border-radius: 10px;
+  padding: 14px 16px;
   margin: 10px 0;
+  background: #fff;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.checkpoint .claim.qjump:hover {
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+.checkpoint .claim.active {
+  background: #fbfbfe;
+  box-shadow: 0 0 0 3px rgba(30, 39, 97, 0.08);
 }
 .checkpoint .claim.rejected {
   opacity: 0.5;
@@ -498,26 +524,34 @@ textarea {
   display: flex;
   align-items: center;
   gap: 16px;
-  margin-top: 6px;
+  margin-top: 8px;
+}
+.claim-actions .link {
+  font-size: 13px;
 }
 .claim-actions .link.danger {
+  color: var(--muted);
+}
+.claim-actions .link.danger:hover {
   color: var(--warn);
 }
 .badge {
   font-size: 11px;
-  background: #eef1f5;
+  font-weight: 500;
+  background: none;
   color: var(--muted);
-  padding: 2px 8px;
+  border: 1px solid var(--line-strong);
+  padding: 1px 7px;
   border-radius: 999px;
 }
 .evidence {
-  border-left: 3px solid var(--accent);
-  background: #f7f9fc;
-  margin: 10px 0 2px;
-  padding: 8px 12px;
-  border-radius: 0 6px 6px 0;
-  font-size: 13px;
-  line-height: 1.5;
+  border-left: 2px solid var(--line-strong);
+  background: #f8f9fb;
+  margin: 12px 0 2px;
+  padding: 10px 14px;
+  border-radius: 0 8px 8px 0;
+  font-size: 13.5px;
+  line-height: 1.55;
   color: var(--ink);
 }
 .evidence-meta {
@@ -533,8 +567,11 @@ textarea {
 }
 .actions {
   display: flex;
-  gap: 12px;
-  margin-top: 16px;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
 }
 
 /* claim cards with hover-edit */
@@ -544,16 +581,17 @@ textarea {
 }
 .claim .edit-btn {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: 10px;
+  right: 10px;
   opacity: 0;
   transition: opacity 0.12s;
-  background: none;
+  background: #fff;
   color: var(--muted);
   border: 1px solid var(--line);
   border-radius: 7px;
-  padding: 3px 8px;
-  font-size: 14px;
+  padding: 4px 8px;
+  font-size: 13px;
+  font-weight: 400;
   line-height: 1;
 }
 .claim.card:hover .edit-btn {
@@ -565,8 +603,8 @@ textarea {
 }
 .claim .claim-body {
   font-size: 14.5px;
-  line-height: 1.55;
-  padding-right: 30px;
+  line-height: 1.6;
+  padding-right: 34px;
 }
 .claim.card .claim-text {
   min-height: 70px;
@@ -576,7 +614,7 @@ textarea {
 .addbox {
   border: 1px solid var(--line);
   border-radius: 10px;
-  margin: 4px 0 14px;
+  margin: 4px 0 16px;
   overflow: hidden;
 }
 .addbox-head {
@@ -584,18 +622,23 @@ textarea {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: #f6f8fb;
+  background: #fff;
   color: var(--ink);
   border: 0;
   border-radius: 0;
   padding: 10px 14px;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 13.5px;
+  font-weight: 500;
   cursor: pointer;
+}
+.addbox-head:hover:not(:disabled) {
+  background: #f7f8fa;
 }
 .addbox-head .chev {
   color: var(--muted);
   font-weight: 400;
+  font-size: 16px;
+  line-height: 1;
 }
 .addbox-body {
   padding: 12px 14px;
@@ -618,7 +661,7 @@ textarea {
 .papers.cards {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 .papers.cards .pcard {
   display: flex;
@@ -629,15 +672,22 @@ textarea {
   border-radius: 10px;
   padding: 12px 14px;
   background: #fff;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.papers.cards .pcard:hover {
+  border-color: var(--line-strong);
 }
 .papers.cards .pcard.removed {
   opacity: 0.45;
 }
 .papers.cards .pkeep {
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
   margin: 3px 0 0;
   flex: 0 0 auto;
+  accent-color: var(--navy);
 }
 .pbody {
   flex: 1;
@@ -651,7 +701,8 @@ textarea {
 }
 .ptitle-row .ptitle {
   font-weight: 600;
-  line-height: 1.35;
+  font-size: 14.5px;
+  line-height: 1.4;
 }
 .ptitle-row .pext {
   margin-left: auto;
@@ -663,8 +714,8 @@ textarea {
   color: var(--accent);
 }
 .badge.added {
-  background: #eaf0fb;
   color: var(--accent);
+  border-color: #c5d3f3;
 }
 .pmeta {
   font-size: 12.5px;
@@ -681,9 +732,9 @@ textarea {
   color: var(--muted);
 }
 .prel-track {
-  flex: 0 0 130px;
-  height: 6px;
-  background: #eef1f5;
+  flex: 0 0 96px;
+  height: 4px;
+  background: #edf0f4;
   border-radius: 999px;
   overflow: hidden;
 }
@@ -693,13 +744,13 @@ textarea {
   border-radius: 999px;
 }
 .prel-fill.high {
-  background: var(--ok);
+  background: var(--navy);
 }
 .prel-fill.mid {
-  background: #d98a0b;
+  background: #7480b3;
 }
 .prel-fill.low {
-  background: #9aa7b5;
+  background: #b9c0cb;
 }
 .prel-val {
   font-size: 12px;
@@ -708,7 +759,7 @@ textarea {
 }
 .abs-toggle {
   margin-top: 8px;
-  font-size: 13px;
+  font-size: 12.5px;
 }
 
 /* related-work topical clusters */
@@ -716,12 +767,12 @@ textarea {
   margin-top: 6px;
 }
 .cluster-head {
-  font-size: 13.5px;
-  font-weight: 700;
-  color: var(--ink);
-  margin: 18px 0 8px;
-  padding-bottom: 5px;
-  border-bottom: 1px solid var(--line);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin: 22px 0 8px;
 }
 .cluster:first-of-type .cluster-head {
   margin-top: 8px;
@@ -774,7 +825,13 @@ button.begin.secondary {
 .review-head {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: flex-end;
+  padding-bottom: 14px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.review-start .live-head {
+  margin-top: 12px;
 }
 .review-head h2 {
   margin: 0;
@@ -785,14 +842,16 @@ button.begin.secondary {
   padding-top: 4px;
 }
 .cdot {
-  width: 22px;
-  height: 6px;
-  border-radius: 3px;
-  background: #e2e6ec;
+  width: 20px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line);
 }
-.cdot.done,
+.cdot.done {
+  background: #8e9bd6;
+}
 .cdot.current {
-  background: #111;
+  background: var(--navy);
 }
 
 .stage-stepper {
@@ -1056,9 +1115,7 @@ button.begin.secondary {
 .review-actions.end {
   justify-content: flex-end;
 }
-.review-actions button:not(.secondary) {
-  background: #111;
-}
+
 
 /* full-text status (review intro) */
 .ft-status {
@@ -1099,7 +1156,7 @@ button.begin.secondary {
   width: 18px;
   height: 18px;
   border: 2px solid var(--line);
-  border-top-color: var(--accent);
+  border-top-color: var(--navy);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
   flex: 0 0 auto;
@@ -1164,33 +1221,6 @@ button.begin.secondary {
   align-items: flex-end;
   gap: 8px;
 }
-.cost-badge {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: flex-end;
-  background: #f4f6fa;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 5px 10px;
-  font-weight: 600;
-  font-size: 13px;
-  line-height: 1.25;
-}
-.cost-badge .cost-tok {
-  font-weight: 400;
-  font-size: 11px;
-  color: var(--muted);
-}
-.cost-summary {
-  margin: 10px auto 2px;
-  font-size: 13.5px;
-  background: #f4f6fa;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 8px 14px;
-  display: inline-block;
-}
-
 .live-head {
   display: flex;
   align-items: center;
@@ -1219,12 +1249,6 @@ button.begin.secondary {
   padding: 2px 8px;
   white-space: nowrap;
 }
-.live-metrics .lm.cost {
-  background: #eaf0fb;
-  color: var(--accent);
-  border-color: #c5d6f5;
-  font-weight: 600;
-}
 
 .live-bar {
   height: 6px;
@@ -1235,7 +1259,7 @@ button.begin.secondary {
 }
 .live-fill {
   height: 100%;
-  background: var(--accent);
+  background: var(--navy);
   transition: width 0.5s ease;
 }
 
@@ -1838,105 +1862,6 @@ button.begin.sm {
   color: #b5790a;
 }
 
-/* ---- per-claim timing breakdown ---- */
-.timing-block {
-  background: #f7f9fc;
-  border: 1px solid #e2e8f2;
-}
-.timing-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.timing-head h4 {
-  margin: 0;
-}
-.timing-toggle {
-  margin-left: auto;
-  font-size: 12.5px;
-  color: var(--accent);
-}
-.timing-bars {
-  margin-top: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.timing-row {
-  display: grid;
-  grid-template-columns: 220px 1fr 110px;
-  align-items: center;
-  gap: 10px;
-  font-size: 13px;
-}
-.tr-label {
-  color: var(--ink);
-}
-.tr-bar-wrap {
-  background: #e6ecf6;
-  border-radius: 4px;
-  height: 14px;
-  overflow: hidden;
-}
-.tr-bar {
-  height: 100%;
-  background: var(--accent);
-  border-radius: 4px;
-}
-.tr-val {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  color: #556;
-}
-.timing-papers {
-  margin-top: 12px;
-  border-top: 1px dashed #d6deea;
-  padding-top: 10px;
-}
-.tp-title {
-  font-size: 12.5px;
-  font-weight: 600;
-  color: #556;
-  margin-bottom: 6px;
-}
-.tp-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: baseline;
-  padding: 3px 0;
-  font-size: 12.5px;
-}
-.tp-name {
-  color: var(--ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 55%;
-}
-.tp-nums {
-  display: flex;
-  gap: 12px;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-.tp-parse {
-  color: #6a7a90;
-}
-.tp-cmp {
-  color: var(--accent);
-  font-weight: 600;
-}
-.tp-tot {
-  color: #333;
-}
-
-@media (max-width: 640px) {
-  .timing-row {
-    grid-template-columns: 130px 1fr 90px;
-  }
-}
-
 /* ---- per-claim verdict from Artifact B (Summary tab) ---- */
 .sum-verdict {
   margin: 8px 0 10px;
@@ -2030,6 +1955,282 @@ button.begin.sm {
   margin: 6px 0 10px;
 }
 
+/* --- assessment colour + the blocks of one comparison ----------------------- */
+/* Mirrors components/assessmentStyle.js, which decides WHICH classes an assessment gets;
+   this decides what they look like, and is the same block in both apps' stylesheets.
+   Two dimensions, deliberately not collapsed into one: the TINT is how much overlap was
+   found, the OUTLINE is whether an evidence check materially carried it. Dashed means it
+   did not, or that none was run -- missing evidence must not look like a secured result,
+   the same reason the export prints both halves of "partial overlap · insufficient
+   evidence" instead of just the first. */
+.as {
+  --as-ink: #42526b;
+  --as-bg: #f1f3f8;
+  --as-edge: #cfd7e6;
+  --as-line: solid;
+}
+.as-partial,
+.vd-uncertain {
+  --as-ink: #8a5200;
+  --as-bg: #fff4e0;
+  --as-edge: #efd3a6;
+}
+.as-weak,
+.vd-unchallenged {
+  --as-ink: #1d6b41;
+  --as-bg: #eef7f1;
+  --as-edge: #bfdfcb;
+}
+.as-same,
+.as-substantial,
+.vd-challenged {
+  --as-ink: #96122c;
+  --as-bg: #fdeef1;
+  --as-edge: #eeb9c4;
+}
+.ev-nonmaterial,
+.ev-insufficient,
+.ev-nocheck {
+  --as-line: dashed;
+}
+/* A non-overlapping degree whose evidence check nonetheless found material overlap is
+   exactly the case battle_export._conflict() reports under "Unresolved assessment
+   conflicts". The green of a settled "no overlap" would misread it, so it takes the
+   neutral, dashed treatment instead: the conflict is unresolved, not decided. The
+   mirror case (an overlap degree with nonmaterial evidence) keeps its stronger tint --
+   understating a strong finding would be the opposite error -- and is already marked
+   dashed by its evidence class above. */
+.as-weak.ev-material {
+  --as-ink: #4d5666;
+  --as-bg: #f3f4f7;
+  --as-edge: #b9bfcc;
+  --as-line: dashed;
+}
+
+.as-pill {
+  display: inline-block;
+  padding: 1px 9px;
+  border-radius: 999px;
+  font-weight: 700;
+  line-height: 1.55;
+  color: var(--as-ink);
+  background: var(--as-bg);
+  border: 1px var(--as-line) var(--as-edge);
+}
+summary .as-pill {
+  margin-left: 8px;
+  font-weight: 600;
+  font-size: 11.5px;
+}
+.as-assess {
+  margin-top: 10px;
+}
+
+/* An assessment cell in the overview tables, plus the row marker for the papers that
+   were asked to stand out there: substantial overlap or stronger. In a table of ~60
+   cells, tinting the "no overlap" ones too would wash the whole grid and leave nothing
+   standing out, so there the tint is dropped and only the ink and the evidence outline
+   remain -- the strong and partial findings are the ones that get a background. */
+td.as-cell {
+  color: var(--as-ink);
+  background: var(--as-bg);
+  font-weight: 600;
+  border-left: 3px var(--as-line) var(--as-edge);
+}
+td.as-cell.as-weak,
+td.as-cell.as-unknown {
+  background: none;
+}
+td.as-cell.as-weak.ev-material {
+  background: var(--as-bg);
+}
+td.as-cell a {
+  color: inherit;
+}
+.as-cell-row {
+  background: #fdf6f8;
+}
+.as-cell-row > td:first-child {
+  border-left: 3px solid #96122c;
+  font-weight: 700;
+}
+
+/* Every assessment in the overview tables jumps to the comparison it names. */
+.as-jump {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-decoration-color: var(--as-edge);
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.as-jump:hover {
+  text-decoration-style: solid;
+  text-decoration-color: currentColor;
+}
+.as-flash {
+  animation: as-flash 1.5s ease-out;
+}
+@keyframes as-flash {
+  0%,
+  30% {
+    box-shadow: 0 0 0 3px #f3cf6a;
+  }
+  100% {
+    box-shadow: 0 0 0 3px rgba(243, 207, 106, 0);
+  }
+}
+
+/* The blocks of one comparison, tinted apart: what the prior paper does (folded), what
+   the comparison argues, the evidence pairs the check accepted, the candidates it set
+   aside (folded), and the check's own record (folded). Folding drops no text. */
+.blk {
+  --blk-edge: #dde2ec;
+  --blk-bg: #fff;
+  --blk-ink: inherit;
+  margin: 9px 0;
+  border: 1px solid var(--blk-edge);
+  border-left: 3px var(--blk-line, solid) var(--blk-edge);
+  border-radius: 0 7px 7px 0;
+  background: var(--blk-bg);
+}
+.blk > summary {
+  cursor: pointer;
+  padding: 5px 10px;
+  font-weight: 700;
+  font-size: 12.5px;
+  color: var(--blk-ink);
+}
+.blk[open] > summary {
+  border-bottom: 1px solid var(--blk-edge);
+}
+.blk > div {
+  padding: 4px 12px 8px;
+}
+.blk-priorwork {
+  --blk-edge: #c6cfe0;
+  --blk-bg: #f6f8fc;
+  --blk-ink: #3c4a63;
+}
+.blk-comparison {
+  --blk-edge: #b9c8ee;
+  --blk-bg: #f9fbff;
+  --blk-ink: #2b3f6b;
+}
+.blk-pairs {
+  --blk-edge: #b3dcc3;
+  --blk-bg: #f8fcf9;
+  --blk-ink: #1d6b41;
+}
+.blk-unused {
+  --blk-edge: #d8dbe2;
+  --blk-bg: #fbfbfc;
+  --blk-ink: #5d6779;
+  --blk-line: dashed;
+}
+.blk-check {
+  --blk-edge: #cabfe8;
+  --blk-bg: #faf8fe;
+  --blk-ink: #4a3d77;
+}
+/* --- report layout v4: claims, comparisons, folds ---------------------------- */
+/* assessmentStyle.groupReport decides the structure; this is how it looks, the same in
+   both apps. A claim is one closed card whose row already says what the reader needs to
+   choose whether to open it; a comparison is a framed section; folds reuse .blk. */
+.lay-claim {
+  margin: 12px 0;
+  border: 1px solid #cdd6e6;
+  border-radius: 9px;
+  background: #fff;
+}
+.lay-claim > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 10px 14px 10px 32px;
+  position: relative;
+  border-radius: 9px;
+  background: #f6f8fc;
+}
+.lay-claim > summary::-webkit-details-marker { display: none; }
+.lay-claim > summary::before {
+  content: "▸";
+  position: absolute;
+  left: 12px;
+  top: 11px;
+  color: #5a6a86;
+}
+.lay-claim[open] > summary::before { content: "▾"; }
+.lay-claim[open] > summary {
+  border-bottom: 1px solid #cdd6e6;
+  border-radius: 9px 9px 0 0;
+}
+.lay-claim > summary > * { margin: 3px 0; }
+.lay-claim > summary h2,
+.lay-claim > summary h3 { font-size: 15px; margin: 0 0 4px; }
+.lay-claim-body { padding: 6px 16px 14px; }
+.lay-verdict { display: inline-block; margin-right: 14px; }
+/* v4.4: the claim text in a claim's row links to its anchor passage in the submission PDF. */
+.claim-jump { color: inherit; text-decoration: underline dotted #8a94a6; text-underline-offset: 3px; cursor: pointer; }
+.claim-jump:hover { text-decoration: underline solid #2f5bd3; }
+.claim-jump.active { background: #fff5c2; }
+.claim-jump-mark { font-size: 0.82em; color: #2f5bd3; white-space: nowrap; }
+.lay-open {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 6px 0;
+  padding: 5px 9px;
+  border-radius: 6px;
+  background: #fff7e6;
+  border: 1px solid #f0d49b;
+  color: #6b4a00;
+}
+.lay-open-mark {
+  flex: none;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: #d9a52b;
+  color: #fff;
+  font-weight: 800;
+  font-size: 11.5px;
+  line-height: 17px;
+  text-align: center;
+  margin-top: 1px;
+}
+.lay-cmp {
+  margin: 16px 0;
+  padding: 10px 14px 6px;
+  border: 1px solid #dfe5ef;
+  border-top: 3px solid #7d93bd;
+  border-radius: 4px 4px 8px 8px;
+  background: #fff;
+}
+.lay-cmp > h4,
+.lay-cmp > h5 { margin-top: 2px; }
+.lay-fold > .lay-fold-summary { font-weight: 700; }
+.lay-fold-body { padding: 4px 12px 8px; }
+.blk-check { --blk-edge: #cabfe8; --blk-bg: #faf8fe; --blk-ink: #4a3d77; }
+.blk-full { --blk-edge: #b9c8ee; --blk-bg: #f9fbff; --blk-ink: #2b3f6b; }
+.blk-passages { --blk-edge: #b3dcc3; --blk-bg: #f8fcf9; --blk-ink: #1d6b41; }
+.blk-coverage { --blk-edge: #d8dbe2; --blk-bg: #fbfbfc; --blk-ink: #5d6779; }
+.blk-legend,
+.blk-matrix,
+.blk-meta { --blk-edge: #c6cfe0; --blk-bg: #f6f8fc; --blk-ink: #3c4a63; }
+/* --- end of the shared assessment block ----------------------------------- */
+
+/* Summary tab: the claim text carries a soft wash of the colour its passages have in the
+   PDF (ReviewSummary's claimColor), full strength while its anchor is the one shown. */
+.claim-jump.claim-colored {
+  background: color-mix(in srgb, var(--claim-color) 38%, transparent);
+  border-radius: 3px;
+  padding: 1px 3px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+.claim-jump.claim-colored.active { background: var(--claim-color); }
+.se-export .rz-quote .qswatch { margin: 5px 0 0; }
+
 .sum-export {
   border: 1px solid #d7dceb;
   border-radius: 10px;
@@ -2081,7 +2282,7 @@ button.begin.sm {
 .split-left {
   min-width: 0;
   overflow: auto;
-  max-height: calc(100vh - 148px);
+  max-height: calc(100vh - 118px);
 }
 .split-right {
   min-width: 0;
@@ -2114,10 +2315,12 @@ button.begin.sm {
   flex-direction: column;
   flex: 1;
   min-width: 0;
-  border: 1px solid #e2e4e8;
-  border-radius: 8px;
-  background: #f6f7f9;
-  max-height: calc(100vh - 148px);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #f1f3f6;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  max-height: calc(100vh - 118px);
 }
 .pdfpane.empty {
   align-items: center;
@@ -2132,10 +2335,9 @@ button.begin.sm {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 6px 10px;
-  border-bottom: 1px solid #e2e4e8;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--line);
   background: #fff;
-  border-radius: 8px 8px 0 0;
   flex: 0 0 auto;
 }
 .pdfzoom {
@@ -2147,9 +2349,30 @@ button.begin.sm {
 }
 .pdfhits {
   font-size: 12px;
+  color: var(--faint);
+}
+.pdftools button.link {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+}
+.pdftools button.link:hover:not(:disabled) {
+  background: #f1f3f6;
+  color: var(--ink);
+  text-decoration: none;
 }
 .pdfopen {
   margin-left: auto;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--muted);
+  text-decoration: none;
+}
+.pdfopen:hover {
+  color: var(--ink);
 }
 .pdfscroll {
   overflow: auto;
@@ -2222,18 +2445,20 @@ button.begin.sm {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
-  border-bottom: 1px solid #e2e4e8;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
   background: #fff;
   flex: 0 0 auto;
 }
 .pdfpicker select {
   flex: 1;
   min-width: 0;
+  font: inherit;
   font-size: 13px;
-  padding: 4px 6px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
+  color: var(--ink);
+  padding: 6px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
   background: #fff;
 }
 .paper-open {
@@ -2243,8 +2468,8 @@ button.begin.sm {
   text-decoration: underline;
 }
 li.pcard.selected {
-  outline: 2px solid #6366f1;
-  outline-offset: 1px;
+  border-color: var(--navy);
+  box-shadow: 0 0 0 1px var(--navy);
 }
 
 /* A span the checker could not confirm. Rendering it like the system's own sentences --
@@ -2628,3 +2853,9 @@ li.pcard.selected {
 .ev-additional-pairs .ev-pair-group:first-of-type {
   margin-top: 10px;
 }
+
+/* Review tab: a finished claim is its section of the report, rendered with the Summary
+   tab's classes (.se-export, .lay-*). */
+.rv-report { margin-top: 6px; }
+.rv-report .lay-claim { margin-top: 4px; }
+.rv-finishing { margin-top: 8px; }

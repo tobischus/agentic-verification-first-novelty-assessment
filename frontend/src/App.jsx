@@ -9,43 +9,21 @@ import ReviewSummary from './components/ReviewSummary.jsx'
 import PublicationDate from './components/PublicationDate.jsx'
 
 const TITLE = 'Towards Verification-First Agentic Novelty Assessment of Scientific Papers'
-const HEADER_STEPS = ['Upload', 'Claims', 'Related Work', 'Review']
 const STAGE_LABELS = {
   document_processing: 'Document processing', claim_extraction: 'Claim extraction',
   retrieval: 'Related-work retrieval', fetch_pdfs: 'Downloading PDFs',
   artifact_a: 'Evidence (Artifact A)', artifact_b: 'Assessment (Artifact B)',
   judge: 'Verification (Judge)', export: 'Report',
 }
-
-// Which of the 4 header steps is currently active (0=Upload … 3=Review).
-function currentStep(state) {
-  const s = state?.status || ''
-  const cps = state?.checkpoints || {}
-  const done = new Set(state?.stages_done || [])
-  if (s === 'completed') return 3
-  if (s === 'awaiting_review:papers' || cps.papers === 'approved' || done.has('retrieval')) return 2
-  if (cps.claims === 'approved') return 2
-  if (s === 'awaiting_review:claims' || done.has('claim_extraction')) return 1
-  return 0
-}
-
-function Stepper({ step, completed }) {
-  return (
-    <ol className="stepper">
-      {HEADER_STEPS.map((label, i) => {
-        const cls = completed || i < step ? 'done' : i === step ? 'current' : 'pending'
-        return (
-          <li key={label} className="stepitem">
-            <span className={'chip ' + cls}>
-              <span className="stepnum">{i + 1}</span>{label}
-            </span>
-            {i < HEADER_STEPS.length - 1 && <span className="arrow">→</span>}
-          </li>
-        )
-      })}
-    </ol>
-  )
-}
+// The tabs are the navigation: all of them are shown from the start, and each one opens
+// once the pipeline has produced what it shows.
+const TABS = [
+  { id: 'document', label: 'Document' },
+  { id: 'claims', label: 'Claims' },
+  { id: 'related', label: 'Related Work' },
+  { id: 'review', label: 'Review' },
+  { id: 'summary', label: 'Summary' },
+]
 
 function DocumentInfo({ submissionId, state }) {
   const [meta, setMeta] = useState(null)
@@ -59,9 +37,8 @@ function DocumentInfo({ submissionId, state }) {
   }, [submissionId, claimsReady])
 
   return (
-    <div className="panel">
-      <div className="step-label">STEP 1</div>
-      <h2>Document</h2>
+    <div className="panel doc-panel">
+      <div className="eyebrow">Document</div>
       {meta ? (
         <>
           <div className="paper-title">{meta.title}</div>
@@ -72,12 +49,14 @@ function DocumentInfo({ submissionId, state }) {
             retrievalDone={retrievalDone}
             onSaved={(v) => setMeta((m) => ({ ...m, date: v, src: 'reviewer' }))}
           />
-          <p className="muted" style={{ marginTop: 12 }}>
-            ✓ Document processed. Use the tabs above to review the claims and related work.
+          <p className="muted doc-note">
+            Processed. Continue with the claims and the related work in the tabs above.
           </p>
         </>
       ) : (
-        <p className="muted">Processing the document… this view updates automatically.</p>
+        <p className="muted doc-note">
+          <span className="dot-pulse" /> Processing the document — this view updates on its own.
+        </p>
       )}
     </div>
   )
@@ -87,6 +66,8 @@ export default function App() {
   const [submissionId, setSubmissionId] = useState(() => localStorage.getItem('sid') || '')
   const [state, setState] = useState(null)
   const [active, setActive] = useState('document')
+  // Set when the reviewer approves the related work: the review then starts on its own.
+  const [reviewRequested, setReviewRequested] = useState(false)
   const prevStatus = useRef('')
 
   const poll = useCallback(async (sid) => {
@@ -112,9 +93,13 @@ export default function App() {
     else if (s === 'completed') setActive('review')
   }, [state?.status])
 
-  const onUploaded = (sid) => { setSubmissionId(sid); setState(null); setActive('document'); prevStatus.current = '' }
-  const reset = () => { localStorage.removeItem('sid'); setSubmissionId(''); setState(null); setActive('document'); prevStatus.current = '' }
+  const clear = () => {
+    setState(null); setActive('document'); setReviewRequested(false); prevStatus.current = ''
+  }
+  const onUploaded = (sid) => { setSubmissionId(sid); clear() }
+  const reset = () => { localStorage.removeItem('sid'); setSubmissionId(''); clear() }
   const refresh = () => poll(submissionId)
+  const startReview = () => { setReviewRequested(true); refresh() }
 
   const done = new Set(state?.stages_done || [])
   const status = state?.status || ''
@@ -122,29 +107,16 @@ export default function App() {
     document: true,
     claims: !!submissionId && done.has('claim_extraction'),
     related: !!submissionId && done.has('retrieval'),
-    review: status === 'completed',
-    summary: status === 'completed',
+    review: !!submissionId && status === 'completed',
+    summary: !!submissionId && status === 'completed',
   }
-  const step = currentStep(state)
-  const tabs = [
-    { id: 'document', label: 'Document' },
-    { id: 'claims', label: 'Claims' },
-    { id: 'related', label: 'Related Work' },
-    ...(avail.review ? [{ id: 'review', label: 'Review' }] : []),
-    ...(avail.summary ? [{ id: 'summary', label: 'Summary' }] : []),
-  ]
 
   return (
     <div className="app">
       <header className="app-header">
         <div className="app-title">{TITLE}</div>
-        <Stepper step={step} completed={status === 'completed'} />
-      </header>
-      <hr className="header-rule" />
-
-      {submissionId && (
         <nav className="tabbar">
-          {tabs.map((t) => (
+          {TABS.map((t) => (
             <button
               key={t.id}
               className={'tab' + (active === t.id ? ' active' : '') + (avail[t.id] ? '' : ' disabled')}
@@ -154,9 +126,9 @@ export default function App() {
               {t.label}
             </button>
           ))}
-          <button className="link newsub" onClick={reset}>new submission</button>
+          {submissionId && <button className="link newsub" onClick={reset}>New submission</button>}
         </nav>
-      )}
+      </header>
 
       {submissionId && status === 'failed' && (
         <div className="error">Pipeline failed — {state?.last_error}</div>
@@ -178,12 +150,17 @@ export default function App() {
       )}
       {avail.related && (
         <div className="tabpane" hidden={active !== 'related'}>
-          <PapersReview submissionId={submissionId} status={status} onApproved={refresh} />
+          <PapersReview submissionId={submissionId} status={status} onApproved={startReview} />
         </div>
       )}
       {avail.review && (
         <div className="tabpane" hidden={active !== 'review'}>
-          <ReviewWalkthrough submissionId={submissionId} onFinish={() => setActive('summary')} />
+          <ReviewWalkthrough
+            submissionId={submissionId}
+            active={active === 'review'}
+            autoStart={reviewRequested}
+            onFinish={() => setActive('summary')}
+          />
         </div>
       )}
       {avail.summary && (

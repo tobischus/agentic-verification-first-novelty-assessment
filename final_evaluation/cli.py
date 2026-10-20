@@ -154,13 +154,82 @@ def cmd_analyze_human(args):
 
 def cmd_plan_e1(args):
     from final_evaluation.evaluation.e1 import adapter
-    plan = adapter.build_plan(args.config)
+    plan = adapter.build_plan(args.config, papers=args.papers, pairs=args.pairs)
     if args.execute:
-        adapter.execute_plan(plan, out_dir=args.out_dir)
+        adapter.execute_plan(plan, out_dir=args.out_dir, limit=args.limit,
+                             service_tier="" if args.standard else "flex",
+                             cache=not args.no_cache)
     else:
-        adapter.print_plan(plan)
+        adapter.print_plan(plan, verbose=args.verbose)
         print("\n(plan mode -- no API calls made. Pass --execute to run them; "
              "requires OPENAI_API_KEY and is never invoked by the web process.)")
+
+
+def cmd_analyze_e1(args):
+    from final_evaluation.evaluation.e1 import adapter, analyze
+    recs, corr = analyze.load(args.e1)
+    plan = adapter.build_plan(args.config) if args.config else None
+    res = analyze.analyze(recs, corr, plan)
+    analyze.print_report(res, args.paper_set)
+    out = Path(args.out) if args.out else Path(args.e1).parent / "e1_analysis.json"
+    out.write_text(json.dumps(res, indent=2), encoding="utf-8")
+    print()
+    print(f"written: {out}")
+
+
+def cmd_sensitivity_e1(args):
+    from final_evaluation.evaluation.e1 import analyze, sensitivity
+    recs, _ = analyze.load(args.e1)
+    res = sensitivity.analyze(recs)
+    sensitivity.print_report(res)
+    out = Path(args.out) if args.out else Path(args.e1).parent / "e1_sensitivity.json"
+    out.write_text(json.dumps(res, indent=2), encoding="utf-8")
+    print()
+    print(f"written: {out}")
+
+
+def cmd_agent_linear(args):
+    from final_evaluation.evaluation import agent_linear
+    res = agent_linear.analyze(Path(args.config))
+    agent_linear.print_report(res)
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(res, indent=2), encoding="utf-8")
+    print()
+    print(f"written: {out}")
+
+
+def cmd_adjudication_packet(args):
+    from final_evaluation.scripts import adjudication_packet
+    res = adjudication_packet.build(Path(args.out_dir), Path(args.config))
+    print(f"{res['cases']} divergent claims -> {res['out_dir']}")
+    print(f"fill in: {res['decisions']}")
+
+
+def cmd_source_audit(args):
+    from final_evaluation.evaluation.e3 import source_audit
+    res = source_audit.analyze(Path(args.config))
+    source_audit.print_report(res)
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(res, indent=2, ensure_ascii=False), encoding="utf-8")
+    print()
+    print(f"written: {out}")
+
+
+def cmd_figures(args):
+    from final_evaluation.scripts import presentation_figures
+    for p in presentation_figures.build(Path(args.out_dir), Path(args.e1_dir), minimal=args.minimal):
+        print(f"written: {p}")
+
+
+def cmd_compare_e1(args):
+    from final_evaluation.evaluation.e2 import analyze
+    result = analyze.compare_to_e1(args.input, args.e1, include_test=args.include_test)
+    out_path = Path(args.out) if args.out else Path(args.e1).parent / "e1_vs_human.json"
+    out_path.write_text(json.dumps(result, ensure_ascii=False, indent=1), encoding="utf-8")
+    analyze.print_e1_comparison(result)
+    print(f"\nwritten: {out_path}")
 
 
 def cmd_upload_assets(args):
@@ -247,10 +316,62 @@ def main():
     p.set_defaults(func=cmd_analyze_human)
 
     p = sub.add_parser("plan-e1")
-    p.add_argument("--config", default="final_evaluation/config/pilot.yaml")
+    p.add_argument("--config", default="final_evaluation/config/e1_main.yaml",
+                   help="e1_main.yaml (all papers x all pairs) or pilot.yaml (the pilot's tasks)")
+    p.add_argument("--papers", default="", help="narrow to these paper keys (comma-separated)")
+    p.add_argument("--pairs", default="", help="narrow to these pairs, e.g. agent:linear,agent:afzal")
+    p.add_argument("--limit", type=int, default=0, help="with --execute: run at most N calls")
+    p.add_argument("--verbose", action="store_true", help="list every planned call")
     p.add_argument("--execute", action="store_true")
-    p.add_argument("--out-dir", default="final_evaluation/results/pilot/e1")
+    p.add_argument("--out-dir", default=None, help="default: the config's out_dir")
+    p.add_argument("--standard", action="store_true",
+                   help="standard service tier instead of flex (2x price; e.g. if flex stays unavailable)")
+    p.add_argument("--no-cache", action="store_true",
+                   help="the pilot's exact request: one user string, seed-shuffled order, no breakpoints")
     p.set_defaults(func=cmd_plan_e1)
+
+    p = sub.add_parser("analyze-e1", help="E1 judge results: stability, pairs, ranking, bias, cost")
+    p.add_argument("--e1", default="final_evaluation/results/main/e1/judge_calls.jsonl")
+    p.add_argument("--config", default="final_evaluation/config/e1_main.yaml",
+                   help="the plan the results are checked against for completeness ('' to skip)")
+    p.add_argument("--paper-set", default="all", help="all | main | e1_only (what is printed)")
+    p.add_argument("--out", default=None, help="default: e1_analysis.json next to the results")
+    p.set_defaults(func=cmd_analyze_e1)
+
+    p = sub.add_parser("sensitivity-e1", help="E1 post-hoc sensitivity: length- and coverage-adjusted rankings")
+    p.add_argument("--e1", default="final_evaluation/results/main/e1/judge_calls.jsonl")
+    p.add_argument("--out", default=None, help="default: e1_sensitivity.json next to the results")
+    p.set_defaults(func=cmd_sensitivity_e1)
+
+    p = sub.add_parser("agent-linear", help="agent vs linear run metrics on the E1 papers, paired sign tests")
+    p.add_argument("--config", default="final_evaluation/config/e1_main.yaml")
+    p.add_argument("--out", default="final_evaluation/results/main/agent_linear/agent_linear.json")
+    p.set_defaults(func=cmd_agent_linear)
+
+    p = sub.add_parser("adjudication-packet", help="blind side-by-side packet for the claims agent and linear judge differently")
+    p.add_argument("--config", default="final_evaluation/config/e1_main.yaml")
+    p.add_argument("--out-dir", default="final_evaluation/results/main/agent_linear/adjudication")
+    p.set_defaults(func=cmd_adjudication_packet)
+
+    p = sub.add_parser("source-audit", help="E3 automatic part: grounding, verifiability and a re-check of every shown quote")
+    p.add_argument("--config", default="final_evaluation/config/e1_main.yaml")
+    p.add_argument("--out", default="final_evaluation/results/main/e3/source_audit.json")
+    p.set_defaults(func=cmd_source_audit)
+
+    p = sub.add_parser("figures", help="slide figures from the E1 and agent-linear analysis outputs")
+    p.add_argument("--out-dir", default="final_evaluation/results/main/figures")
+    p.add_argument("--e1-dir", default="final_evaluation/results/main/e1",
+                   help="the E1 run to draw (holds e1_analysis.json and e1_sensitivity.json)")
+    p.add_argument("--minimal", action="store_true",
+                   help="one short caption line per figure, built from the data only")
+    p.set_defaults(func=cmd_figures)
+
+    p = sub.add_parser("compare-e1", help="human ratings vs the E1 judge on the same tasks")
+    p.add_argument("--input", required=True, help="the admin export ZIP")
+    p.add_argument("--e1", required=True, help="judge_calls.jsonl written by plan-e1 --execute")
+    p.add_argument("--include-test", action="store_true")
+    p.add_argument("--out", default=None)
+    p.set_defaults(func=cmd_compare_e1)
 
     p = sub.add_parser("upload-assets")
     p.add_argument("--study", required=True)

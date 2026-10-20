@@ -632,6 +632,35 @@ from storage, autosave and reload, submit, re-login shows 1 of 20, admin export 
 files incl. `participants.csv`), A/B mapped to systems, umlauts intact. Supabase Storage
 itself remains untested until the real seed (SETUP_HOSTING.md section 5).
 
+### 13f. E1 ready for the main study — 2026-09-24
+
+`evaluation/e1/adapter.py` reads each paper from its own set's inputs directory (it read
+`inputs/pilot/` only) and, for `config/e1_main.yaml`, plans every pair of the five
+systems in both orders on every paper, shuffled with a stored seed, marking the 20 human
+tasks; the pilot config still plans the pilot's six tasks. `--execute` appends and
+resumes (refuses a file of another E1 id or rubric), refuses an unfiltered run while the
+plan has a problem (today: "10 of 20 papers configured"), and stores rubric version,
+content versions and file hashes with every call. `config/e1_extra.yaml` is the
+still-empty list of the ten further papers; `seed.py` refuses any `e1_only` config.
+`compare_to_e1` now gates on orientation, rubric version and content version (it
+matched by task only and said so) and is wired as `compare-e1`. Checks:
+`plan-e1` -> 200/200 calls ready on the ten human-rated papers, 40 on human tasks, ~$40
+estimated, 2 calls above 256k estimated tokens; `--execute` against a fake model writes,
+resumes (0 to run on the second pass) and refuses the unfiltered plan; `seed-pilot
+--config e1_extra.yaml` refuses; `pytest final_evaluation/tests` 21 passed, 14 skipped
+(7 new in `test_e1.py`). No judge call was made.
+
+### 13g. E1 configuration and `compare-e1` on the criteria text — 2026-10-20
+
+`config/e1_main.yaml` is the E1 run of PROTOCOL 8a (rubric v5, gpt-6.1-sol, results in
+`results/main/e1/`); `config/main.yaml` names v5 as the study's rubric, whose CRITERIA
+section is the raters' text. `compare-e1` no longer matches rubric version labels: it
+compares the CRITERIA section of the export's `rubric.txt` with that of the judge call's
+rubric file, by content, and writes the sha256 of the raters' criteria. Checks:
+`compare-e1` on the main-study export -> 40/40 responses comparable, per-criterion
+agreement identical to the previous output; `pytest final_evaluation/tests` 50 passed,
+14 skipped.
+
 ## 14. Untouched by this work
 
 The assessment pipeline's *decisions* (`agent`, retrieval, evidence checking) and every

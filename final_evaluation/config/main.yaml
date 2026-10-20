@@ -105,6 +105,8 @@ tasks:
     pair: [agent, opennovelty]
 
 participants:
-  count: 2          # two raters, each assigned all 20 tasks -> 40 ratings
+  count: 3          # three raters, each assigned all 20 tasks -> 60 ratings. M03 added
+                    # 2026-10-01 (PROTOCOL section 5): create-participants --count 3
+                    # created M03 only (ordinal 6, see there); M01/M02 untouched.
   prefix: "M"
   test: false

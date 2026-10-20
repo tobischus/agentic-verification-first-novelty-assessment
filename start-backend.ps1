@@ -16,6 +16,10 @@ $env:NOVELTY_COMPARE_MODEL   = "gpt-5.6-luna"
 $env:NOVELTY_COMPARE_EFFORT  = "low"
 $env:NOVELTY_EVIDENCE_MODEL  = "gpt-5.6-luna"
 $env:NOVELTY_EVIDENCE_EFFORT = "low"
+# Claim-Bewertung (5c) und Novelty Summary (5b) wie im evaluierten Batch-Lauf
+# (eval/out/e1_extra/run_all.py); ohne diese Zeile nimmt /review/conclusion gpt-4.1.
+$env:NOVELTY_CONCLUSION_MODEL  = "gpt-5.6-luna"
+$env:NOVELTY_CONCLUSION_EFFORT = "low"
 $env:NOVELTY_AGENT_MAX_STEPS       = "50"        # Kompatibilitaets-Backstop (Zwei-Phasen-Ablauf terminiert von selbst)
 $env:NOVELTY_AGENT_MAX_RETRIEVALS  = "1"         # Re-Entry-Runden (retrieve_more), wenn nichts ueberlappt
 $env:NOVELTY_AGENT_CLOSEST_N        = "10"        # nur noch Coverage-/Anzeige-Breite; die Triage schaut IMMER den ganzen Pool an

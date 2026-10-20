@@ -1,9 +1,15 @@
-# E3 -- source-fidelity verification (schema + directory only, NOT implemented)
+# E3 -- source-fidelity verification
 
-This directory is a placeholder by design (PROTOCOL.md section 12): "Ein vollständiges
+**Automatic part: implemented** (2026-09-27, PROTOCOL.md section 8c). `source_audit.py`,
+run as `python -m final_evaluation.cli source-audit`, reports grounding rate, verifiability
+rate and ownership rate for agent and linear, and re-checks every quote a report shows
+against its hash-pinned source text. It needs no model and reads only frozen artifacts and
+parsed texts under `data/`.
+
+**Manual part: NOT implemented** -- everything below. "Ein vollständiges
 Quellenprüfungsdashboard ... sind nicht Voraussetzung für den lauffähigen Human-Pilot."
-Nothing under `evaluation/e3/` is wired into `cli.py`, the dashboard backend, or E2's
-analysis. Do not treat the schema below as an implemented feature.
+Nothing below is wired into `cli.py`, the dashboard backend, or E2's analysis. Do not treat
+the schema below as an implemented feature.
 
 ## What E3 is for
 

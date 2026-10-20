@@ -2438,15 +2438,21 @@ class ClaimNoveltyAgent:
             )
             return comp, pt, ct
 
+        # The same claim-local selection the comparison was built from, so the check can
+        # read what the claim's terms mean instead of only the comparison's account of
+        # them. Interpretation only -- the verification corpora above are unchanged, and
+        # overlap still rests on the grounded pairs alone.
         check = evidence_map.check_evidence(
             struct,
             claim_str,
             mapping,
             comparison=raw_proposal,
+            submission_context=submission_text,
         )
 
         comp["evidence_check"] = {
             "status": check.get("status", "insufficient"),
+            "prompt_version": evidence_map.EVIDENCE_CHECK_PROMPT_VERSION,
             "reasoning": check.get("reasoning", ""),
             "supporting_pair_indices": check.get(
                 "supporting_pair_indices", []

@@ -56,8 +56,8 @@ contributions and differences?
 Reward distinctions between contribution roles, assumptions,
 capabilities, findings, and scope when relevant.
 Do not reward detail that does not affect the novelty argument.
-A technical difference alone does not establish meaningful novelty.
-A shared technique or topic alone does not establish material overlap.
+Shared topics or methods do not by themselves establish a shared
+contribution; differences do not by themselves establish novelty.
 This criterion assesses the analysis as presented, not independently
 verified prior-work correctness.
 
@@ -74,14 +74,14 @@ Distinguish missing evidence from demonstrated falsehood.
 4. conclusion_warrant
 Which report's novelty conclusion follows more convincingly from
 its own presented comparisons and their limitations?
-Consider whether it distinguishes partial overlap from anticipation
-of the central contribution, and identifies remaining contributions.
+Assess what prior work already establishes, what the submission adds,
+and whether the novelty judgment follows.
 Penalize internal contradictions, unsupported certainty, and
 unhelpful evasiveness.
 "No overlap found" is not proof of novelty across the literature.
 A broader scope or additional application is not automatically a
 scientifically significant contribution.
-Do not require any particular verdict vocabulary.
+Judge substance, not matching terminology, headings, formats, or verdict labels.
 Do not treat publication acceptance or rejection as a novelty gold label.
 
 5. reviewer_usefulness

@@ -1,0 +1,31 @@
+# E1 -- the LLM judge on the main study (PROTOCOL 8a). Read by `plan-e1 --config` only;
+# nothing is seeded from this file.
+#
+# Design fixed on 2026-09-14 (eval/Meeting 14.09.2026.txt): 20 papers, all five systems,
+# all 10 system pairs, each pair in both A/B orders -> 400 calls. The ten human-rated
+# papers are judged on the SAME frozen files the raters see (inputs/main/); calls on one
+# of the 20 human tasks are marked `human_task` for the E1-E2 comparison (`compare-e1`).
+# The other ten papers are E1 only (config/e1_extra.yaml).
+#
+# The judge rubric is novelty_report_judge_v5. Its CRITERIA section is the text the raters
+# read (criteria.json, the rating form); the rest is judge-only: instructions on length,
+# coverage and precision and an inventory in the response. plan-e1 reports a problem if a
+# paper set's study uses a different rubric version, and `--execute` refuses to run with an
+# open problem unless the run is explicitly narrowed with --papers/--pairs.
+
+e1:
+  id: e1_main_v5
+  rubric_version: novelty_report_judge_v5
+  judge_model: gpt-6.1-sol
+  judge_effort: medium
+  inventory: true
+  seed: 42                  # shuffles the execution order only, never the judge
+  expected_papers: 20
+  systems: [agent, linear, opennovelty, deepreviewer, afzal]
+  out_dir: final_evaluation/results/main/e1
+
+paper_sets:
+  - config: final_evaluation/config/main.yaml
+    role: human_rated
+  - config: final_evaluation/config/e1_extra.yaml
+    role: e1_only

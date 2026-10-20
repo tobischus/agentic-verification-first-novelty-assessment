@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
-import PipelineCostBadge from './PipelineCostBadge.jsx'
 import SplitView from '../pdf/SplitView.jsx'
 import PdfViewer from '../pdf/PdfViewer.jsx'
 
@@ -40,6 +39,31 @@ function fmtAuthors(a) {
 }
 const s2Url = (id) => (/^[0-9a-f]{40}$/i.test(id || '') ? `https://www.semanticscholar.org/paper/${id}` : null)
 
+// The final related work grouped by topical cluster, strongest cluster first and the
+// reviewer's own additions last -- the order the list is shown in.
+function groupPapers(papers) {
+  const groups = {}
+  papers.forEach((p) => {
+    const key = p.added_by ? '_added'
+      : (p.cluster != null && p.cluster >= 0 ? `c${p.cluster}` : '_none')
+    if (!groups[key]) {
+      groups[key] = {
+        label: key === '_added' ? 'Added by reviewer'
+          : (p.cluster_label || (key === '_none' ? 'Related work' : `Cluster ${p.cluster + 1}`)),
+        papers: [], best: 0,
+      }
+    }
+    groups[key].papers.push(p)
+    groups[key].best = Math.max(groups[key].best, p.relevance || 0)
+  })
+  const order = Object.keys(groups).sort((a, b) => {
+    if (a === '_added') return 1
+    if (b === '_added') return -1
+    return groups[b].best - groups[a].best
+  })
+  return { groups, order }
+}
+
 // Checkpoint 2: validate the related-work pool (grouped into topical clusters); add missing papers.
 export default function PapersReview({ submissionId, status, onApproved }) {
   const [papers, setPapers] = useState(null)
@@ -65,6 +89,14 @@ export default function PapersReview({ submissionId, status, onApproved }) {
   useEffect(() => {
     api.papers(submissionId).then((d) => setPapers(d.papers)).catch((e) => setErr(String(e)))
   }, [submissionId, status])
+
+  // Open the first listed paper that has a PDF, so the reader pane is never empty.
+  useEffect(() => {
+    if (selected || !papers) return
+    const { groups, order } = groupPapers(papers)
+    const first = order.flatMap((k) => groups[k].papers).find((p) => p.pdf_available)
+    if (first) setSelected(first.paper_id)
+  }, [papers, selected])
 
   const uploadPdf = async (paperId, file) => {
     if (!file) return
@@ -133,15 +165,15 @@ export default function PapersReview({ submissionId, status, onApproved }) {
             {p.cited_paper && <span className="badge">cited</span>}
             {p.added_by && <span className="badge added">added</span>}
             {p.pdf_available
-              ? <span className="pdfbadge ok" title="A PDF was downloaded for this paper">PDF ✓</span>
-              : <span className="pdfbadge warn" title="No PDF could be downloaded automatically">⚠ no PDF</span>}
+              ? <span className="pdfbadge ok" title="A PDF was downloaded for this paper">PDF</span>
+              : <span className="pdfbadge warn" title="No PDF could be downloaded automatically">no PDF</span>}
             {url && <a className="pext" href={url} target="_blank" rel="noreferrer" title="Open in Semantic Scholar">↗</a>}
           </div>
           {meta && <div className="pmeta muted">{meta}</div>}
           {!p.pdf_available && (
             <div className="pdf-upload">
               <label className="link pdf-upload-btn">
-                {pdfBusy.has(p.paper_id) ? 'Uploading…' : '⬆ upload PDF for this paper'}
+                {pdfBusy.has(p.paper_id) ? 'Uploading…' : 'Upload PDF'}
                 <input type="file" accept="application/pdf" hidden disabled={pdfBusy.has(p.paper_id)}
                   onChange={(e) => { uploadPdf(p.paper_id, e.target.files[0]); setSelected(p.paper_id) }} />
               </label>
@@ -157,7 +189,7 @@ export default function PapersReview({ submissionId, status, onApproved }) {
           )}
           {p.abstract && (
             <button className="link abs-toggle" onClick={() => toggle(p.paper_id, setOpen)}>
-              {open.has(p.paper_id) ? 'hide abstract' : 'abstract'}
+              {open.has(p.paper_id) ? 'Hide abstract' : 'Abstract'}
             </button>
           )}
           {open.has(p.paper_id) && <p className="abstract">{p.abstract}</p>}
@@ -166,26 +198,7 @@ export default function PapersReview({ submissionId, status, onApproved }) {
     )
   }
 
-  // Group the final related work by topical cluster (reviewer-added papers last).
-  const groups = {}
-  papers.forEach((p) => {
-    const key = p.added_by ? '_added'
-      : (p.cluster != null && p.cluster >= 0 ? `c${p.cluster}` : '_none')
-    if (!groups[key]) {
-      groups[key] = {
-        label: key === '_added' ? 'Added by reviewer'
-          : (p.cluster_label || (key === '_none' ? 'Related work' : `Cluster ${p.cluster + 1}`)),
-        papers: [], best: 0,
-      }
-    }
-    groups[key].papers.push(p)
-    groups[key].best = Math.max(groups[key].best, p.relevance || 0)
-  })
-  const order = Object.keys(groups).sort((a, b) => {
-    if (a === '_added') return 1
-    if (b === '_added') return -1
-    return groups[b].best - groups[a].best
-  })
+  const { groups, order } = groupPapers(papers)
   const multiCluster = order.filter((k) => k !== '_added').length > 1
 
   const nNoPdf = papers.filter((p) => !p.pdf_available).length
@@ -195,23 +208,21 @@ export default function PapersReview({ submissionId, status, onApproved }) {
 
   const panel = (
     <div className="panel checkpoint">
-      <div className="paper-head-row">
-        <h2>Related work — {papers.length - remove.size}/{papers.length} kept</h2>
-        <PipelineCostBadge submissionId={submissionId} />
-      </div>
-      <p className="muted">Uncheck papers that are not relevant; add any missing ones below.</p>
+      <div className="eyebrow">Related work</div>
+      <h2>{papers.length - remove.size} of {papers.length} papers kept</h2>
+      <p className="muted lede">Uncheck papers that are not relevant, and add any that are missing.</p>
       {nNoPdf > 0 && (
         <p className="muted pdf-summary">
           <strong>{nNoPdf}</strong> paper{nNoPdf === 1 ? '' : 's'} without a downloadable PDF —
-          upload one manually where you see the ⚠ badge below (needed only if that paper ends up in a deep dive during Review).
+          upload one where a paper is marked <em>no PDF</em>. It is only needed if the review reads that paper.
         </p>
       )}
 
       {/* collapsible add box */}
       <div className="addbox">
         <button className="addbox-head" onClick={() => setAddOpen((o) => !o)}>
-          <span>＋ Add related paper</span>
-          <span className="chev">{addOpen ? '▾' : '▸'}</span>
+          <span>Add a paper</span>
+          <span className="chev">{addOpen ? '−' : '+'}</span>
         </button>
         {addOpen && (
           <div className="addbox-body">
@@ -253,7 +264,7 @@ export default function PapersReview({ submissionId, status, onApproved }) {
       ))}
 
       <div className="actions">
-        <button disabled={busy} onClick={approve}>{busy ? 'Submitting…' : 'Approve & continue'}</button>
+        <button disabled={busy} onClick={approve}>{busy ? 'Starting the review…' : 'Approve and start the review'}</button>
       </div>
       {err && <div className="error">{err}</div>}
     </div>
