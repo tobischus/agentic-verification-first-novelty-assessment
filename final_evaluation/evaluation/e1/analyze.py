@@ -12,6 +12,9 @@ Everything the thesis reports from E1, computed from the stored records alone:
                 system, ties, inconsistent, unclear; net preference = (wins - losses) /
                 papers with a verdict, with a bootstrap 95% CI resampling papers and an
                 exact two-sided sign test on the stable wins
+  holm          per pair, the five criteria's sign-test p-values Holm-adjusted
+                (`sign_test_p_holm_criteria`). Added post hoc, after the results had been
+                seen (2026-10-20); the unadjusted p stays next to it
   ranking       Bradley-Terry strengths of the five systems per criterion from the stable
                 verdicts (stable tie = half a win each way; inconsistent/unclear left out;
                 0.5 pseudo-wins each way per compared pair keep it finite)
@@ -96,6 +99,28 @@ def sign_test(k: int, m: int) -> float:
         return 1.0
     tail = sum(math.comb(n, i) for i in range(min(k, m) + 1)) / 2 ** n
     return min(1.0, 2 * tail)
+
+
+def holm(ps: dict) -> dict:
+    """Holm-Bonferroni adjusted p-values, monotone, capped at 1."""
+    order = sorted(ps, key=ps.get)
+    m, out, run = len(order), {}, 0.0
+    for i, k in enumerate(order):
+        run = max(run, min(1.0, (m - i) * ps[k]))
+        out[k] = run
+    return out
+
+
+def add_holm_across_criteria(criteria: dict) -> None:
+    """Per pair, Holm-adjust the sign-test p-values of the criteria present (post hoc)."""
+    tables = defaultdict(dict)
+    for crit, d in criteria.items():
+        for t in d["pairs"]:
+            tables[tuple(t["pair"])][crit] = t
+    for by_crit in tables.values():
+        adj = holm({c: t["sign_test_p"] for c, t in by_crit.items()})
+        for c, t in by_crit.items():
+            t["sign_test_p_holm_criteria"] = adj[c]
 
 
 def pair_table(us: dict, crit: str, pair: tuple) -> dict:
@@ -346,6 +371,7 @@ def analyze(recs: list, corr: dict, plan: dict | None = None) -> dict:
                 "elo": elo(us, (crit,)),
                 "length": length_effect(us, crit),
             }
+        add_holm_across_criteria(block["criteria"])
         block["elo_all_criteria"] = elo(us, CRITERIA)
         block["online_elo_all_criteria"] = online_elo(us, CRITERIA)
         out["by_paper_set"][ps or "all"] = block
@@ -378,7 +404,8 @@ def print_report(res: dict, paper_set: str = "all") -> None:
             ci = f"[{t['ci95'][0]:+.2f}, {t['ci95'][1]:+.2f}]" if t["ci95"] else ""
             print(f"    {x:12} vs {y:12} n={t['papers']:2}  {t[f'{x}_wins']:2}:{t[f'{y}_wins']:<2} "
                   f"tie {t['tie']:2} incons {t['inconsistent']:2} uncl {t['unclear']}  "
-                  f"net {t['net_preference']:+.2f} {ci} p={t['sign_test_p']:.3f}")
+                  f"net {t['net_preference']:+.2f} {ci} p={t['sign_test_p']:.3f} "
+                  f"p_holm={t['sign_test_p_holm_criteria']:.3f}")
         if d["bradley_terry_log_strength"]:
             print("    Bradley-Terry: " + "  ".join(f"{s} {v:+.2f}" for s, v in d["bradley_terry_log_strength"].items()))
         if d.get("elo"):

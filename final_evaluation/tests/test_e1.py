@@ -239,6 +239,18 @@ def test_sign_test_and_pair_table():
     assert t["ci95"] == [1.0, 1.0]
 
 
+
+def test_holm_across_criteria_is_per_pair_and_monotone():
+    from final_evaluation.evaluation.e1 import analyze as an
+    adj = an.holm({"a": 0.01, "b": 0.04, "c": 0.03, "d": 0.5})
+    assert adj == pytest.approx({"a": 0.04, "b": 0.09, "c": 0.09, "d": 0.5})
+    crits = {c: {"pairs": [{"pair": ["x", "y"], "sign_test_p": p}, {"pair": ["x", "z"], "sign_test_p": 1.0}]}
+             for c, p in zip(E1_CRITERIA, (1.0, 0.0041809, 0.0009766, 0.0009766, 0.0000401))}
+    an.add_holm_across_criteria(crits)
+    xy = [crits[c]["pairs"][0]["sign_test_p_holm_criteria"] for c in E1_CRITERIA]
+    assert xy == pytest.approx([1.0, 0.0083618, 0.0039064, 0.0039064, 0.0002005], rel=1e-4)
+    assert all(crits[c]["pairs"][1]["sign_test_p_holm_criteria"] == 1.0 for c in E1_CRITERIA)
+
 def test_bradley_terry_orders_a_dominance_chain():
     from final_evaluation.evaluation.e1 import analyze as an
     recs = []
