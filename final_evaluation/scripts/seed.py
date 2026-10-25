@@ -1,11 +1,4 @@
-"""init-db, seed-pilot, create-participants, create-admin.
-
-Every function here is written to be re-run safely: it looks for the row it is about to
-create by its natural key first, and either leaves an existing row untouched or reports
-why it will not overwrite one (an already-final Assignment, in particular, is never
-touched by re-seeding -- see seed_pilot()'s Task upsert and create_participants()'s
-Assignment creation, both of which skip rather than recreate).
-"""
+"""Database setup: init-db, seed-study, create-participants, create-admin."""
 from __future__ import annotations
 
 import csv
@@ -40,12 +33,11 @@ def _content_type_for(kind: str, path: Path) -> str:
 
 
 def _study_config(config_path: str) -> dict:
-    """A study config -- never an E1-only paper list (config/e1_extra.yaml), whose papers
-    must not reach the study database."""
+    """A study config -- never an E1-only paper list (config/e1_extra.yaml), whose papers must not reach the study database."""
     cfg = yaml.safe_load((REPO_ROOT / config_path).read_text(encoding="utf-8"))
     if cfg.get("e1_only"):
         raise SystemExit(f"{config_path} is E1-only (e1_only: true) -- it is never seeded "
-                         "into a study; use it with import-pilot, validate-inputs and plan-e1.")
+                         "into a study; use it with import-inputs, validate-inputs and plan-e1.")
     return cfg
 
 
@@ -66,13 +58,9 @@ def _put_asset(db, backend: storage.StorageBackend, study_id: str, kind: str,
     return asset
 
 
-def seed_pilot(config_path: str = "final_evaluation/config/pilot.yaml") -> dict:
+def seed_study(config_path: str = "final_evaluation/config/main.yaml") -> dict:
     cfg = _study_config(config_path)
-    # The manifest of the study this config describes, not the pilot's. `inputs_dir` is
-    # the same key import_pilot writes under, so a study is seeded from exactly the files
-    # that were frozen for it -- seeding the main study off the pilot's manifest would
-    # look up its papers in the wrong report set and fail, or worse, bind the wrong file.
-    study_dir = cfg.get("inputs_dir") or "pilot"
+    study_dir = cfg.get("inputs_dir") or "main"
     manifest = json.loads(
         (FE_ROOT / "manifests" / study_dir / "reports.json").read_text(encoding="utf-8"))
     if manifest.get("blockers"):
@@ -98,11 +86,6 @@ def seed_pilot(config_path: str = "final_evaluation/config/pilot.yaml") -> dict:
             db.add(study)
             db.flush()
         else:
-            # A rubric/instructions revision has to reach an already-seeded study, but it
-            # must never rewrite the version a finalised answer was given under. So the
-            # update happens only while no FinalResponse exists for this study; after
-            # that, the mismatch is reported and the stored versions stay as they are --
-            # the stale study is then the one to close and re-seed under a NEW id.
             wanted = {"rubric_version": cfg["study"]["rubric_version"],
                      "instructions_version": cfg["study"]["instructions_version"],
                      "ui_version": cfg["study"]["ui_version"]}
@@ -168,7 +151,7 @@ def seed_pilot(config_path: str = "final_evaluation/config/pilot.yaml") -> dict:
 
         for t in cfg["tasks"]:
             paper_key = t["paper"]
-            sys_a, sys_b = sorted(t["pair"])  # canonical alphabetical order
+            sys_a, sys_b = sorted(t["pair"])
             pair_key = f"{paper_key}::{sys_a}::{sys_b}"
             existing = db.query(models.Task).filter(models.Task.study_id == sid,
                                                      models.Task.pair_key == pair_key).first()
@@ -195,13 +178,7 @@ def seed_pilot(config_path: str = "final_evaluation/config/pilot.yaml") -> dict:
 
 
 def _db_tag(database_url: str) -> str:
-    """A short, filename-safe tag for the database a credential belongs to.
-
-    Codes are issued per DATABASE, not per study id: seeding a throwaway test database
-    with the same study id used to overwrite the real pilot's `admin_code.txt` and append
-    a second, indistinguishable R01 row to `participant_codes.csv` -- so a credential
-    file could silently stop matching the database it was meant for.
-    """
+    """A short, filename-safe tag for the database a credential belongs to."""
     if database_url.startswith("sqlite"):
         return Path(database_url.replace("sqlite:///", "")).stem
     host = database_url.split("@")[-1].split("/")[0]
@@ -209,11 +186,8 @@ def _db_tag(database_url: str) -> str:
 
 
 def create_participants(study_id: str, count: int, prefix: str = "R", is_test: bool = True,
-                        config_path: str = "final_evaluation/config/pilot.yaml") -> dict:
-    """Create `count` participants AND their frozen assignments to every existing Task
-    in the study, using the seeded orientation/order (security.orientation_for /
-    block_and_task_order). Re-running with the same count is a no-op for participants and
-    assignments that already exist -- see the two `if existing:` early-returns below."""
+                        config_path: str = "final_evaluation/config/main.yaml") -> dict:
+    """Create `count` participants AND their frozen assignments to every existing Task in the study, using the seeded orientation/order (security.orientation_for / block_and_task_order). Re-running with the same count is a no-op for participants and assignments that already exist -- see the two `if existing:` early-returns below."""
     cfg = _study_config(config_path)
     settings = get_settings()
     engine = db_mod.make_engine(settings.database_url)
@@ -247,7 +221,7 @@ def create_participants(study_id: str, count: int, prefix: str = "R", is_test: b
                 db.add(p); db.flush()
                 created_rows.append({"code_display": display, "code": full_code, "study_id": study_id})
             else:
-                full_code = None  # not re-shown for an already-existing participant
+                full_code = None
 
             order_seed = cfg["study"].get("order_seed_base", 100) + ordinal
             ordered_task_ids = security.block_and_task_order(order_seed, paper_ids, by_paper)
@@ -257,7 +231,7 @@ def create_participants(study_id: str, count: int, prefix: str = "R", is_test: b
                     models.Assignment.study_id == study_id, models.Assignment.task_id == task_id,
                     models.Assignment.participant_id == p.id).first()
                 if exists is not None:
-                    continue  # never reroll -- see module docstring
+                    continue
                 task = db.query(models.Task).get(task_id)
                 orientation = security.orientation_for(assignment_seed, task.pair_key, ordinal)
                 db.add(models.Assignment(id=models.new_id(), study_id=study_id, task_id=task_id,
@@ -300,8 +274,6 @@ def create_admin(study_id: str, display: str = "ADMIN") -> dict:
         db.commit()
     finally:
         db.close()
-    # Per database AND study, never overwritten -- see _db_tag's docstring for the
-    # failure this prevents.
     admin_path = private_dir / f"admin_code__{study_id}__{_db_tag(settings.database_url)}.txt"
     if admin_path.exists():
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -311,26 +283,9 @@ def create_admin(study_id: str, display: str = "ADMIN") -> dict:
 
 
 def refresh_reports(config_path: str, systems=("agent", "linear"), dry_run: bool = False) -> dict:
-    """Point a study's reports at the content of its CURRENT manifest -- only where no one
-    has rated against the old content.
-
-    seed_pilot() never touches an existing Report, deliberately: a report a rater has seen
-    must not change underneath their rating. A FinalResponse does not store which content
-    version it rated, so the only guarantee that it stays tied to what was shown is that
-    the report under its task is never replaced. This is the one sanctioned way to replace
-    one, and it refuses whenever that guarantee would break:
-
-      kept   any task using the report has a FinalResponse, or a non-test participant has
-             started it or left a draft -- the old content stays, and the result says why.
-      swap   otherwise: the new asset is stored beside the old one (assets are content-
-             addressed, so the old bytes stay retrievable by their id), the Report row
-             points at it, and an audit event records old and new content_version.
-
-    Test participants' drafts do not block a swap -- they are excluded from the analysis
-    and exist to look at the study -- but each affected one is listed.
-    """
+    """Point a study's reports at the content of its CURRENT manifest -- only where no one has rated against the old content."""
     cfg = _study_config(config_path)
-    study_dir = cfg.get("inputs_dir") or "pilot"
+    study_dir = cfg.get("inputs_dir") or "main"
     manifest = json.loads(
         (FE_ROOT / "manifests" / study_dir / "reports.json").read_text(encoding="utf-8"))
     if manifest.get("blockers"):

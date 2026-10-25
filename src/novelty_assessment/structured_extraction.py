@@ -1,17 +1,14 @@
 import os
 import json
-import glob
 import textwrap
-from typing import List, Dict, Any, Optional
+from typing import List
 from pydantic import BaseModel, Field
 from langchain_openai import ChatOpenAI
 from dotenv import load_dotenv
 
-# Load environment variables
 load_dotenv()
 
 
-# Define models for structured data
 class ResultEntry(BaseModel):
     """Individual result entries for structured paper information."""
 
@@ -37,18 +34,10 @@ class StructuredPaperInformation(BaseModel):
 
 
 class StructuredRepresentationGenerator:
-    """
-    Generates structured representations of research papers.
-    """
+    """Generates structured representations of research papers."""
 
     def __init__(self, model_name: str = "gpt-4.1", temperature: float = 0.0):
-        """
-        Initialize the generator with the specified LLM.
-
-        Args:
-            model_name: Name of the OpenAI model to use
-            temperature: Temperature setting for the LLM
-        """
+        """Initialize the generator with the specified LLM."""
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise ValueError("OPENAI_API_KEY environment variable is not set")
@@ -82,64 +71,38 @@ class StructuredRepresentationGenerator:
     def extract_paper_information(
         self, paper_title: str, abstract: str, introduction: str = ""
     ):
-        """
-        Extract structured information from a research paper.
-
-        Args:
-            paper_title: The title of the paper
-            abstract: The abstract content of the paper
-            introduction: The introduction of the paper (optional)
-
-        Returns:
-            Dict containing both raw LLM response and parsed structured information
-        """
+        """Extract structured information from a research paper."""
         prompt = self.template.format(
             title=paper_title, abstract=abstract, introduction=introduction
         )
 
-        # Run the chain without include_raw to get clean structured output
         result = self.llm.with_structured_output(StructuredPaperInformation).invoke(
             prompt
         )
 
-        # Return clean format
         return {"raw": str(result), "parsed": dict(result)}
 
     def process_single_submission(self, data_dir: str, submission_id: str):
-        """
-        Process a single submission using LangChain batch for related papers.
-
-        Args:
-            data_dir: Directory containing submission data
-            submission_id: ID of the submission to process
-
-        Returns:
-            Dict with structured representations
-        """
+        """Process a single submission using LangChain batch for related papers."""
         submission_path = os.path.join(data_dir, submission_id)
 
-        # Load main paper
         with open(f"{submission_path}/{submission_id}.json", "r") as f:
             main_paper = json.load(f)
 
-        # Get introduction if available
         intro = ""
         if os.path.exists(f"{submission_path}/introductions/{submission_id}_intro.txt"):
             with open(f"{submission_path}/introductions/{submission_id}_intro.txt", "r") as f:
                 intro = f.read()
 
-        # Process main paper
         main_result = self.extract_paper_information(
             main_paper["title"], main_paper["abstract"], intro
         )
 
-        # Load related papers and prepare prompts
         with open(f"{submission_path}/related_work_data/ranked_papers.json", "r") as f:
             related_papers = json.load(f)
 
-        # Prepare all prompts for batch processing
         prompts = []
-        for paper in related_papers[:10]:  # Process top 10
+        for paper in related_papers[:10]:
             paper_intro = ""
             intro_path = (
                 f"{submission_path}/introductions/{paper['paper_id']}_intro.txt"
@@ -155,11 +118,9 @@ class StructuredRepresentationGenerator:
             )
             prompts.append(prompt)
 
-        # Batch process all related papers
         chain = self.llm.with_structured_output(StructuredPaperInformation)
         related_raw_results = chain.batch(prompts)
 
-        # Process batch results to consistent format
         related_results = []
         for i, result in enumerate(related_raw_results):
             related_results.append(
@@ -170,7 +131,6 @@ class StructuredRepresentationGenerator:
                 }
             )
 
-        # Format output with proper serialization
         def serialize_result_entries(results):
             """Convert ResultEntry objects to dicts"""
             if not results:
@@ -180,7 +140,6 @@ class StructuredRepresentationGenerator:
                 for r in results
             ]
 
-        # Convert main paper parsed data
         main_parsed = dict(main_result["parsed"])
         if "results" in main_parsed:
             main_parsed["results"] = serialize_result_entries(main_parsed["results"])
@@ -189,13 +148,12 @@ class StructuredRepresentationGenerator:
             "main_paper": {
                 "raw": str(
                     main_result["raw"]
-                ),  # Convert to string to avoid serialization issues
+                ),
                 "parsed": main_parsed,
             },
             "selected_papers": [],
         }
 
-        # Process related papers
         for r in related_results:
             related_parsed = dict(r["parsed"])
             if "results" in related_parsed:
@@ -208,12 +166,11 @@ class StructuredRepresentationGenerator:
                     "paper_id": r["paper_id"],
                     "raw": str(
                         r["raw"]
-                    ),  # Convert to string to avoid serialization issues
+                    ),
                     "parsed": related_parsed,
                 }
             )
 
-        # Save results
         output_path = f"{submission_path}/structured_representation.json"
         with open(output_path, "w") as f:
             json.dump({"structured_representation": output}, f, indent=4)
@@ -226,20 +183,9 @@ class StructuredRepresentationGenerator:
         model_name: str = "gpt-4.1",
         output_dir: str = "./openai_inputs",
     ):
-        """
-        Prepare data for batched inference with OpenAI API.
-
-        Args:
-            data_dir: Directory containing submission data
-            model_name: Name of the OpenAI model to use
-            output_dir: Directory to save the batch input file
-
-        Returns:
-            Path to the generated JSONL batch file
-        """
+        """Prepare data for batched inference with OpenAI API."""
         batch_entries = []
 
-        # Statistics for reporting
         total_main_papers = 0
         main_papers_with_intro = 0
         total_selected_papers = 0
@@ -247,12 +193,10 @@ class StructuredRepresentationGenerator:
 
         submissions = os.listdir(data_dir)
         for submission in submissions:
-            # Handle different submission ID formats
             submission_id = (
                 submission.split("_")[0] if "_" in submission else submission
             )
 
-            # Check if submission paper exists
             submission_paper_path = f"{data_dir}/{submission}/{submission}.json"
             if not os.path.exists(submission_paper_path):
                 print(f"Skipping {submission}: main paper not found")
@@ -305,7 +249,6 @@ class StructuredRepresentationGenerator:
 
             batch_entries.append(main_paper_entry)
 
-            # Check if related papers exist
             related_papers_path = (
                 f"{data_dir}/{submission}/related_work_data/ranked_papers.json"
             )
@@ -342,7 +285,6 @@ class StructuredRepresentationGenerator:
                     introduction=paper_introduction,
                 )
 
-                # Create batch entry for selected paper
                 paper_entry = {
                     "custom_id": f"structured-rep-rel-{submission_id}-{paper_id}",
                     "method": "POST",
@@ -357,7 +299,6 @@ class StructuredRepresentationGenerator:
 
                 batch_entries.append(paper_entry)
 
-        # Report introduction statistics
         print(
             f"Main papers with introductions: {main_papers_with_intro}/{total_main_papers} ({main_papers_with_intro/total_main_papers*100:.1f}%)"
         )
@@ -365,10 +306,8 @@ class StructuredRepresentationGenerator:
             f"Selected papers with introductions: {selected_papers_with_intro}/{total_selected_papers} ({selected_papers_with_intro/total_selected_papers*100:.1f}%)"
         )
 
-        # Create output directory if it doesn't exist
         os.makedirs(output_dir, exist_ok=True)
 
-        # Write to JSONL file
         output_path = os.path.join(output_dir, "batch_structured_rep_input.jsonl")
         with open(output_path, "w", encoding="utf-8") as f:
             for entry in batch_entries:
@@ -384,23 +323,12 @@ class StructuredRepresentationGenerator:
         results_file: str,
         data_dir: str,
     ):
-        """
-        Process the results from batched inference and organize by submission.
-
-        Args:
-            results_file: Path to the batch results file (JSONL)
-            data_dir: Directory to store processed data
-
-        Returns:
-            Dict with processing statistics
-        """
+        """Process the results from batched inference and organize by submission."""
         from litellm import cost_per_token
 
-        # Load the results
         with open(results_file, "r", encoding="utf-8") as f:
             results = [json.loads(line) for line in f]
 
-        # Group results by submission_id
         grouped_results = {}
 
         for result in results:
@@ -413,7 +341,7 @@ class StructuredRepresentationGenerator:
             if len(parts) < 4:
                 continue
 
-            paper_type = parts[2]  # "main" or "rel"
+            paper_type = parts[2]
             submission_id = parts[3]
 
             if submission_id not in grouped_results:
@@ -432,7 +360,6 @@ class StructuredRepresentationGenerator:
             content = choices[0].get("message", {}).get("content", "{}")
             usage = response_data.get("usage", {})
 
-            # Calculate cost
             total_cost = sum(
                 cost_per_token(
                     model="gpt-4.1",
@@ -441,7 +368,6 @@ class StructuredRepresentationGenerator:
                 )
             )
 
-            # Parse JSON content
             try:
                 parsed_content = json.loads(content)
             except json.JSONDecodeError:
@@ -464,13 +390,9 @@ class StructuredRepresentationGenerator:
                     else len(grouped_results[submission_id]["selected_papers"])
                 )
 
-                # Make sure we have enough slots
-                # while len(grouped_results[submission_id]["selected_papers"]) <= rel_idx:
-                #     grouped_results[submission_id]["selected_papers"].append(None)
 
                 grouped_results[submission_id]["selected_papers"][rel_idx] = result_data
 
-        # Statistics
         stats = {"total_processed": 0, "successful": 0, "failed": 0, "submissions": []}
 
         submissions = os.listdir(data_dir)
@@ -484,7 +406,6 @@ class StructuredRepresentationGenerator:
 
             result_data = grouped_results[submission_id]
 
-            # Check if we have main paper results
             if not result_data.get("main_paper"):
                 print(f"No main paper results for {submission_id}")
                 stats["failed"] += 1
@@ -507,7 +428,6 @@ class StructuredRepresentationGenerator:
                 ],
             }
 
-            # Save metadata
             meta_path = os.path.join(data_dir, submission_id, "ours", "metadata.json")
             current_meta = {}
             if os.path.exists(meta_path):
@@ -531,7 +451,6 @@ class StructuredRepresentationGenerator:
             with open(meta_path, "w") as f:
                 json.dump(current_meta, f, indent=3)
 
-            # Save structured representation
             with open(
                 f"{data_dir}/{submission_id}/structured_representation.json", "w"
             ) as f:
@@ -545,7 +464,6 @@ class StructuredRepresentationGenerator:
             stats["successful"] += 1
             stats["submissions"].append(submission_id)
 
-        # Print summary
         print(f"\nProcessing Summary:")
         print(f"Total processed: {stats['total_processed']}")
         print(f"Successful: {stats['successful']}")
@@ -585,14 +503,12 @@ if __name__ == "__main__":
     structured_extraction = StructuredRepresentationGenerator(model_name=args.model)
 
     if args.prepare:
-        # Step 1: Prepare batch inference data
         structured_extraction.prepare_batch_inference_data(
             data_dir=args.data_dir,
             model_name=args.model,
         )
 
     if args.process:
-        # Step 2: Process batch results
         structured_extraction.process_batch_results(
             results_file=args.results_file,
             data_dir=args.data_dir,

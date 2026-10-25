@@ -1,31 +1,4 @@
-#!/usr/bin/env python3
-"""Run the agent and the linear baseline over the same claims, from one entry point.
-
-The two systems share every module that touches a judgement and differ only in control
-flow (see src/novelty_assessment/agent/linear_baseline.py). What this script adds is the
-other half of that guarantee: they are constructed with the SAME arguments, from the same
-files, in one process, so a pilot cannot end up comparing two different configurations
-because a shell variable was set for one run and not the other.
-
-It writes each variant to its own artifact pair -- {id}_artifact_a_{variant}.json and
-{id}_artifact_b_{variant}.json -- so both can sit side by side and be rendered by the
-same exporter:
-
-  python src/novelty_assessment/battle_export.py --data-dir data \
-      --submission-id ID --variant agent
-  python src/novelty_assessment/battle_export.py --data-dir data \
-      --submission-id ID --variant linear
-
-Quality is not the only output that matters here. The agent may spend more calls on the
-same claim, so USD and wall-clock time per claim are reported next to the verdicts, and
-written into the artifact as `run_cost`. A quality difference that cost three times as
-much is a different finding from one that did not.
-
-Usage
------
-  python eval/run_pilot.py --submission transducing_language_models --variant both
-  python eval/run_pilot.py --submission ID --variant linear --claims claim_1,claim_2
-"""
+"""Run the agent and the linear baseline over the same claims, from one entry point."""
 import argparse
 import json
 import os
@@ -40,18 +13,11 @@ from dotenv import load_dotenv                                          # noqa: 
 
 load_dotenv()
 
-# The agent's validated configuration, pinned here instead of assumed from the shell.
-# NOVELTY_PAPER_LOOP and NOVELTY_NO_TRIAGE are read at IMPORT time in claim_agent, so a
-# variable forgotten before the run would silently execute a different agent -- and the
-# pilot would report that difference as an effect of the control flow. setdefault leaves
-# an explicitly exported value authoritative, so an ablation can still override one.
 for _k, _v in (("NOVELTY_PAPER_LOOP", "1"), ("NOVELTY_NO_TRIAGE", "1")):
     os.environ.setdefault(_k, _v)
 
 VARIANTS = ("agent", "linear")
 
-#: Reasoning effort per role, identical for both variants. Same rationale as above: the
-#: roles are what the models are actually asked to do, and they have to match.
 ROLE_EFFORT = {"NOVELTY_READING_EFFORT": "low", "NOVELTY_COMPARE_EFFORT": "low",
                "NOVELTY_EVIDENCE_EFFORT": "low"}
 ROLE_MODEL_VARS = ("NOVELTY_READING_MODEL", "NOVELTY_COMPARE_MODEL", "NOVELTY_EVIDENCE_MODEL")
@@ -81,25 +47,16 @@ def run_variant(data_dir: str, sid: str, variant: str, claims: list, model: str,
     entries, per_claim_b, costs = [], [], []
 
     for claim in claims:
-        # A fresh instance per claim, exactly as the backend runs it -- the toolbox, the
-        # pool snapshot and the run log are per-claim objects in both systems.
         ag = cls(data_dir, sid, model_name=model,
                  max_retrievals=max_retrievals, deep_dive_workers=workers)
         t0 = time.perf_counter()
         res = ag.run(claim)
         secs = round(time.perf_counter() - t0, 1)
 
-        # `run()` returns the artifact entry itself (tools.artifact_entry, updated with
-        # the verdict, cost and timings), so the comparisons are already at the top level.
         cost = res.get("cost") or {}
         pt = cost.get("prompt_tokens", 0)
         ct = cost.get("completion_tokens", 0)
         usd = _usd(model, pt, ct)
-        # The agent measures how many prompt tokens OpenAI served from its own cache
-        # (claim_agent._cache_read) and puts it in `cost["cache"]`. This used to be dropped
-        # here, so every reported figure priced repeated context at the full rate and was an
-        # upper bound with no way to tell by how much. Carried through now: `usd` stays that
-        # upper bound, and the cached count beside it says what it overstates.
         cache = cost.get("cache") or {}
         comps = res.get("comparisons") or []
 
@@ -117,14 +74,10 @@ def run_variant(data_dir: str, sid: str, variant: str, claims: list, model: str,
             "unresolved_count": res.get("unresolved_count"),
             "unresolved_papers": res.get("unresolved_papers") or [],
             "timings": res.get("timings") or {},
-            # Reported per claim, not only in total: the agent's extra calls are spent on
-            # particular papers, and an average over claims hides which.
             "run_cost": {"prompt_tokens": pt, "completion_tokens": ct,
                          "cached_prompt_tokens": cache.get("total_cached_tokens", 0),
                          "cache_hit_rate": cache.get("hit_rate", 0.0),
                          "cache_by_role": cache.get("by_role") or {},
-                         # Prices every prompt token at the full rate -- cached ones cost
-                         # less, so this is a ceiling, not the bill.
                          "usd": round(usd, 4), "usd_is_upper_bound": True,
                          "seconds": secs},
             "stop_reason": res.get("stop_reason", ""),
@@ -132,11 +85,6 @@ def run_variant(data_dir: str, sid: str, variant: str, claims: list, model: str,
         per_claim_b.append({
             "claim_id": claim["id"],
             "claim_name": claim.get("name", ""),
-            # The run's own deterministic verdict (`agent_verdict`), which both systems
-            # derive from the ledger by the same rule. The prose rationale stays empty:
-            # the claim-level synthesis is a separate pipeline step, and generating one
-            # per variant here would add a second difference to the comparison. The
-            # exporter's own deterministic claim conclusion covers both alike.
             "verdict": res.get("agent_verdict"),
             "rationale": res.get("agent_rationale", "") or "",
             "challenging_papers": [],
@@ -151,8 +99,6 @@ def run_variant(data_dir: str, sid: str, variant: str, claims: list, model: str,
         "control_flow": getattr(cls, "control_flow", "agentic_loop"),
         "agentic": variant == "agent",
         "model": model,
-        # The retrieval snapshot both variants were handed, read from the file rather than
-        # from either run -- so an unequal pool would show up here instead of hiding.
         "n_related_pool": _pool_size(sub),
         "claims": entries,
         "run_cost_total": {
@@ -172,11 +118,6 @@ def run_variant(data_dir: str, sid: str, variant: str, claims: list, model: str,
     (sub / f"{sid}_artifact_b_{variant}.json").write_text(
         json.dumps(b, ensure_ascii=False, indent=1), encoding="utf-8")
 
-    # Step 5b, on the artifacts this variant just wrote. Both variants get the SAME
-    # prompt and model here for the same reason they get the same comparison prompt: the
-    # summary must not become a second way the two systems differ. Failing is not fatal --
-    # the per-claim report stands, and battle_export simply omits the section -- but it is
-    # reported, because a report silently missing its opening summary is easy to miss.
     try:
         import paper_synthesis
         s = paper_synthesis.build(data_dir, sid, variant=variant, model_name=model)
@@ -226,7 +167,6 @@ def main():
     if not claims:
         raise SystemExit("no claims selected")
 
-    # One model and one effort per role for both variants, set before either runs.
     for var in ROLE_MODEL_VARS:
         os.environ.setdefault(var, args.model)
     for var, eff in ROLE_EFFORT.items():

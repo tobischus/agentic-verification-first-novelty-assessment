@@ -1,14 +1,4 @@
-"""Agent, linear and Afzal on the ten E1-only papers -- the same steps, in the same order
-and with the same settings as the ten human-study papers:
-
-  1. eval/run_pilot.py --variant both   (agent + linear, incl. the paper summary, step 5b)
-  2. claim_assessment.build             (claim_assessment_v1, as eval/out/human_study/claim_assessment/run_all.py)
-  3. eval/afzal_adapter.py + src/novelty_assessment/pipeline.py --model gpt-4.1
-
-Claims are used exactly as extracted (no HITL), like the human-study papers.
-Resumable: a step whose output exists is skipped; a failing paper does not stop the rest.
-Run from the repository root:  python eval/out/e1_extra/run_all.py
-"""
+"""Agent, linear and Afzal on the ten E1-only papers -- the same steps, in the same order and with the same settings as the ten human-study papers:"""
 import json
 import os
 import shutil
@@ -68,7 +58,6 @@ for k in keys:
     meta_p = OUT / f"{k}__run_meta.json"
     meta = json.loads(meta_p.read_text(encoding="utf-8")) if meta_p.is_file() else {"submission": k}
     try:
-        # 1. agent + linear
         if artifacts_done(k):
             print("  agent/linear: already done", flush=True)
         else:
@@ -79,7 +68,6 @@ for k in keys:
             if rc != 0 or not artifacts_done(k):
                 raise RuntimeError(f"run_pilot rc={rc}")
 
-        # 2. claim-level assessments
         if assessed(k):
             print("  claim assessments: already done", flush=True)
         else:
@@ -103,7 +91,6 @@ for k in keys:
             meta["claim_assessment"] = rows
             print(f"  claim assessments: {[(r['variant'], r['claims'], r['usd_upper_bound']) for r in rows]}", flush=True)
 
-        # 3. Afzal et al. (their method on our inputs)
         if afzal_done(k):
             print("  afzal: already done", flush=True)
         else:

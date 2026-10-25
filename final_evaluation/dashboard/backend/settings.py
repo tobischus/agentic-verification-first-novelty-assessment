@@ -1,22 +1,12 @@
-"""Environment configuration, loaded once. See .env.example for every variable this
-reads and what each one is for. Fails loudly and specifically at startup rather than
-letting a missing secret surface later as an opaque 500 -- "fehlende Cloud-Zugangsdaten
-blockieren nur das Deployment, nicht die lokale Implementierung" means local dev (APP_ENV
-!= production, STORAGE_BACKEND=local, DATABASE_URL=sqlite:///...) must work with an
-almost-empty .env, while a cloud deploy is checked strictly.
-"""
+"""Environment configuration, loaded once. See .env.example for every variable this reads and what each one is for. Fails loudly and specifically at startup rather than letting a missing secret surface later as an opaque 500 -- "fehlende Cloud-Zugangsdaten blockieren nur das Deployment, nicht die lokale Implementierung" means local dev (APP_ENV != production, STORAGE_BACKEND=local, DATABASE_URL=sqlite:///...) must work with an almost-empty .env, while a cloud deploy is checked strictly."""
 from __future__ import annotations
 
 import os
-import secrets
 from dataclasses import dataclass, field
 from pathlib import Path
 
 try:
     from dotenv import load_dotenv
-    # final_evaluation/.env by default; ENV_FILE picks another one, e.g. the cloud
-    # settings in final_evaluation/.env.cloud for CLI commands against Supabase, so the
-    # local .env (and the local study) stays untouched.
     _env_file = os.getenv("ENV_FILE")
     if _env_file and not Path(_env_file).is_file():
         raise SystemExit(f"ENV_FILE={_env_file} does not exist")
@@ -27,7 +17,7 @@ except Exception:
     pass
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-FE_ROOT = Path(__file__).resolve().parents[2]  # final_evaluation/
+FE_ROOT = Path(__file__).resolve().parents[2]
 
 
 @dataclass
@@ -55,12 +45,10 @@ class Settings:
 
     @property
     def cookie_secure(self) -> bool:
-        # Only relax Secure on localhost dev; any cloud deploy sets APP_ENV=production.
         return self.is_production
 
     def require_for_start(self) -> list[str]:
-        """Configuration errors that must block startup, given the CURRENT mode.
-        Returns human-readable problem strings; empty = OK to start."""
+        """Configuration errors that must block startup, given the CURRENT mode. Returns human-readable problem strings; empty = OK to start."""
         problems = []
         if not self.session_secret:
             problems.append("SESSION_SECRET is not set (any long random string; "
@@ -69,8 +57,6 @@ class Settings:
             problems.append("ACCESS_CODE_PEPPER is not set (any long random string, "
                             "distinct from SESSION_SECRET).")
         if self.is_production:
-            # STUDY_CONTACT is optional: the login page no longer shows a contact line
-            # (raters are recruited personally and contact the study author directly).
             if self.storage_backend == "supabase":
                 for name, val in (("SUPABASE_URL", self.supabase_url),
                                   ("SUPABASE_SERVICE_ROLE_KEY", self.supabase_service_role_key),
@@ -88,7 +74,3 @@ def get_settings() -> Settings:
     return Settings()
 
 
-def dev_default_secret_warning(settings: Settings) -> str | None:
-    if not settings.is_production and not settings.session_secret:
-        return None  # main.py fills in an ephemeral one for pure local convenience
-    return None

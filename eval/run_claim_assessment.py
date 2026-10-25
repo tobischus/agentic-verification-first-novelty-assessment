@@ -1,5 +1,4 @@
-"""Claim-level assessments (claim_assessment_v1) for the 10 human-study papers, agent and
-linear alike. Backs up every Artifact B first; records tokens, cost and time per report."""
+"""Claim-level assessments (claim_assessment_v1) for the 10 human-study papers, agent and linear alike. Backs up every Artifact B first; records tokens, cost and time per report."""
 import json, shutil, sys, time
 from pathlib import Path
 sys.path.insert(0, "src/novelty_assessment")

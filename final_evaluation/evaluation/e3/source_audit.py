@@ -1,44 +1,4 @@
-"""E3, automatic part: do the quotes a report shows stand in the sources it names?
-
-Read-only, no API call, no model. Added 2026-09-27 (PROTOCOL 8c); descriptive, no
-test. The midterm presentation announced two checkable metrics that need no
-judge -- the grounding rate and the verifiability rate. This module reports them for the
-agent and the linear baseline on the 20 E1 papers, and adds an audit that does not reuse
-the pipeline's verifier: every quote a report SHOWS is looked up again in the source text
-it was verified against, after that text's hash has been matched to the run log.
-
-Inputs are the artifacts the frozen reports were rendered from (sha256-checked against the
-manifests, `agent_linear._checked`) and, per quote, the source text:
-
-  submission side   the submission's section texts + abstract, joined exactly as
-                    `tools.py` builds the verification corpus; its sha256 must equal the
-                    run log's `submission_selection.source_sha256`
-  prior-work side   `related_work_data/<parsed_text_path>`, whose sha256 must equal the run
-                    log's `parsed_text_sha256`. A source without a recorded parsed text
-                    (abstract + introduction only) is reported as not auditable -- its text
-                    cannot be tied to the run by a hash.
-
-Metrics, per flow:
-
-  grounding rate      overlap comparisons (partial / substantial / same, or refuting) that
-                      show at least one quote pair
-  verifiability rate  quote pairs the model proposed whose two sides the pipeline found in
-                      the sources: (returned - unverified) / returned, from the recorded
-                      map diagnostics of each comparison's final turn
-  ownership rate      of those, the pairs the ownership check assigned to the prior paper's
-                      own contribution -- the pairs a report shows
-  quote audit         each shown quote against its source text: exact (case- and
-                      whitespace-insensitive substring), near-verbatim (rapidfuzz
-                      partial_ratio >= 90, the pipeline's documented threshold, e.g. a
-                      dropped citation marker or a ligature), not found (< 90)
-  source dates        shown pairs whose prior-work version is dated before the submission's
-                      first public version
-
-Only the agent and the linear baseline record quote pairs in machine-readable form. What
-the external systems' free text says about prior work, and absence claims in any report
-("paper X does not do Y"), need the prior-work papers read by a person: E3's manual part,
-not implemented.
-"""
+"""E3, automatic part: do the quotes a report shows stand in the sources it names?"""
 from __future__ import annotations
 
 import hashlib
@@ -94,13 +54,11 @@ def submission_text(sub_dir: Path, paper: str) -> str:
 
 
 def paper_text(sub_dir: Path, pw: dict) -> str | None:
-    """The parsed prior-work text the run verified against, or None if it cannot be tied
-    to the run by its recorded hash."""
+    """The parsed prior-work text the run verified against, or None if it cannot be tied to the run by its recorded hash."""
     rel, want = pw.get("parsed_text_path"), pw.get("parsed_text_sha256")
     if not (rel and want):
         return None
     f = sub_dir / "related_work_data" / rel
-    # Hash the bytes, as the writer did (see tools._load_fulltext_file).
     if not f.exists() or hashlib.sha256(f.read_bytes()).hexdigest() != want:
         return None
     return f.read_text(encoding="utf-8")
@@ -134,8 +92,6 @@ def audit_variant(artifact_a: dict, sub_dir: Path, paper: str, sub_date: str, vd
             c["pairs_shown"] += len(pairs)
             if not pairs:
                 continue
-            # Keyed by path AND recorded hash: a record naming the same file with another
-            # hash must not inherit the verdict of the one that matched.
             key = (pw.get("parsed_text_path") or "", pw.get("parsed_text_sha256") or "")
             if key not in cache:
                 txt = paper_text(sub_dir, pw)
@@ -145,7 +101,6 @@ def audit_variant(artifact_a: dict, sub_dir: Path, paper: str, sub_date: str, vd
             for pr in pairs:
                 c["pairs_source_dated"] += bool(dated)
                 c["pairs_source_before_submission"] += bool(dated) and dated < sub_date
-                # Equation 3.1: the pinned version at least 90 days before the submission.
                 c["pairs_source_gap_known"] += gap is not None
                 c["pairs_source_gap_90"] += gap is not None and gap >= MIN_GAP_DAYS
                 for side, quote, src in (("submission", pr.get("claim_quote", ""), sub_norm),
@@ -183,13 +138,9 @@ def rates(c: Counter) -> dict:
         "quotes_not_auditable": shown_quotes - audited,
         "share_exact": _rate(exact, audited),
         "share_exact_or_near": _rate(exact + near, audited),
-        # Of the shown pairs whose prior-work version carries a date; an undated source is a
-        # single-document record without version history (`version_status == single`).
         "sources_dated_before_submission": _rate(c["pairs_source_before_submission"],
                                                  c["pairs_source_dated"]),
         "pairs_source_undated": c["pairs_shown"] - c["pairs_source_dated"],
-        # Of the shown pairs whose source and submission both carry a full date: the share
-        # pinned to a version at least MIN_GAP_DAYS before the submission (Equation 3.1).
         "sources_dated_90_days_before_submission": _rate(c["pairs_source_gap_90"],
                                                           c["pairs_source_gap_known"]),
         "pairs_source_gap_known": c["pairs_source_gap_known"],

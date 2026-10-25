@@ -1,29 +1,11 @@
-#!/usr/bin/env python3
-"""
-Quality gates for the document-processing stage (Step 1).
-
-After GROBID extraction, verify that the pieces the downstream pipeline depends
-on are actually present: title, abstract, references, citation contexts, and
-full text. Each gate is a verifiable boolean; the orchestrator can decide to
-proceed, flag for the reviewer, or abort. This keeps Step 1 deterministic and
-auditable.
-"""
+"""Quality gates for the document-processing stage (Step 1)."""
 from typing import Dict, List
 
-# Minimum body length (chars) to consider full-text extraction successful.
 MIN_FULLTEXT_CHARS = 1000
 
 
 def compute_quality_gates(metadata: Dict, sections: List[Dict]) -> Dict:
-    """Compute Step-1 quality gates from parsed metadata + body sections.
-
-    Args:
-        metadata: parsed {id}.json dict (title, abstract, cited_papers, citation_contexts, ...)
-        sections: list of {"section", "text"} from extract_full_text_sections
-
-    Returns:
-        A report dict with per-gate booleans, an overall flag, and counts.
-    """
+    """Compute Step-1 quality gates from parsed metadata + body sections."""
     cited_papers = metadata.get("cited_papers") or []
     citation_contexts = metadata.get("citation_contexts") or []
     full_text_chars = sum(len(s.get("text", "")) for s in sections)
@@ -46,7 +28,6 @@ def compute_quality_gates(metadata: Dict, sections: List[Dict]) -> Dict:
             "sections": len(sections),
             "full_text_chars": full_text_chars,
         },
-        # Metadata that the reviewer should confirm in the human-in-the-loop step.
         "title_source": metadata.get("title_source"),
         "title_needs_review": metadata.get("title_needs_review", False),
     }

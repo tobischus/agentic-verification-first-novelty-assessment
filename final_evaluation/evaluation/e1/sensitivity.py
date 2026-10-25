@@ -1,35 +1,4 @@
-"""E1 sensitivity analyses -- post hoc, exploratory, read-only, no API call.
-
-PROTOCOL 8a. The pre-specified E1 analysis is `analyze.py`; nothing here replaces it. The
-question: the linear report shows more detailed comparisons than the agent report on most
-papers, and the reports of the five systems differ widely in length. How much of the
-judge's verdicts is explained by how MUCH a report shows?
-
-Both covariates are partly consequences of each system's design (the agent's triage is why
-it shows fewer comparisons). Controlling for them answers a different question -- "at equal
-coverage, which report does the judge prefer?" -- and never replaces the unadjusted
-comparison, which stays the answer to "which report does the judge prefer?".
-
-  length     all five systems: Bradley-Terry with one covariate, the log ratio of the two
-             reports' lengths as the judge saw them (`context_chars`, line ids included).
-             Per criterion and pooled over the five criteria; adjusted Elo with
-             paper-bootstrap CIs next to the unadjusted fit of the same model family.
-  coverage   agent vs linear only (they share the renderer, so a "detailed comparison"
-             means the same thing in both): the stable verdict modelled on the log ratio of
-             1 + the number of detailed comparisons -- the `### R<n>` blocks under each
-             "# Claim <n> — Review" of the frozen report file the judge read (sha256-checked
-             against the record). Reported: P(agent preferred) unadjusted and at equal
-             coverage, and the coverage effect; the same model with length instead of
-             coverage as a check.
-
-Estimation: maximum likelihood by Newton's method. As in `analyze.bradley_terry`, a stable
-tie is half a win each way, inconsistent/unclear verdicts are left out, and every compared
-pair carries 0.5 pseudo-wins each way at equal covariates. Covariate slopes get a weakly
-informative N(0, 2.5^2) prior (Gelman et al. 2008) so that a bootstrap sample with
-separation stays finite. CIs resample papers (1000 samples, seed 2026). The equal-coverage
-estimate extrapolates where coverage is rarely equal: the number of papers on which the
-agent shows at least as many detailed comparisons as linear is reported with it.
-"""
+"""E1 sensitivity analyses -- post hoc, exploratory, read-only, no API call."""
 from __future__ import annotations
 
 import hashlib
@@ -76,8 +45,7 @@ def report_coverage(recs: list, systems=("agent", "linear")) -> dict:
 
 def fit(obs: list, prior: float = 0.5, beta_sd: float = BETA_SD,
         iters: int = 100, tol: float = 1e-10) -> tuple[dict, list]:
-    """Bradley-Terry with covariates. obs: [(x, y, outcome for x in {1, .5, 0}, dz)], dz the
-    covariate differences x minus y. Returns (log-strengths centred on 0, slopes)."""
+    """Bradley-Terry with covariates. obs: [(x, y, outcome for x in {1, .5, 0}, dz)], dz the covariate differences x minus y. Returns (log-strengths centred on 0, slopes)."""
     systems = sorted({s for x, y, _, _ in obs for s in (x, y)}, key=an.SYSTEMS.index)
     k, m = len(systems), len(obs[0][3]) if obs else 0
     if k < 2:
@@ -116,8 +84,7 @@ def fit(obs: list, prior: float = 0.5, beta_sd: float = BETA_SD,
 
 
 def _obs_by_paper(us: dict, crits, covariate, pair=None) -> dict:
-    """paper -> [(x, y, outcome, dz)] from the stable verdicts; covariate(paper, x, y, unit)
-    gives dz (a tuple, empty for none)."""
+    """paper -> [(x, y, outcome, dz)] from the stable verdicts; covariate(paper, x, y, unit) gives dz (a tuple, empty for none)."""
     out = defaultdict(list)
     for (paper, (x, y)), u in us.items():
         if pair and (x, y) != pair:
@@ -131,7 +98,7 @@ def _obs_by_paper(us: dict, crits, covariate, pair=None) -> dict:
 
 
 def _log_length(paper, x, y, u):
-    cc = u["xy"]["context_chars"]  # x was A there
+    cc = u["xy"]["context_chars"]
     return (math.log(cc["report_a"]) - math.log(cc["report_b"]),)
 
 
@@ -188,8 +155,7 @@ BASELINES = ("opennovelty", "deepreviewer", "afzal")
 
 
 def length_overlap(us: dict) -> dict:
-    """How often a baseline report is at least as long as an agent/linear report of the same
-    paper -- the support the five-system length adjustment has for comparing the groups."""
+    """How often a baseline report is at least as long as an agent/linear report of the same paper -- the support the five-system length adjustment has for comparing the groups."""
     ln = {}
     for (p, (x, y)), u in us.items():
         cc = u["xy"]["context_chars"]
@@ -202,9 +168,7 @@ def length_overlap(us: dict) -> dict:
 
 
 def within_group_slope(us: dict, crits) -> dict:
-    """The length slope from agent-vs-linear and baseline-vs-baseline pairs only, where report
-    lengths overlap. Two neutral games at equal length connect the two groups so the fit is
-    defined; they fix the (meaningless) offset between the groups and leave the slope alone."""
+    """The length slope from agent-vs-linear and baseline-vs-baseline pairs only, where report lengths overlap. Two neutral games at equal length connect the two groups so the fit is defined; they fix the (meaningless) offset between the groups and leave the slope alone."""
     sub = {k: u for k, u in us.items() if set(k[1]) <= OURS or not set(k[1]) & OURS}
     bridge = [("agent", "opennovelty", 0.5, (0.0,)), ("linear", "deepreviewer", 0.5, (0.0,))]
     by_paper = _obs_by_paper(sub, crits, _log_length)

@@ -1,35 +1,4 @@
-#!/usr/bin/env python3
-"""Step 5c: the claim-level assessment -- why each claim got the verdict it got.
-
-Final claim reviews -> THIS STEP -> stored in Artifact B -> rendered by battle_export.
-
-The verdict of a claim is fixed by the deterministic controller; until now the report
-explained it with one template sentence per verdict, identical under every claim. That
-sentence says what the verdict means, not why THIS claim got it. This step writes the why:
-which comparisons carry the verdict, why the strongest of them is not more than it is, and
-which ones stayed open -- from the recorded comparisons of that one claim and nothing else.
-
-What it is NOT allowed to do (the same limits as paper_synthesis.py):
-
-- change the verdict, any comparison's overlap level or any evidence-check result, or add
-  a comparison of its own;
-- present a proposed overlap that the evidence check did not confirm as established;
-- use knowledge that is not in the findings.
-
-Where it is stored, and why not in `rationale`: Artifact B's per-claim `rationale` is read
-by paper_synthesis.build_findings and is part of the novelty summary's fingerprint. Writing
-there would mark every approved summary out of date without anything in the claim results
-having changed. The claim assessment therefore lives in its own field,
-`per_claim[i].claim_assessment`, fingerprinted against its own findings, so a later change
-to that claim's comparisons marks it stale in the export instead of leaving it standing.
-
-The agent and the linear baseline run the SAME step with the same prompt and model.
-
-Usage
------
-  python claim_assessment.py --data-dir data --submission-id <id> --variant agent [--model M]
-  python claim_assessment.py --data-dir data --submission-id <id> --variant agent --check
-"""
+"""Step 5c: the claim-level assessment -- why each claim got the verdict it got."""
 import argparse
 import hashlib
 import json
@@ -45,8 +14,6 @@ import verdict as vd
 
 PROMPT_VERSION = "claim_assessment_v1"
 
-# No worked example, for the reason paper_synthesis.py gives: an example is copied in shape
-# and emphasis by every run. The rules are stated instead.
 CLAIM_ASSESSMENT_PROMPT = """You are writing the claim-level assessment in a novelty report for a peer reviewer.
 
 It explains why ONE claim of the submission received its verdict. Everything you need is
@@ -129,8 +96,6 @@ def build_claim_findings(entry: dict, claim_no: int, claim_text: str, verdict: s
            f"Comparisons recorded as anticipating (challenging) this claim: "
            + (", ".join(ref(c) for c in comparisons if vd.challenges(c)) or "none"),
            f"Prior papers compared for this claim: {len(comparisons)}", ""]
-    # Counted here, not by the model: asked to "give the number" of the comparisons it did
-    # not name, it miscounted (twelve for nine). It is given the numbers and told to use them.
     confirmed = [c for c in details if vd.degree(c) in vd.OVERLAP_DEGREES and vd.degree_confirmed(c)]
     by_level = {}
     for c in confirmed:
@@ -182,8 +147,6 @@ def build_claim_findings(entry: dict, claim_no: int, claim_text: str, verdict: s
             out.append(f"  Open question recorded by the evidence check: {_txt(q)}")
         out.append("")
     if rest:
-        # Counts only, no ids: these comparisons have no section in the report to point to,
-        # and given their ids the model listed them.
         inconclusive = sum(1 for c in rest if vd.evidence_status(c) == "insufficient")
         unchecked = sum(1 for c in rest if not vd.evidence_status(c))
         out += ["## OTHER COMPARISONS (no detailed section; numbers in COUNTS)", "",
@@ -192,7 +155,6 @@ def build_claim_findings(entry: dict, claim_no: int, claim_text: str, verdict: s
     return "\n".join(out).rstrip() + "\n"
 
 
-# ------------------------------------------------------------------ staleness --
 
 def fingerprint(findings: str) -> str:
     return hashlib.sha256(findings.encode("utf-8")).hexdigest()
@@ -208,15 +170,13 @@ def is_stale(stored: Optional[dict], findings: str) -> bool:
     return stored.get("inputs_fingerprint") != fingerprint(findings)
 
 
-# ------------------------------------------------------------ consistency checks --
 
 _NEG = re.compile(r"\b(not|no|never|without|nor|un(?:supported|confirmed|resolved)|"
                   r"inconclusive|did not|does not|was not|were not)\b", re.I)
 
 
 def consistency_problems(text: str, entry: dict, verdict: str, refs: dict) -> List[str]:
-    """Deterministic checks on a generated text. Each problem is a plain sentence that can
-    be handed back to the model for one revision; none of them judges the prose."""
+    """Deterministic checks on a generated text. Each problem is a plain sentence that can be handed back to the model for one revision; none of them judges the prose."""
     problems = []
     comparisons = entry.get("comparisons") or []
     by_ref = {refs.get(source_refs.paper_id(c), "R?"): c for c in comparisons}
@@ -240,12 +200,10 @@ def consistency_problems(text: str, entry: dict, verdict: str, refs: dict) -> Li
             if not _NEG.search(m.group(0)):
                 problems.append("The verdict is 'not challenged'; do not state that the claim "
                                 f"is anticipated or challenged: \"{m.group(0).strip()}\"")
-    # A source whose proposed level was NOT confirmed must not be called confirmed, and a
-    # confirmed one must not be called unsupported -- sentence by sentence.
     for sentence in re.split(r"(?<=[.;])\s+", text):
         ids = set(re.findall(r"\bR\d+\b", sentence)) & set(by_ref)
         if len(ids) != 1:
-            continue          # several sources in one sentence: too ambiguous to attribute
+            continue
         c = by_ref[next(iter(ids))]
         confirmed = vd.degree_confirmed(c)
         if not confirmed and vd.degree(c) in vd.OVERLAP_DEGREES and \
@@ -260,7 +218,6 @@ def consistency_problems(text: str, entry: dict, verdict: str, refs: dict) -> Li
     return problems
 
 
-# ----------------------------------------------------------------- the builder --
 
 def _load(path: Path):
     try:
@@ -302,8 +259,6 @@ class ClaimAssessor:
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise ValueError("OPENAI_API_KEY environment variable is not set")
-        # Same switch and effort as paper_synthesis.py, so the two model-written parts of
-        # a report are produced under the same settings.
         self.effort = (os.getenv("NOVELTY_CONCLUSION_EFFORT", "low")
                        if model_name.startswith(("gpt-5", "o1", "o3", "o4")) else None)
         kw = {"reasoning_effort": self.effort} if self.effort else {"temperature": temperature}
@@ -322,8 +277,6 @@ class ClaimAssessor:
         problems = consistency_problems(text, entry, verdict, refs)
         revised = False
         if problems:
-            # One bounded revision, told exactly what failed. A loop is not worth it; a
-            # second failure is recorded and shown for manual review instead.
             revised = True
             text2, usage2 = self._invoke(
                 prompt + "\n\n# YOUR PREVIOUS ANSWER\n" + text + "\n\n# REVISION\n"

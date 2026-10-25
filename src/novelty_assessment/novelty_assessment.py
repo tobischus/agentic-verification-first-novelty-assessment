@@ -3,16 +3,13 @@ import json
 from typing import List, Dict, Optional
 from pydantic import BaseModel, Field
 from langchain_openai import ChatOpenAI
-from rapidfuzz import fuzz
 from dotenv import load_dotenv
 
-# Load environment variables
 load_dotenv()
 
 
 
 
-# This prompt integrates adding citation contexts from paper for checking out the arguments mentioned by the authors.
 novelty_delta_analysis_prompt = """
 # Novelty Delta Analysis for Reviewer Support
 
@@ -125,7 +122,6 @@ Remember that your role is to provide objective analysis that helps reviewers ma
 
 
 
-# Reuse PaperInformation model from landscape analysis
 class PaperInformation(BaseModel):
     """Structured information extracted from a research paper."""
 
@@ -147,18 +143,10 @@ class PaperInformation(BaseModel):
 
 
 class NoveltyAssessor:
-    """
-    Assesses the novelty of a submission paper in the context of related work.
-    """
+    """Assesses the novelty of a submission paper in the context of related work."""
 
     def __init__(self, model_name: str = "gpt-4.1", temperature: float = 0.0):
-        """
-        Initialize the novelty assessor with the specified LLM.
-
-        Args:
-            model_name: Name of the OpenAI model to use
-            temperature: Temperature setting for the LLM
-        """
+        """Initialize the novelty assessor with the specified LLM."""
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise ValueError("OPENAI_API_KEY environment variable is not set")
@@ -169,23 +157,6 @@ class NoveltyAssessor:
             api_key=api_key,
         )
 
-    @staticmethod
-    def get_papers_not_cited(cited_papers, selected_papers, threshold=85):
-        """
-        Returns papers from selected_papers whose titles do not match any title in cited_papers above the threshold.
-        """
-        not_cited_papers = []
-        for paper in selected_papers:
-            is_cited = False
-            for cited in cited_papers:
-                if "title" not in cited:
-                    continue
-                if fuzz.token_set_ratio(paper["title"], cited["title"]) >= threshold:
-                    is_cited = True
-                    break
-            if not is_cited:
-                not_cited_papers.append(paper)
-        return not_cited_papers
 
     @staticmethod
     def get_citation_matches(citation_contexts) -> str:
@@ -200,16 +171,7 @@ class NoveltyAssessor:
     def load_submission_paper(
         self, data_dir: str, submission_id: str
     ) -> Optional[PaperInformation]:
-        """
-        Load the submission paper information from JSON file.
-
-        Args:
-            data_dir: Directory containing paper information JSON files
-            submission_id: ID of the submission paper
-
-        Returns:
-            PaperInformation object for the submission paper
-        """
+        """Load the submission paper information from JSON file."""
         file_path = os.path.join(
             data_dir, submission_id, f"structured_representation.json"
         )
@@ -269,15 +231,7 @@ class NoveltyAssessor:
 
 
     def load_landscape_analysis(self, landscape_file: str) -> str:
-        """
-        Load the research landscape analysis from file.
-
-        Args:
-            landscape_file: Path to the landscape analysis file
-
-        Returns:
-            Content of the landscape analysis
-        """
+        """Load the research landscape analysis from file."""
         if not os.path.exists(landscape_file):
             raise ValueError(f"Landscape analysis file not found: {landscape_file}")
 
@@ -287,15 +241,7 @@ class NoveltyAssessor:
         return analysis
 
     def format_submission_for_prompt(self, submission: PaperInformation) -> str:
-        """
-        Format the submission paper information for the prompt.
-
-        Args:
-            submission: PaperInformation object for the submission paper
-
-        Returns:
-            Formatted string for the prompt
-        """
+        """Format the submission paper information for the prompt."""
         formatted_text = f"# SUBMISSION PAPER: {submission.title}\n\n"
 
         formatted_text += (
@@ -338,17 +284,7 @@ class NoveltyAssessor:
         not_cited_paper_titles: str,
         citation_contexts,
     ) -> str:
-        """
-        Assess the novelty of the submission paper in the context of the research landscape.
-
-        Args:
-            submission: PaperInformation object for the submission paper
-            landscape_analysis: Research landscape analysis
-
-        Returns:
-            Novelty assessment of the submission paper
-        """
-        # Format submission for the prompt
+        """Assess the novelty of the submission paper in the context of the research landscape."""
         formatted_submission = self.format_submission_for_prompt(submission)
 
         prompt = novelty_delta_analysis_prompt.format(
@@ -358,7 +294,6 @@ class NoveltyAssessor:
             citation_contexts=citation_contexts,
         )
 
-        # Run the assessment
         assessment = self.llm.invoke(prompt)
 
         return assessment
@@ -372,33 +307,19 @@ class NoveltyAssessor:
         data_dir: str,
         submission_id: str,
     ) -> str:
-        """
-        Run the complete novelty assessment pipeline.
-
-        Args:
-            data_dir: Directory containing paper information JSON files
-            submission_id: ID of the submission paper
-
-        Returns:
-            Novelty assessment of the submission paper
-        """
-        # Load submission paper
+        """Run the complete novelty assessment pipeline."""
         submission = self.load_submission_paper(data_dir, submission_id)
 
-        # Load landscape analysis (standard path)
         landscape_path = os.path.join(data_dir, submission_id, "research_landscape.txt")
         landscape_analysis = self.load_landscape_analysis(landscape_path)
 
-        # Load non-cited papers from ranked papers
         with open(f"{data_dir}/{submission_id}/related_work_data/ranked_papers.json", "r") as f:
             ranked_papers = json.load(f)
         not_cited_papers = [i["title"] for i in ranked_papers if not i["cited_paper"]]
         formatted_not_cited_papers = self.format_not_cited_papers(not_cited_papers)
 
-        # Load citation contexts
         citation_contexts = self.load_citation_contexts(data_dir, submission_id)
 
-        # Run assessment
         assessment = self.assess_novelty(
             submission,
             landscape_analysis,
@@ -406,7 +327,6 @@ class NoveltyAssessor:
             citation_contexts,
         )
 
-        # Save assessment to file (standard path)
         output_path = os.path.join(data_dir, submission_id, "novelty_delta_analysis.txt")
         if assessment:
             with open(output_path, "w", encoding="utf-8") as f:
@@ -444,32 +364,17 @@ class NoveltyAssessor:
         landscape_file: str = "research_landscape.txt",
         model_name: str = "gpt-4.1",
     ) -> str:
-        """
-        Prepare data for batched inference with OpenAI API for novelty assessment.
-
-        Args:
-            data_dir: Directory containing paper information JSON files
-            submission_ids: List of submission paper IDs to process
-            landscape_file: Name of the landscape analysis file
-            citation_context_file: Name of the citation context file
-            model_name: Name of the OpenAI model to use
-            non_cited_papers_dict: Dictionary mapping submission IDs to lists of non-cited papers
-
-        Returns:
-            Path to the generated JSONL batch file
-        """
+        """Prepare data for batched inference with OpenAI API for novelty assessment."""
         batch_entries = []
 
         submission_ids = os.listdir(data_dir)
 
-        # Statistics for reporting
         total_submissions = len(submission_ids)
         valid_submissions = 0
         missing_landscape = 0
         missing_structured_rep = 0
 
         for submission_id in submission_ids:
-            # Check if required files exist
             landscape_path = os.path.join(
                 data_dir, submission_id, "ours", landscape_file
             )
@@ -503,22 +408,16 @@ class NoveltyAssessor:
                 missing_structured_rep += 1
                 continue
 
-            # Load submission paper
             submission = self.load_submission_paper(data_dir, submission_id)
 
-            # Load landscape analysis
             landscape_analysis = self.load_landscape_analysis(landscape_path)
 
-            # Load citation context
             citation_contexts = self.load_citation_contexts(data_dir, submission_id)
 
-            # Format submission for the prompt
             formatted_submission = self.format_submission_for_prompt(submission)
 
-            # Get non-cited papers
             formatted_not_cited_papers = self.format_not_cited_papers(not_cited_papers)
 
-            # Prepare the prompt
             prompt = novelty_delta_analysis_prompt.format(
                 structured_representation=formatted_submission,
                 research_landscape=landscape_analysis,
@@ -526,7 +425,6 @@ class NoveltyAssessor:
                 citation_contexts=citation_contexts,
             )
 
-            # Create the batch entry
             batch_entry = {
                 "custom_id": f"novelty-assessment-{submission_id}",
                 "method": "POST",
@@ -541,7 +439,6 @@ class NoveltyAssessor:
             batch_entries.append(batch_entry)
             valid_submissions += 1
 
-        # Report statistics
         print(
             f"Valid submissions for novelty assessment: {valid_submissions}/{total_submissions} ({valid_submissions/total_submissions*100:.1f}%)"
         )
@@ -552,7 +449,6 @@ class NoveltyAssessor:
                 f"Submissions missing structured representation: {missing_structured_rep}"
             )
 
-        # Write to JSONL file
         output_path = os.path.join(
             "./openai_inputs", "batch_novelty_assessment_input.jsonl"
         )
@@ -571,22 +467,11 @@ class NoveltyAssessor:
         results_file: str,
         output_file: str = "novelty_delta_analysis.txt",
     ) -> Dict:
-        """
-        Process the results from batched inference for novelty assessment.
-
-        Args:
-            data_dir: Directory to store processed data
-            results_file: Path to the batch results file (JSONL)
-            output_file: Name of the output file for each submission
-
-        Returns:
-            Dict with processing statistics
-        """
+        """Process the results from batched inference for novelty assessment."""
         from litellm import cost_per_token
 
         print(f"Processing novelty assessment batch results from {results_file}")
 
-        # Statistics for reporting
         stats = {
             "total_processed": 0,
             "successful": 0,
@@ -595,11 +480,9 @@ class NoveltyAssessor:
             "submissions": [],
         }
 
-        # Load the results
         with open(results_file, "r", encoding="utf-8") as f:
             results = [json.loads(line) for line in f]
 
-        # Process each result
         for result in results:
             custom_id = result.get("custom_id", "")
 
@@ -609,10 +492,8 @@ class NoveltyAssessor:
 
             stats["total_processed"] += 1
 
-            # Extract submission_id from custom_id
             submission_id = custom_id.replace("novelty-assessment-", "")
 
-            # Extract the assessment content
             response_data = result.get("response", {}).get("body", {})
             choices = response_data.get("choices", [])
 
@@ -626,7 +507,6 @@ class NoveltyAssessor:
                 stats["submissions"].append(submission_stats)
                 continue
 
-            # Get the content from the first choice
             content = choices[0].get("message", {}).get("content", "")
 
             if not content:
@@ -637,7 +517,6 @@ class NoveltyAssessor:
                 stats["submissions"].append(submission_stats)
                 continue
 
-            # Save the content to a file
             submission_dir = os.path.join(data_dir, submission_id, "ours")
             os.makedirs(submission_dir, exist_ok=True)
 
@@ -647,10 +526,8 @@ class NoveltyAssessor:
 
             print(f"Saved novelty assessment for {submission_id}")
 
-            # Save metadata
             token_usage = response_data.get("usage", {})
 
-            # Calculate cost
             prompt_tokens = token_usage.get("prompt_tokens", 0)
             completion_tokens = token_usage.get("completion_tokens", 0)
 
@@ -670,7 +547,6 @@ class NoveltyAssessor:
 
             submission_stats["token_usage"] = token_usage
 
-            # Update metadata file
             meta_path = os.path.join(submission_dir, "metadata.json")
             current_meta = {}
 
@@ -692,7 +568,6 @@ class NoveltyAssessor:
             stats["successful"] += 1
             stats["submissions"].append(submission_stats)
 
-        # Create summary statistics
         success_rate = (
             (stats["successful"] / stats["total_processed"]) * 100
             if stats["total_processed"] > 0
@@ -703,7 +578,6 @@ class NoveltyAssessor:
         )
         print(f"Total estimated cost: ${stats['total_cost']:.4f}")
 
-        # Save summary
         summary_path = "./openai_outputs/novelty_assessment_processing_summary.json"
         with open(summary_path, "w") as f:
             json.dump(stats, f, indent=3)
@@ -766,18 +640,15 @@ if __name__ == "__main__":
     assessor = NoveltyAssessor(model_name=args.model)
     
     if args.submission_id:
-        # Single submission assessment
         assessor.run_assessment(
             args.data_dir,
             args.submission_id
         )
     
     if args.prepare:
-        # Prepare batch inference data
         assessor.prepare_batch_inference_data(args.data_dir)
     
     if args.process:
-        # Process batch results
         assessor.process_batch_results(
             args.data_dir,
             args.results_file,

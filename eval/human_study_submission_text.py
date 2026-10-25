@@ -1,30 +1,4 @@
-#!/usr/bin/env python3
-"""Freeze one submission text per human-study paper, with the pilot's parser and check.
-
-The E1 judge is asked whether a report's claims about the submission hold against the
-submission, so the text it reads has to contain what the paper argues with. GROBID's
-section text drops display equations and table bodies; MinerU keeps LaTeX math and table
-markup. The pilot therefore froze MinerU's markdown (see eval/pilot_submission.py), and
-this uses the SAME parser for the same reason -- a main study whose submission text came
-from a different extractor would not be comparable to the pilot, and nothing in the
-dashboard would show that.
-
-MinerU happens to be reachable through DeepReviewer's adapter, but parsing a PDF is not
-DeepReviewer's assessment: no review is run here, no model is asked anything about the
-paper, and the output belongs to no system. The same parser is used for every paper, so
-no paper's submission is better represented than another's.
-
-The check is printed, not assumed -- character count, math, tables, headings, and whether
-the text reaches a references section or was cut off. Reading it once is the only chance
-to notice that a judge would be shown a truncated paper.
-
-Usage
------
-  python eval/human_study_submission_text.py --check          # parse and report, write nothing
-  python eval/human_study_submission_text.py --write          # parse, report and freeze
-  python eval/human_study_submission_text.py --write --only astabench
-  python eval/human_study_submission_text.py --write --config final_evaluation/config/e1_extra.yaml --sources final_evaluation/config/sources.e1_extra.yaml
-"""
+"""Freeze one submission text per human-study paper, with the pilot's parser and check."""
 from __future__ import annotations
 
 import argparse
@@ -32,6 +6,7 @@ import asyncio
 import hashlib
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -40,7 +15,23 @@ DR = REPO / "DeepReviewer-v2"
 OUT_DIR = REPO / "eval" / "out" / "human_study" / "submission_text"
 
 sys.path.insert(0, str(REPO / "eval"))
-from pilot_submission import stats  # noqa: E402  -- the pilot's own check, unchanged
+
+
+def stats(text: str) -> dict:
+    return {
+        "chars": len(text),
+        "lines": len(text.splitlines()),
+        "words": len(text.split()),
+        "display_math": len(re.findall(r"\$\$", text)) // 2,
+        "inline_math": len(re.findall(r"(?<!\$)\$(?!\$)[^$\n]{1,200}\$(?!\$)", text)),
+        "table_rows": len(re.findall(r"^\s*\|.*\|\s*$", text, re.M)),
+        "html_tables": len(re.findall(r"<table", text)),
+        "headings": len(re.findall(r"^#{1,4}\s", text, re.M)),
+        "images": len(re.findall(r"!\[", text)),
+        "has_references": bool(re.search(r"^#{1,4}\s*(references|bibliography)\b", text,
+                                         re.M | re.I)),
+        "sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+    }
 
 
 MAIN_CONFIG = "final_evaluation/config/main.yaml"
@@ -48,9 +39,7 @@ MAIN_SOURCES = "final_evaluation/config/sources.main.yaml"
 
 
 def papers(config: str = MAIN_CONFIG, sources: str = MAIN_SOURCES) -> dict:
-    """{paper_key: submission pdf} straight from the study's source config, so this can
-    never drift from what the import actually freezes as submission.pdf. The E1-only
-    papers: `config/e1_extra.yaml` with `config/sources.e1_extra.yaml`."""
+    """{paper_key: submission pdf} straight from the study's source config, so this can never drift from what the import actually freezes as submission.pdf. The E1-only papers: `config/e1_extra.yaml` with `config/sources.e1_extra.yaml`."""
     import yaml
     cfg = yaml.safe_load((REPO / config).read_text(encoding="utf-8"))
     src = yaml.safe_load((REPO / sources).read_text(encoding="utf-8"))
@@ -58,15 +47,11 @@ def papers(config: str = MAIN_CONFIG, sources: str = MAIN_SOURCES) -> dict:
 
 
 def _adapter():
-    """DeepReviewer's configured MinerU client. `get_settings()` reads the .env beside it,
-    so the working directory has to be DeepReviewer-v2 while it is built."""
+    """DeepReviewer's configured MinerU client. `get_settings()` reads the .env beside it, so the working directory has to be DeepReviewer-v2 while it is built."""
     cwd = Path.cwd()
     sys.path.insert(0, str(DR))
     os.chdir(DR)
     try:
-        # Built directly from the same settings `runner._build_mineru_adapter` uses.
-        # Importing the runner itself would drag in the agents SDK -- the review stack,
-        # which is exactly the part that must NOT run here.
         from deepreview.config import get_settings
         from deepreview.adapters.mineru import MineruAdapter, MineruConfig
         st = get_settings()
@@ -78,7 +63,7 @@ def _adapter():
             poll_endpoint_templates=st.mineru_poll_templates(),
             poll_interval_seconds=st.mineru_poll_interval_seconds,
             poll_timeout_seconds=st.mineru_poll_timeout_seconds,
-            allow_local_fallback=False,   # never silently swap in a different parser
+            allow_local_fallback=False,
         ))
     finally:
         os.chdir(cwd)

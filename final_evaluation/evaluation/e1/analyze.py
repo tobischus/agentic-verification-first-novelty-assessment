@@ -1,39 +1,4 @@
-"""E1 analysis over judge_calls.jsonl -- read-only, no API call.
-
-Everything the thesis reports from E1, computed from the stored records alone:
-
-  completeness  every planned call recorded once without a technical failure
-  stability     per (paper, pair, criterion) the two orders. A preference counts only when
-                both orders name the same system (or both say tie); "X one way, tie or Y
-                the other" is `inconsistent` (instability, not a result -- pilot_judge doc);
-                `unclear` in either order is missing, as in E2
-  position      share of "A" among the judge's A/B preferences, per criterion
-  pairs         per pair and criterion, over papers (each paper once): stable wins of each
-                system, ties, inconsistent, unclear; net preference = (wins - losses) /
-                papers with a verdict, with a bootstrap 95% CI resampling papers and an
-                exact two-sided sign test on the stable wins
-  holm          per pair, the five criteria's sign-test p-values Holm-adjusted
-                (`sign_test_p_holm_criteria`). Added post hoc, after the results had been
-                seen (2026-10-20); the unadjusted p stays next to it
-  ranking       Bradley-Terry strengths of the five systems per criterion from the stable
-                verdicts (stable tie = half a win each way; inconsistent/unclear left out;
-                0.5 pseudo-wins each way per compared pair keep it finite)
-  elo           the same Bradley-Terry fit on the Elo scale (1000 = the average of the five
-                systems; +400 = 10:1 odds of winning), with a 95% CI and, per pair, the share
-                of bootstrap samples in which one system rates higher -- both from resampling
-                papers. Per criterion and pooled over the five criteria (every criterion
-                verdict one game; the criteria of one call are not independent, so the pooled
-                rating is a summary, not a sixth test). Arena-style online Elo (K=16, mean
-                over 1000 random game orders) is reported pooled as a check on the ranking.
-                Descriptive: a rescaling of the pre-specified Bradley-Terry fit, not a
-                new test
-  length        among stable preferences, the share won by the longer report
-  paper sets    all of the above per paper set (human-rated `main` vs `e1_only`)
-  cost          billed USD, tokens, cache reads/writes, with billing_corrections.jsonl
-                applied; latency; attempts
-
-The E1-vs-human comparison is `compare-e1` (evaluation/e2/analyze.py).
-"""
+"""E1 analysis over judge_calls.jsonl -- read-only, no API call."""
 from __future__ import annotations
 
 import itertools
@@ -68,8 +33,7 @@ def _winner_system(rec: dict, crit: str) -> str:
 
 
 def units(recs: list, paper_set: str | None = None) -> dict:
-    """(paper, (x, y)) -> {"xy": call with x as A, "yx": call with y as A, ...};
-    x before y in SYSTEMS order. Technical failures are not units."""
+    """(paper, (x, y)) -> {"xy": call with x as A, "yx": call with y as A, ...}; x before y in SYSTEMS order. Technical failures are not units."""
     out = {}
     for r in recs:
         if r.get("failed") or (paper_set and r.get("paper_set") != paper_set):
@@ -141,7 +105,7 @@ def pair_table(us: dict, crit: str, pair: tuple) -> dict:
             "net_preference": net, "ci95": ci, "sign_test_p": sign_test(c[x], c[y])}
 
 
-ELO_BASE, ELO_PER_LOG = 1000.0, 400 / math.log(10)  # Elo points per unit of log-strength
+ELO_BASE, ELO_PER_LOG = 1000.0, 400 / math.log(10)
 ELO_K, ELO_ORDERS = 16, 1000
 
 
@@ -174,10 +138,7 @@ def _solve(a: list, b: list) -> list:
 
 
 def _bt_fit(games: list, prior: float = 0.5, iters: int = 100, tol: float = 1e-12) -> dict:
-    """Bradley-Terry maximum likelihood by Newton's method: system -> natural-log strength,
-    centred on 0 (the geometric mean of the strengths is 1). The log-likelihood is strictly
-    concave once every compared pair carries its pseudo-wins, so Newton converges in a few
-    steps to the same fit an MM iteration reaches after thousands."""
+    """Bradley-Terry maximum likelihood by Newton's method: system -> natural-log strength, centred on 0 (the geometric mean of the strengths is 1). The log-likelihood is strictly concave once every compared pair carries its pseudo-wins, so Newton converges in a few steps to the same fit an MM iteration reaches after thousands."""
     wins, n = defaultdict(float), defaultdict(float)
     for x, y, v in games:
         n[frozenset((x, y))] += 1
@@ -208,7 +169,6 @@ def _bt_fit(games: list, prior: float = 0.5, iters: int = 100, tol: float = 1e-1
                 grad[a] += wins[(systems[a], systems[b])] - nab * pab
                 hess[a][a] -= nab * pab * (1 - pab)
                 hess[a][b] += nab * pab * (1 - pab)
-        # the last strength is the reference (fixed at 0), then everything is re-centred
         step = _solve([row[:-1] for row in hess[:-1]], [-g for g in grad[:-1]]) + [0.0]
         step = [max(-5.0, min(5.0, s)) for s in step]
         th = [t + s for t, s in zip(th, step)]
@@ -251,15 +211,13 @@ def elo(us: dict, crits=CRITERIA) -> dict:
 
 
 def shared_rank(ratings: dict, s: str) -> int:
-    """Chatbot Arena's rank (Chiang et al., 2024): 1 + the number of systems whose CI lies
-    entirely above this system's CI. Systems that cannot be told apart share a rank."""
+    """Chatbot Arena's rank (Chiang et al., 2024): 1 + the number of systems whose CI lies entirely above this system's CI. Systems that cannot be told apart share a rank."""
     lo, hi = ratings[s]["ci95"]
     return 1 + sum(1 for t, r in ratings.items() if t != s and r["ci95"][0] > hi)
 
 
 def online_elo(us: dict, crits=CRITERIA, k: float = ELO_K, orders: int = ELO_ORDERS) -> dict:
-    """Arena-style sequential Elo (every system starts at ELO_BASE; stable tie = 0.5), averaged
-    over `orders` random game orders because a single pass depends on the order."""
+    """Arena-style sequential Elo (every system starts at ELO_BASE; stable tie = 0.5), averaged over `orders` random game orders because a single pass depends on the order."""
     games = [g for gs in games_by_paper(us, crits).values() for g in gs]
     systems = sorted({s for x, y, _ in games for s in (x, y)}, key=SYSTEMS.index)
     if len(systems) < 2:
@@ -292,7 +250,7 @@ def length_effect(us: dict, crit: str) -> dict:
         v = stable_verdict(u, crit)
         if v not in (x, y):
             continue
-        cc = u["xy"]["context_chars"]  # x was A there
+        cc = u["xy"]["context_chars"]
         if cc["report_a"] == cc["report_b"]:
             continue
         longer = x if cc["report_a"] > cc["report_b"] else y
@@ -320,8 +278,6 @@ def cost(recs: list, corr: dict) -> dict:
             out["reasoning_recorded_calls"] += 1
         usd = c.get("billed_usd_corrected", r.get("billed_usd"))
         if usd is None:
-            # recorded before cache writes were stored (standard tier, one string): implicit
-            # mode writes the whole prompt at 1.25x (measured) -- an estimate, flagged
             t, long = r["input_tokens"], r["input_tokens"] > 272_000
             usd = (t * 2.0 * 1.25 * (2 if long else 1) + r["output_tokens"] * 12.0 * (1.5 if long else 1)) / 1e6
             est.append(r["call_index"])

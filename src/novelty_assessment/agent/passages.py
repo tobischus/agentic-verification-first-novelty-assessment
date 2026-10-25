@@ -5,7 +5,7 @@ section menus and section text, and a hybrid BM25 and embedding search.
 """
 import re
 import threading
-from typing import List, Optional
+from typing import List
 
 import numpy as np
 
@@ -191,14 +191,6 @@ class PassageIndex:
             return False
         return w == s if exact else (w == s or w in s or s in w)
 
-    def get_section(self, name: str, max_chars: int = 4000) -> Optional[str]:
-        want = (name or "").lower().strip()
-        if not want:
-            return None
-        parts = [c["text"] for c in self.chunks if self._matches(want, c["section"])]
-        if not parts:
-            return None
-        return "\n\n".join(parts)[:max_chars]
 
     def get_sections(self, names: List[str], max_total: int = 40000,
                      exact: bool = False) -> List[dict]:

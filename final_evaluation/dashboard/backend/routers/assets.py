@@ -1,10 +1,4 @@
-"""One endpoint serves every asset -- submission PDFs, report text/PDF, quote indexes --
-because one endpoint is one place to get authorization right, instead of N endpoints
-that each have to remember to check it. See deps.py / current_participant for how the
-session cookie resolves to a participant; this module adds the per-asset ownership check
-on top: a participant may fetch an asset only if it is reachable from one of THEIR
-assignments (a Task whose Report or Paper references it) -- never by asset id alone.
-"""
+"""One endpoint serves every asset -- submission PDFs, report text/PDF, quote indexes -- because one endpoint is one place to get authorization right, instead of N endpoints that each have to remember to check it. See deps.py / current_participant for how the session cookie resolves to a participant; this module adds the per-asset ownership check on top: a participant may fetch an asset only if it is reachable from one of THEIR assignments (a Task whose Report or Paper references it) -- never by asset id alone."""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -18,13 +12,7 @@ router = APIRouter(prefix="/api/assets", tags=["assets"])
 
 
 def _participant_may_access(db: Session, participant: models.Participant, asset_id: str) -> bool:
-    """True iff `asset_id` is reachable from one of this participant's assignments.
-
-    Admins bypass this (see admin.py's own asset route) -- this function is for the
-    participant-facing endpoint only, and intentionally does not special-case role, so a
-    participant account can never read another participant's-only-visible asset even if
-    one existed (today all assets on a task are visible to whoever holds that task).
-    """
+    """True iff `asset_id` is reachable from one of this participant's assignments."""
     task_ids = [row[0] for row in db.query(models.Assignment.task_id)
                .filter(models.Assignment.participant_id == participant.id).all()]
     if not task_ids:
@@ -68,10 +56,6 @@ def get_asset(asset_id: str, request=None, db: Session = Depends(get_db),
     if asset is None:
         raise HTTPException(404, "asset not found")
     if participant.role != "admin" and not _participant_may_access(db, participant, asset_id):
-        # A prior-work PDF is never wired to any Paper/Report asset field in the first
-        # place (import_pilot.py never imports one), so there is no asset id that would
-        # even need blocking here -- the boundary is enforced by what gets IMPORTED, not
-        # by a blocklist of forbidden ids. This branch is the general "not yours" case.
         raise HTTPException(403, "not authorized for this asset")
     try:
         return _serve(request, asset)

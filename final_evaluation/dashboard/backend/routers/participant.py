@@ -1,11 +1,6 @@
-"""Everything a logged-in participant does: consent, task list, task detail, autosave,
-submit, familiarity, technical issues, and their own data export. Admin-only concerns
-live in admin.py; asset bytes are served from assets.py. See deps.py for the shared
-"who is this request" plumbing.
-"""
+"""Everything a logged-in participant does: consent, task list, task detail, autosave, submit, familiarity, technical issues, and their own data export. Admin-only concerns live in admin.py; asset bytes are served from assets.py. See deps.py for the shared "who is this request" plumbing."""
 from __future__ import annotations
 
-import hashlib
 import json
 from datetime import datetime, timezone
 
@@ -14,7 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from .. import models, security
-from ..deps import CSRF_HEADER, SESSION_COOKIE, current_participant, get_db, require_csrf
+from ..deps import SESSION_COOKIE, current_participant, get_db, require_csrf
 from ..settings import get_settings as get_settings
 
 router = APIRouter(prefix="/api", tags=["participant"])
@@ -22,8 +17,7 @@ router = APIRouter(prefix="/api", tags=["participant"])
 
 @router.get("/public/config")
 def public_config():
-    """The only unauthenticated endpoint besides /auth/login and /health -- just enough
-    for the login page to show a real contact address before anyone has logged in."""
+    """The only unauthenticated endpoint besides /auth/login and /health -- just enough for the login page to show a real contact address before anyone has logged in."""
     return {"study_contact": get_settings().study_contact}
 
 CRITERIA_KEYS = ("submission_fidelity", "comparison_specificity", "presented_evidence",
@@ -31,7 +25,7 @@ CRITERIA_KEYS = ("submission_fidelity", "comparison_specificity", "presented_evi
 WINNER_VALUES = {"A", "B", "tie", "unclear"}
 UNCLEAR_REASONS = {"Insufficient report evidence", "Insufficient domain expertise",
                    "Ambiguous criterion", "Other"}
-IDLE_CAP_S = 120  # a gap longer than this between autosaves does not count as active time
+IDLE_CAP_S = 120
 
 _ACTIVE_LOCK_STATUS = {"submitted"}
 
@@ -41,9 +35,6 @@ def _audit(db: Session, study_id: str, actor: str, event_type: str, payload: dic
                              event_type=event_type, payload=payload))
 
 
-# --------------------------------------------------------------------------- #
-# Auth
-# --------------------------------------------------------------------------- #
 
 class LoginBody(BaseModel):
     code: str = Field(min_length=4, max_length=120)
@@ -58,8 +49,6 @@ def login(body: LoginBody, request: Request, response: Response, db: Session = D
 
     code = body.code.strip()
     display = code.split("-", 1)[0] if "-" in code else code
-    # Looked up by (study, code_display) first so a wrong secret with a right prefix still
-    # hits ONE row's failure counter, rather than scanning every participant's hash.
     candidates = db.query(models.Participant).filter(models.Participant.code_display == display).all()
 
     match = None
@@ -78,7 +67,6 @@ def login(body: LoginBody, request: Request, response: Response, db: Session = D
                 if locked:
                     p.locked_until = locked
         db.commit()
-        # Generic message: does not distinguish "no such code" from "wrong secret".
         raise HTTPException(401, "invalid access code")
 
     match.failed_logins = 0
@@ -96,9 +84,6 @@ def login(body: LoginBody, request: Request, response: Response, db: Session = D
     csrf = security.new_csrf_token()
     response.set_cookie(SESSION_COOKIE, token, httponly=True, samesite="lax",
                         secure=settings.cookie_secure, max_age=int(ttl.total_seconds()))
-    # Readable by JS on purpose (double-submit CSRF pattern) -- it is not a credential by
-    # itself, only proof the same browser that holds the HttpOnly session cookie also
-    # made this request.
     response.set_cookie("fe_csrf", csrf, httponly=False, samesite="lax",
                         secure=settings.cookie_secure, max_age=int(ttl.total_seconds()))
     return {"participant_id": match.id, "code_display": match.code_display, "role": match.role,
@@ -109,10 +94,6 @@ def login(body: LoginBody, request: Request, response: Response, db: Session = D
 def logout(response: Response, db: Session = Depends(get_db),
           participant: models.Participant = Depends(current_participant),
           fe_session: str | None = None):
-    # Revoke every live session for this participant, not only the one on this cookie --
-    # "Logout" should end the participant's access, not just this tab's.
-    token_hashes = [s.token_hash for s in db.query(models.Session_).filter(
-        models.Session_.participant_id == participant.id, models.Session_.revoked_at.is_(None))]
     db.query(models.Session_).filter(models.Session_.participant_id == participant.id,
                                      models.Session_.revoked_at.is_(None)).update(
         {"revoked_at": datetime.now(timezone.utc)})
@@ -136,9 +117,6 @@ def me(db: Session = Depends(get_db), participant: models.Participant = Depends(
     }
 
 
-# --------------------------------------------------------------------------- #
-# Consent + instructions
-# --------------------------------------------------------------------------- #
 
 class ConsentBody(BaseModel):
     accept: bool
@@ -164,12 +142,6 @@ def consent(body: ConsentBody, db: Session = Depends(get_db),
     return {"ok": True}
 
 
-# --------------------------------------------------------------------------- #
-# Reading gate: in a non-pilot study, a paper's tasks open only after the participant
-# has read the plain submission and confirmed it (models.PaperReading). Enforced here,
-# not only in the UI, so the gate holds for any client. The pilot keeps its old flow --
-# its frozen responses were collected without the step.
-# --------------------------------------------------------------------------- #
 
 def _reading_required(db: Session, participant: models.Participant) -> bool:
     study = db.query(models.Study).get(participant.study_id)
@@ -205,9 +177,6 @@ def _owns_paper(db: Session, participant: models.Participant, paper_id: str) -> 
                     models.Task.paper_id == paper_id).first()) is not None
 
 
-# --------------------------------------------------------------------------- #
-# Task list + detail
-# --------------------------------------------------------------------------- #
 
 def _paper_view(db: Session, paper: models.Paper) -> dict:
     return {"paper_id": paper.id, "title": paper.title,
@@ -216,8 +185,7 @@ def _paper_view(db: Session, paper: models.Paper) -> dict:
 
 
 def _report_view(db: Session, report: models.Report) -> dict:
-    """NEVER includes system_id. `id` here is the Report row id, opaque to a
-    participant; it is only ever compared server-side against Task.report_a/b_id."""
+    """NEVER includes system_id. `id` here is the Report row id, opaque to a participant; it is only ever compared server-side against Task.report_a/b_id."""
     return {"report_ref": report.id, "view_type": report.view_type,
            "content_asset_id": report.content_asset_id,
            "quote_index_asset_id": report.quote_index_asset_id}
@@ -280,9 +248,6 @@ def get_task(assignment_id: str, db: Session = Depends(get_db),
     }
 
 
-# --------------------------------------------------------------------------- #
-# Paper familiarity (once per participant x paper)
-# --------------------------------------------------------------------------- #
 
 class FamiliarityBody(BaseModel):
     paper_id: str
@@ -309,9 +274,6 @@ def set_familiarity(body: FamiliarityBody, db: Session = Depends(get_db),
     return {"ok": True, "already_recorded": False}
 
 
-# --------------------------------------------------------------------------- #
-# Reading the submission (once per participant x paper, non-pilot studies)
-# --------------------------------------------------------------------------- #
 
 def _reading_view(db: Session, participant: models.Participant, paper: models.Paper) -> dict:
     fam = (db.query(models.PaperFamiliarity)
@@ -363,9 +325,7 @@ class ReadingConfirmBody(BaseModel):
 @router.post("/papers/{paper_id}/reading/confirm", dependencies=[Depends(require_csrf)])
 def confirm_reading(paper_id: str, body: ReadingConfirmBody, db: Session = Depends(get_db),
                     participant: models.Participant = Depends(current_participant)):
-    """Unlocks the paper's tasks. The background questions come first on the reading page,
-    so they must be answered before the confirmation counts. Confirming again is a no-op
-    that keeps the first timestamp."""
+    """Unlocks the paper's tasks. The background questions come first on the reading page, so they must be answered before the confirmation counts. Confirming again is a no-op that keeps the first timestamp."""
     paper = _owned_paper_or_404(db, participant, paper_id)
     fam = (db.query(models.PaperFamiliarity)
            .filter(models.PaperFamiliarity.participant_id == participant.id,
@@ -386,9 +346,6 @@ def confirm_reading(paper_id: str, body: ReadingConfirmBody, db: Session = Depen
     return _reading_view(db, participant, paper)
 
 
-# --------------------------------------------------------------------------- #
-# Draft autosave -- optimistic concurrency + idempotency
-# --------------------------------------------------------------------------- #
 
 def _validate_criteria(criteria: dict, require_complete: bool) -> list[str]:
     problems = []
@@ -451,9 +408,6 @@ def save_draft(assignment_id: str, body: DraftBody, db: Session = Depends(get_db
     return {"ok": True, "revision": a.revision, "status": a.status}
 
 
-# --------------------------------------------------------------------------- #
-# Submit -- atomic finalisation
-# --------------------------------------------------------------------------- #
 
 class SubmitBody(BaseModel):
     criteria: dict
@@ -469,11 +423,6 @@ def submit_task(assignment_id: str, body: SubmitBody, db: Session = Depends(get_
     if a is None:
         raise HTTPException(404, "task not found")
 
-    # Idempotent replay: the SAME idempotency key on an already-finalised task returns
-    # the SAME success, instead of erroring -- a double-click or a retried request must
-    # not look like a failure, and must not create a second FinalResponse (the column is
-    # UNIQUE, so a second insert would fail anyway; this check makes the replay a
-    # deliberate 200, not an accidental 500).
     existing = db.query(models.FinalResponse).filter(
         models.FinalResponse.assignment_id == a.id).first()
     if existing is not None:
@@ -510,14 +459,11 @@ def submit_task(assignment_id: str, body: SubmitBody, db: Session = Depends(get_
                                 revision=a.revision))
     _audit(db, participant.study_id, participant.id, "submit", {"assignment_id": a.id,
                                                                 "receipt_id": receipt})
-    db.commit()  # one transaction: validation already done above, both writes commit together
+    db.commit()
     return {"ok": True, "receipt_id": receipt,
            "submitted_at": datetime.now(timezone.utc).isoformat(), "already_final": False}
 
 
-# --------------------------------------------------------------------------- #
-# Technical issue / pause
-# --------------------------------------------------------------------------- #
 
 class IssueBody(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
@@ -540,9 +486,6 @@ def report_issue(body: IssueBody, db: Session = Depends(get_db),
     return {"ok": True}
 
 
-# --------------------------------------------------------------------------- #
-# A participant's own data, for download. No system identity anywhere in this payload.
-# --------------------------------------------------------------------------- #
 
 @router.get("/export/mine")
 def export_mine(db: Session = Depends(get_db),

@@ -1,40 +1,4 @@
-#!/usr/bin/env python3
-"""Get the human-study papers ready for the review runs, and say what still needs a human.
-
-`human_study/paper/*.pdf` are the submissions, `human_study/OpenNovelty/*.pdf` the
-authors' own reports for the same papers. This script does the deterministic part:
-
-  1. assigns each PDF a stable submission id (and paper_key for the study config),
-  2. matches each OpenNovelty report to its paper by title, reporting anything ambiguous
-     rather than picking by mtime -- the same rule `inventory.py` applies,
-  3. runs the orchestrator's four preparation stages per paper
-     (document_processing -> claim_extraction -> retrieval -> fetch_pdfs),
-  4. prints a readiness table.
-
-It deliberately STOPS before the agent and linear runs. Two things have to be looked at by
-a person first, and both are cheap to fix now and expensive to discover afterwards:
-
-  publication date   Retrieval's cutoff is the submission's FIRST-disclosure date. A paper
-                     whose date fell back to today admits later work as "prior work", which
-                     silently corrupts every comparison for it. Flagged as DATE? below.
-  claims             Everything downstream is per claim. `--no-hitl` auto-approves the
-                     extraction, so the claim count and wording are worth reading once
-                     before spending the agent budget on them.
-
-Then, per paper:
-
-    python eval/run_pilot.py --submission <id> --variant both
-
-Usage
------
-  python eval/human_study_prep.py --status          # table only, runs nothing
-  python eval/human_study_prep.py --run             # prepare every paper not yet done
-  python eval/human_study_prep.py --run --only astabench,hubble
-  python eval/human_study_prep.py --write-sources final_evaluation/config/sources.main.yaml
-
-The ten E1-only papers live elsewhere; every call above takes
-  --papers-dir "<dir>/paper" --opennovelty-dir "<dir>/opennovelty"
-"""
+"""Get the human-study papers ready for the review runs, and say what still needs a human."""
 from __future__ import annotations
 
 import argparse
@@ -50,7 +14,6 @@ PAPERS = HS / "paper"
 OPENNOVELTY = HS / "OpenNovelty"
 DATA = REPO / "data"
 
-#: Long enough to stay readable, short enough for a path and a config key.
 _KEY_MAX = 46
 
 
@@ -58,7 +21,6 @@ def slug(name: str) -> str:
     s = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
     if len(s) <= _KEY_MAX:
         return s
-    # Cut on a word boundary rather than mid-token, so the key stays recognisable.
     return s[:_KEY_MAX].rsplit("_", 1)[0]
 
 
@@ -76,8 +38,7 @@ def opennovelty_index() -> dict:
 
 
 def match_opennovelty(paper_pdf: Path, index: dict) -> tuple[Path | None, str]:
-    """(report, note). Their filename carries a TRUNCATED title, so this matches on the
-    shorter of the two normalised strings -- and reports every tie instead of choosing."""
+    """(report, note). Their filename carries a TRUNCATED title, so this matches on the shorter of the two normalised strings -- and reports every tie instead of choosing."""
     want = _norm(paper_pdf.stem)
     hits = []
     for key, path in index.items():
@@ -101,7 +62,6 @@ def plan() -> list[dict]:
     return rows
 
 
-# ------------------------------------------------------------------- status --
 
 def _load(p: Path):
     try:
@@ -110,7 +70,6 @@ def _load(p: Path):
         return None
 
 
-#: orchestrator.STAGES, by the output each one leaves behind.
 _STAGE_OUTPUT = (
     ("document_processing", "{k}_quality.json"),
     ("claim_extraction", "{k}_claims.json"),
@@ -126,11 +85,6 @@ def status_of(key: str) -> dict:
     claims_doc = _load(sub / f"{key}_claims.json") or {}
     pool = _load(sub / "related_work_data" / "ranked_papers.json") or []
     claims = [c for c in claims_doc.get("claims", []) or [] if c.get("status") != "rejected"]
-    # "Prepared" means all FOUR stages left their output -- not merely that document
-    # processing wrote {key}.json. A paper that parsed and then died in claim extraction
-    # would otherwise look done and be skipped on every resume, silently entering the
-    # agent runs with no claims. GROBID dying mid-batch makes that a likely shape of
-    # failure, not a hypothetical one.
     done = [n for n, rel in _STAGE_OUTPUT if (sub / rel.format(k=key)).exists()]
     state = _load(sub / f"{key}_pipeline_state.json") or {}
     gates = quality.get("gates") or quality
@@ -199,7 +153,6 @@ def print_table(rows: list[dict]) -> None:
           "the date before running the agent, or its comparisons are not trustworthy.")
 
 
-# --------------------------------------------------------------------- run --
 
 def grobid_alive(url: str, timeout: float = 4.0) -> bool:
     import urllib.request
@@ -211,8 +164,7 @@ def grobid_alive(url: str, timeout: float = 4.0) -> bool:
 
 
 def wait_for_grobid(url: str, seconds: int) -> bool:
-    """GROBID dying mid-batch cost seven papers once. With `--restart unless-stopped`
-    Docker brings it back in a few seconds, so waiting beats aborting the run."""
+    """GROBID dying mid-batch cost seven papers once. With `--restart unless-stopped` Docker brings it back in a few seconds, so waiting beats aborting the run."""
     import time
     if grobid_alive(url):
         return True
@@ -239,9 +191,6 @@ def prepare(row: dict, model: str, grobid: str, k: int, wait: int = 0) -> bool:
               f"{' '.join(cmd[-12:])}", flush=True)
         if subprocess.run(cmd, cwd=str(REPO)).returncode == 0:
             return True
-        # The orchestrator is resumable and idempotent, so a second attempt picks up at
-        # the stage that failed rather than redoing the ones that succeeded. Only worth
-        # it when GROBID is what went away; a real parse failure fails the same way twice.
         if attempt == 1 and not grobid_alive(grobid):
             print(f"  {key} failed and GROBID is gone -- retrying once", flush=True)
             continue
@@ -250,8 +199,7 @@ def prepare(row: dict, model: str, grobid: str, k: int, wait: int = 0) -> bool:
 
 
 def write_sources(rows: list[dict], out_path: Path) -> None:
-    """A starting sources.yaml: what is unambiguous is filled in, the rest is left as a
-    TODO with the reason. Never invents a resolution -- same contract as the pilot's."""
+    """A starting sources.yaml: what is unambiguous is filled in, the rest is left as a TODO with the reason. Never invents a resolution -- same contract as the pilot's."""
     lines = [
         "# Source resolution for the human study. Generated by eval/human_study_prep.py;",
         "# every TODO below needs a human decision, and nothing here was picked by mtime.",
@@ -266,7 +214,6 @@ def write_sources(rows: list[dict], out_path: Path) -> None:
         key = r["key"]
         lines.append(f"{key}:")
         lines.append(f"  submission:")
-        # `pdf:` and `text:` are the key names import_pilot._import_submission reads.
         lines.append(f"    pdf: \"{r['pdf'].relative_to(REPO).as_posix()}\"")
         lines.append(f"    # TODO: text: the frozen submission text the E1 judge reads.")
         lines.append(f"    #   The pilot took MinerU's markdown from the DeepReviewer job")
@@ -275,8 +222,6 @@ def write_sources(rows: list[dict], out_path: Path) -> None:
         lines.append(f"    #   submission against the submission. Same parser for every")
         lines.append(f"    #   paper, so resolve this only once DeepReviewer has run.")
         for variant in ("agent", "linear"):
-            # Rendered fresh at import time from these two artifacts; their hashes and the
-            # renderer's own go into the frozen content_version, so the paths belong here.
             lines.append(f"  {variant}:")
             lines.append(f"    kind: rendered")
             lines.append(f"    renderer: battle_export.build")
@@ -350,9 +295,6 @@ def main() -> int:
         return 0
 
     if not grobid_alive(args.grobid_server):
-        # NOT --rm: the container that died mid-batch was removed along with its logs, so
-        # nothing was left to say why. --restart brings it back on its own, which is what
-        # --wait-grobid then waits for.
         print(f"GROBID is not answering at {args.grobid_server}.\n"
               "  docker run -d --init --ulimit core=0 -p 8070:8070 "
               "--restart unless-stopped --name grobid grobid/grobid:0.9.0-crf")

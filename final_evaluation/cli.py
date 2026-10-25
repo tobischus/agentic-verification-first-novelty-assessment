@@ -1,10 +1,4 @@
-#!/usr/bin/env python3
-"""Single entry point: `python -m final_evaluation.cli <command> ...` from the repo root.
-
-Every subcommand is documented in final_evaluation/README.md with its exact invocation.
-This file only parses arguments and calls into scripts/*.py and evaluation/*/*.py --
-none of the actual logic lives here.
-"""
+"""Single entry point: `python -m final_evaluation.cli <command> ...` from the repo root."""
 from __future__ import annotations
 
 import argparse
@@ -18,16 +12,12 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 
-def cmd_inventory(args):
-    from final_evaluation.scripts import inventory
-    report = inventory.run(args.config)
-    inventory.print_report(report)
 
 
-def cmd_import_pilot(args):
-    from final_evaluation.scripts import import_pilot
-    manifest = import_pilot.run(args.sources, args.config)
-    import_pilot.print_report(manifest)
+def cmd_import_inputs(args):
+    from final_evaluation.scripts import import_inputs
+    manifest = import_inputs.run(args.sources, args.config)
+    import_inputs.print_report(manifest)
     if manifest["blockers"]:
         sys.exit(1)
 
@@ -46,9 +36,9 @@ def cmd_init_db(args):
     print(f"migrations applied: {applied}" if applied else "schema already up to date")
 
 
-def cmd_seed_pilot(args):
+def cmd_seed_study(args):
     from final_evaluation.scripts import seed
-    print(seed.seed_pilot(args.config))
+    print(seed.seed_study(args.config))
 
 
 def cmd_refresh_reports(args):
@@ -80,11 +70,7 @@ def cmd_create_admin(args):
 
 
 def _sync_instructions_text():
-    """The ONE source of truth for the instruction text and the rubric descriptions is
-    `prompts/` -- this copies them into the frontend's public/ dir (as plain text/JSON)
-    so the UI fetches the same bytes the consent hash is computed over, in dev mode and
-    in the built dist/ alike. Never edit the copies under frontend/public/ by hand; they
-    are regenerated on every build-frontend."""
+    """The ONE source of truth for the instruction text and the rubric descriptions is `prompts/` -- this copies them into the frontend's public/ dir (as plain text/JSON) so the UI fetches the same bytes the consent hash is computed over, in dev mode and in the built dist/ alike. Never edit the copies under frontend/public/ by hand; they are regenerated on every build-frontend."""
     import re
     import shutil
     prompts = REPO_ROOT / "final_evaluation" / "prompts"
@@ -199,11 +185,6 @@ def cmd_agent_linear(args):
     print(f"written: {out}")
 
 
-def cmd_adjudication_packet(args):
-    from final_evaluation.scripts import adjudication_packet
-    res = adjudication_packet.build(Path(args.out_dir), Path(args.config))
-    print(f"{res['cases']} divergent claims -> {res['out_dir']}")
-    print(f"fill in: {res['decisions']}")
 
 
 def cmd_source_audit(args):
@@ -217,10 +198,6 @@ def cmd_source_audit(args):
     print(f"written: {out}")
 
 
-def cmd_figures(args):
-    from final_evaluation.scripts import presentation_figures
-    for p in presentation_figures.build(Path(args.out_dir), Path(args.e1_dir), minimal=args.minimal):
-        print(f"written: {p}")
 
 
 def cmd_compare_e1(args):
@@ -253,24 +230,22 @@ def main():
     ap = argparse.ArgumentParser(prog="python -m final_evaluation.cli")
     sub = ap.add_subparsers(dest="command", required=True)
 
-    p = sub.add_parser("inventory"); p.add_argument("--config", default="final_evaluation/config/pilot.yaml")
-    p.set_defaults(func=cmd_inventory)
 
-    p = sub.add_parser("import-pilot")
-    p.add_argument("--sources", default="final_evaluation/config/sources.pilot.yaml")
-    p.add_argument("--config", default="final_evaluation/config/pilot.yaml")
-    p.set_defaults(func=cmd_import_pilot)
+    p = sub.add_parser("import-inputs")
+    p.add_argument("--sources", default="final_evaluation/config/sources.main.yaml")
+    p.add_argument("--config", default="final_evaluation/config/main.yaml")
+    p.set_defaults(func=cmd_import_inputs)
 
     p = sub.add_parser("validate-inputs")
     p.add_argument("--study", required=True)
-    p.add_argument("--config", default="final_evaluation/config/pilot.yaml")
+    p.add_argument("--config", default="final_evaluation/config/main.yaml")
     p.set_defaults(func=cmd_validate_inputs)
 
     p = sub.add_parser("init-db"); p.set_defaults(func=cmd_init_db)
 
-    p = sub.add_parser("seed-pilot")
-    p.add_argument("--config", default="final_evaluation/config/pilot.yaml")
-    p.set_defaults(func=cmd_seed_pilot)
+    p = sub.add_parser("seed-study")
+    p.add_argument("--config", default="final_evaluation/config/main.yaml")
+    p.set_defaults(func=cmd_seed_study)
 
     p = sub.add_parser("refresh-reports",
                        help="replace report content from the current manifest where no one has rated it")
@@ -284,7 +259,7 @@ def main():
     p.add_argument("--count", type=int, required=True)
     p.add_argument("--prefix", default="R")
     p.add_argument("--not-test", action="store_true", help="mark as real (non-test) participants")
-    p.add_argument("--config", default="final_evaluation/config/pilot.yaml")
+    p.add_argument("--config", default="final_evaluation/config/main.yaml")
     p.set_defaults(func=cmd_create_participants)
 
     p = sub.add_parser("create-admin")
@@ -311,13 +286,12 @@ def main():
     p.add_argument("--input", required=True)
     p.add_argument("--out", default=None)
     p.add_argument("--include-test", action="store_true",
-                  help="include responses from test participants -- required for the "
-                       "pilot, whose two raters are deliberately test accounts")
+                  help="include responses from test participants")
     p.set_defaults(func=cmd_analyze_human)
 
     p = sub.add_parser("plan-e1")
     p.add_argument("--config", default="final_evaluation/config/e1_main.yaml",
-                   help="e1_main.yaml (all papers x all pairs) or pilot.yaml (the pilot's tasks)")
+                   help="E1 configuration: papers, system pairs and judge settings")
     p.add_argument("--papers", default="", help="narrow to these paper keys (comma-separated)")
     p.add_argument("--pairs", default="", help="narrow to these pairs, e.g. agent:linear,agent:afzal")
     p.add_argument("--limit", type=int, default=0, help="with --execute: run at most N calls")
@@ -327,7 +301,7 @@ def main():
     p.add_argument("--standard", action="store_true",
                    help="standard service tier instead of flex (2x price; e.g. if flex stays unavailable)")
     p.add_argument("--no-cache", action="store_true",
-                   help="the pilot's exact request: one user string, seed-shuffled order, no breakpoints")
+                   help="send one user string without cache breakpoints")
     p.set_defaults(func=cmd_plan_e1)
 
     p = sub.add_parser("analyze-e1", help="E1 judge results: stability, pairs, ranking, bias, cost")
@@ -348,23 +322,12 @@ def main():
     p.add_argument("--out", default="final_evaluation/results/main/agent_linear/agent_linear.json")
     p.set_defaults(func=cmd_agent_linear)
 
-    p = sub.add_parser("adjudication-packet", help="blind side-by-side packet for the claims agent and linear judge differently")
-    p.add_argument("--config", default="final_evaluation/config/e1_main.yaml")
-    p.add_argument("--out-dir", default="final_evaluation/results/main/agent_linear/adjudication")
-    p.set_defaults(func=cmd_adjudication_packet)
 
     p = sub.add_parser("source-audit", help="E3 automatic part: grounding, verifiability and a re-check of every shown quote")
     p.add_argument("--config", default="final_evaluation/config/e1_main.yaml")
     p.add_argument("--out", default="final_evaluation/results/main/e3/source_audit.json")
     p.set_defaults(func=cmd_source_audit)
 
-    p = sub.add_parser("figures", help="slide figures from the E1 and agent-linear analysis outputs")
-    p.add_argument("--out-dir", default="final_evaluation/results/main/figures")
-    p.add_argument("--e1-dir", default="final_evaluation/results/main/e1",
-                   help="the E1 run to draw (holds e1_analysis.json and e1_sensitivity.json)")
-    p.add_argument("--minimal", action="store_true",
-                   help="one short caption line per figure, built from the data only")
-    p.set_defaults(func=cmd_figures)
 
     p = sub.add_parser("compare-e1", help="human ratings vs the E1 judge on the same tasks")
     p.add_argument("--input", required=True, help="the admin export ZIP")
@@ -388,10 +351,8 @@ def main():
     p.set_defaults(func=cmd_restore)
 
     args = ap.parse_args()
-    if args.command in {"init-db", "seed-pilot", "refresh-reports", "create-participants",
+    if args.command in {"init-db", "seed-study", "refresh-reports", "create-participants",
                         "create-admin", "upload-assets", "backup", "export", "serve"}:
-        # Say which database and storage this command acts on -- the local study and the
-        # cloud one differ only by ENV_FILE, and a missed ENV_FILE is otherwise silent.
         from final_evaluation.dashboard.backend.settings import get_settings
         st = get_settings()
         db = st.database_url.rsplit("@", 1)[-1] if "@" in st.database_url else st.database_url

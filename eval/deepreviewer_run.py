@@ -1,26 +1,4 @@
-#!/usr/bin/env python3
-"""Run DeepReviewer on human-study submissions and record what each job cost.
-
-DeepReviewer's own CLI reports a job id and a status, not a bill. Its jobs are the most
-expensive thing in this study by an order of magnitude -- the jobs already in the tree
-range from 2.1M to 10.4M input tokens -- so a run that does not write down its own cost
-cannot be reported in the thesis next to the other four systems.
-
-This wraps `main.py submit`, waits for the job, then reads the usage DeepReviewer stored in
-`job.json` and prices it with the SAME table the agent runs are priced with
-(`claim_agent._usd`), so the five systems' costs are comparable rather than each computed
-its own way. Nothing about the review itself is changed or configured here.
-
-It must run DeepReviewer's own interpreter: the review stack (the `agents` SDK) lives in
-`DeepReviewer-v2/.venv`, not in the interpreter this repository uses.
-
-Usage
------
-  python eval/deepreviewer_run.py --only llms_get_lost_in_multi_turn_conversation
-  python eval/deepreviewer_run.py --all
-  python eval/deepreviewer_run.py --all --config final_evaluation/config/e1_extra.yaml --sources final_evaluation/config/sources.e1_extra.yaml
-  python eval/deepreviewer_run.py --report          # costs of jobs already run
-"""
+"""Run DeepReviewer on human-study submissions and record what each job cost."""
 from __future__ import annotations
 
 import argparse
@@ -35,7 +13,7 @@ REPO = Path(__file__).resolve().parent.parent
 DR = REPO / "DeepReviewer-v2"
 JOBS = DR / "data" / "jobs"
 OUT = REPO / "eval" / "out" / "human_study" / "deepreviewer"
-VENV_PY = DR / ".venv" / "Scripts" / "python.exe"      # Windows layout
+VENV_PY = DR / ".venv" / "Scripts" / "python.exe"
 if not VENV_PY.is_file():
     VENV_PY = DR / ".venv" / "bin" / "python"
 
@@ -53,8 +31,7 @@ def papers(config: str, sources: str) -> dict:
 
 
 def agent_model() -> str:
-    """Whatever DeepReviewer is actually configured to use, read from its own settings --
-    never assumed, because the price depends on it."""
+    """Whatever DeepReviewer is actually configured to use, read from its own settings -- never assumed, because the price depends on it."""
     cwd = Path.cwd()
     sys.path.insert(0, str(DR))
     import os
@@ -107,7 +84,7 @@ def submit(key: str, pdf: Path, wait: int, model: str) -> dict:
     except Exception:
         resp = {}
     job_id = resp.get("job_id") or resp.get("id")
-    if not job_id:                       # fall back to whichever job dir is new
+    if not job_id:
         new = ({p.name for p in JOBS.iterdir()} - before) if JOBS.is_dir() else set()
         job_id = next(iter(new), None)
     if not job_id:
@@ -168,8 +145,6 @@ def main() -> int:
     if not sel:
         print("no paper selected"); return 1
 
-    # A completed job is not re-run by accident: these are the most expensive calls in the
-    # study, and a second `--all` would silently pay for every paper again.
     if not args.force:
         already = [k for k in sel if (recs.get(k) or {}).get("status") == "completed"]
         for k in already:

@@ -1,30 +1,4 @@
-"""E1: the LLM judge over the study's FROZEN inputs -- plan first, run only on request.
-
-Two modes, chosen by the config passed to `plan-e1 --config`:
-
-  pilot  a study config with `tasks` and no `e1` block (config/pilot.yaml): the pilot's
-         six human tasks, each in both orders. Reads inputs/pilot/.
-  main   a config with an `e1` block (config/e1_main.yaml): every paper of every listed
-         paper set, EVERY unordered pair of the five systems, each in both orders -- the
-         design fixed on 2026-09-14 (20 papers x 10 pairs x 2 orders = 400 calls). Each
-         paper is read from its own set's inputs directory, so the ten human-rated papers
-         are judged on exactly the files the raters see (inputs/main/). Calls on a
-         (paper, pair) that is also a human task are marked `human_task`, for the E1-E2
-         comparison (`compare-e1`); the judge itself is not told.
-
-This is a thin adapter over the existing pilot judge (eval/pilot_judge.py) -- it reuses
-that module's prompt assembly, line ids, JSON/locator validation and bounded retries, and
-only supplies a different report source: `inputs/<dir>/<paper>/{system}.md` (agent,
-linear, afzal: the same file the dashboard renders) or `{system}.e1_text.md`
-(OpenNovelty: a PDF-to-text extraction, flagged `needs_manual_check` by validate-inputs;
-DeepReviewer: the source markdown of its PDF). The judge model only accepts text.
-
-Planning mode needs no API key and makes no calls. `--execute` is the only path that
-calls a model, is never imported by the dashboard's FastAPI app, and refuses to run
-without OPENAI_API_KEY. It appends to `judge_calls.jsonl` and resumes: a call already
-recorded without failure is skipped, so an interrupted run is continued, never repeated
-or overwritten. A file from a different E1 id or rubric is refused.
-"""
+"""E1: the LLM judge over the study's FROZEN inputs -- plan first, run only on request."""
 from __future__ import annotations
 
 import hashlib
@@ -42,30 +16,19 @@ FE_ROOT = REPO_ROOT / "final_evaluation"
 
 SYSTEMS = ("agent", "linear", "opennovelty", "deepreviewer", "afzal")
 
-#: Measured on eval/out/pilot_v1/judge_calls.jsonl (40 calls, same judge and prompt
-#: layout): 290,774 prompt characters per call on average against 84,309 input tokens,
-#: and 1,162 output tokens per call. Used for the plan's cost ESTIMATE only.
 CHARS_PER_TOKEN = 3.45
 OUTPUT_TOKENS_PER_CALL = 1200
-#: USD per 1k tokens (input, output) -- the same entry as claim_agent.PRICES.
-#: gpt-6.1-sol from the OpenAI price page on 2026-10-01 (2.00 / 10.00 per 1M).
 PRICE_PER_1K = {"gpt-5.6-terra": (0.0020, 0.0120), "gpt-6.1-sol": (0.0020, 0.0100)}
 
-#: GPT-5.6 billing, measured with probe calls on 2026-09-24 against the price page: cache
-#: writes 1.25x input, cache reads 0.1x; flex (and batch) half of standard; prompts over
-#: 272K input tokens 2x input/read/write and 1.5x output.
 CACHE_WRITE_X, CACHE_READ_X, LONG_CONTEXT = 1.25, 0.10, 272_000
-#: Models whose cache reads are priced differently (price page, 2026-10-01): gpt-6.1-sol
-#: reads at 0.10 per 1M = 0.05x input. Writes, flex and long context as above.
 CACHE_READ_X_BY_MODEL = {"gpt-6.1-sol": 0.05}
 
 
 def billed_usd(rec: dict, model: str = "gpt-5.6-terra") -> float | None:
-    """What one recorded call was billed, from its own usage counts. Needs the
-    cache_write_tokens the judge records since 2026-09-24; None for older records."""
+    """What one recorded call was billed, from its own usage counts. Needs the cache_write_tokens the judge records since 2026-09-24; None for older records."""
     if rec.get("failed") or rec.get("cache_write_tokens") is None or model not in PRICE_PER_1K:
         return None
-    pin, pout = (p * 1000 for p in PRICE_PER_1K[model])  # per 1M
+    pin, pout = (p * 1000 for p in PRICE_PER_1K[model])
     if rec.get("service_tier") in ("flex", "batch"):
         pin, pout = pin / 2, pout / 2
     t, read, write = rec["input_tokens"], rec.get("cache_tokens") or 0, rec["cache_write_tokens"]
@@ -77,12 +40,7 @@ def billed_usd(rec: dict, model: str = "gpt-5.6-terra") -> float | None:
 
 
 def cache_order(calls: list) -> list:
-    """The execution order for prompt caching: all calls of a paper back to back, and
-    within a paper the calls that share report A back to back (they share the cached
-    prefix rubric + submission + report A). No new randomness: papers, A-groups and the
-    calls inside a group keep the relative order of the seeded shuffle. A drift of the API
-    can then align with a paper -- all ten pairs of which run within minutes under the
-    same conditions -- but not with a system."""
+    """The execution order for prompt caching: all calls of a paper back to back, and within a paper the calls that share report A back to back (they share the cached prefix rubric + submission + report A). No new randomness: papers, A-groups and the calls inside a group keep the relative order of the seeded shuffle. A drift of the API can then align with a paper -- all ten pairs of which run within minutes under the same conditions -- but not with a system."""
     papers, groups = {}, {}
     for c in calls:
         papers.setdefault(c["paper_id"], len(papers))
@@ -122,8 +80,7 @@ def _submission_file(input_dir: str, paper: str) -> Path:
 
 
 def _content_versions(input_dir: str) -> dict:
-    """{(paper, system): content_version} from the import manifest -- the same string the
-    dashboard stores on each report and the admin export writes to manifest.json."""
+    """{(paper, system): content_version} from the import manifest -- the same string the dashboard stores on each report and the admin export writes to manifest.json."""
     p = FE_ROOT / "manifests" / input_dir / "reports.json"
     if not p.is_file():
         return {}
@@ -134,8 +91,7 @@ def _content_versions(input_dir: str) -> dict:
 
 
 def _prompt_chars(input_dir: str, paper: str, a: str, b: str, rubric_chars: int) -> int:
-    """Characters the judge receives: rubric + the three documents with their line ids
-    (`S0001 ` = 6 extra characters per line)."""
+    """Characters the judge receives: rubric + the three documents with their line ids (`S0001 ` = 6 extra characters per line)."""
     n = rubric_chars
     for p in (_submission_file(input_dir, paper), _report_file(input_dir, paper, a),
               _report_file(input_dir, paper, b)):
@@ -216,8 +172,6 @@ def _plan_main(config_path: str, cfg: dict) -> dict:
     expected = e1.get("expected_papers")
     if expected and len(seen) != expected:
         problems.append(f"{len(seen)} of {expected} papers configured")
-    # The execution order is shuffled with a stored seed, so a drift in the API over the
-    # session cannot line up with one system, one paper or one paper set.
     random.Random(int(e1.get("seed", 42))).shuffle(calls)
     for i, c in enumerate(calls, 1):
         c["call_index"] = i
@@ -232,14 +186,11 @@ def _plan_main(config_path: str, cfg: dict) -> dict:
 
 
 def build_plan(config_path: str, papers: str = "", pairs: str = "") -> dict:
-    """`papers` ("a,b") and `pairs` ("agent:linear,agent:afzal") narrow the plan, e.g. for
-    a smoke run; call indices stay those of the full plan."""
+    """`papers` ("a,b") and `pairs` ("agent:linear,agent:afzal") narrow the plan, e.g. for a smoke run; call indices stay those of the full plan."""
     cfg = _yaml(config_path)
     plan = _plan_main(config_path, cfg) if "e1" in cfg else _plan_pilot(config_path, cfg)
     plan["rubric_path"] = f"final_evaluation/prompts/{plan['rubric_version']}.txt"
     pj = _judge()
-    # judge_model / judge_effort from the e1 block; without them the pilot judge's own
-    # constants (the pilot config sets neither).
     plan["model"] = plan.get("model") or pj.JUDGE_MODEL
     plan["effort"] = plan.get("effort") or pj.JUDGE_EFFORT
     plan.setdefault("inventory", False)
@@ -343,21 +294,11 @@ def _load_done(out_path: Path, plan: dict) -> set:
 
 def execute_plan(plan: dict, out_dir: str | None = None, limit: int = 0,
                  service_tier: str = "flex", cache: bool = True) -> None:
-    """Runs the calls for real. Never called by the web app -- only by this CLI with
-    --execute. Every call goes through eval/pilot_judge.run_call, so the same JSON-shape
-    and locator checks and the same bounded retries apply as in the original pilot run.
-
-    Billing only (PROTOCOL 8a): `service_tier` "flex" (half price,
-    slower) and `cache` -- the same user text sent with cache breakpoints after the
-    submission and after report A, a cache key per paper, and the calls in cache_order().
-    Model, effort, rubric, and the token sequence the judge reads are unchanged.
-    service_tier="" and cache=False reproduce the pilot's request exactly."""
+    """Runs the calls for real. Never called by the web app -- only by this CLI with --execute. Every call goes through eval/pilot_judge.run_call, so the same JSON-shape and locator checks and the same bounded retries apply as in the original pilot run."""
     if not os.getenv("OPENAI_API_KEY"):
         raise SystemExit("OPENAI_API_KEY is not set -- refusing to execute E1 calls. "
                          "(Plan mode needs no key; this message only appears with --execute.)")
     if plan["problems"] and not plan["filtered"]:
-        # A partial run is allowed only when asked for explicitly (--papers/--pairs): an
-        # unfiltered run with a known gap would look complete in the results.
         raise SystemExit("plan has problems -- fix them, or narrow the run with --papers/--pairs:\n  "
                          + "\n  ".join(plan["problems"]))
     pj = _judge()
@@ -387,8 +328,6 @@ def execute_plan(plan: dict, out_dir: str | None = None, limit: int = 0,
             a_p, b_p = _report_file(d, paper, c["system_a"]), _report_file(d, paper, c["system_b"])
             call = {"paper_id": paper, "system_a": c["system_a"], "system_b": c["system_b"],
                     "call_index": c["call_index"]}
-            # Line ids per ROLE: the same report carries A-ids in one order and B-ids in
-            # the other, so a locator always names the role the judge saw.
             docs = {paper: {
                 "submission": pj.with_line_ids(sub_p.read_text(encoding="utf-8"), "S"),
                 "reports": {c["system_a"]: pj.with_line_ids(a_p.read_text(encoding="utf-8"), "A"),

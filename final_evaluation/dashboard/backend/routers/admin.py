@@ -1,19 +1,7 @@
-"""Admin-only endpoints: study/participant overview, code reset, session lock, closing
-the study, and the full research export. Every route depends on `current_admin`
-(deps.py), which is `current_participant` plus a `role == "admin"` check -- an admin
-session is a normal session for a Participant row with `role="admin"`, created only by
-`cli.py create-admin`, never by self-service.
-
-No system ranking is computed or returned here while a study is `active` (see
-`overview()`): section 7 of the protocol is explicit that the standard admin screen must
-not show one during data collection. `export_zip()` is the one place system identity and
-a comparable ranking are legitimately produced, and it is a file download an admin
-requests deliberately, not a number sitting on a dashboard screen.
-"""
+"""Admin-only endpoints: study/participant overview, code reset, session lock, closing the study, and the full research export. Every route depends on `current_admin` (deps.py), which is `current_participant` plus a `role == "admin"` check -- an admin session is a normal session for a Participant row with `role="admin"`, created only by `cli.py create-admin`, never by self-service."""
 from __future__ import annotations
 
 import csv
-import hashlib
 import io
 import json
 import zipfile
@@ -31,9 +19,7 @@ router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
 def _csv_safe(v) -> str:
-    """Neutralise formula injection: a cell starting with = + - @ is prefixed with a
-    tab, which spreadsheet programs treat as inert text instead of a formula. Applied to
-    every free-text field written into a CSV export (reasons, issue messages, notes)."""
+    """Neutralise formula injection: a cell starting with = + - @ is prefixed with a tab, which spreadsheet programs treat as inert text instead of a formula. Applied to every free-text field written into a CSV export (reasons, issue messages, notes)."""
     s = "" if v is None else str(v)
     if s[:1] in ("=", "+", "-", "@"):
         return "\t" + s
@@ -69,7 +55,6 @@ def overview(db: Session = Depends(get_db), admin: models.Participant = Depends(
                   "is_pilot": study.is_pilot} if study else None,
         "participants": people,
         "open_technical_issues": len(issues),
-        # No system-level ranking here -- see module docstring.
     }
 
 
@@ -122,7 +107,6 @@ def reset_code(body: ResetCodeBody, db: Session = Depends(get_db),
     db.add(models.AuditEvent(id=models.new_id(), study_id=admin.study_id, actor=f"admin:{admin.id}",
                              event_type="reset_code", payload={"participant_id": p.id}))
     db.commit()
-    # Returned once, exactly like at creation time -- not stored anywhere in plaintext.
     return {"ok": True, "new_code": new_code, "code_display": p.code_display}
 
 
@@ -139,7 +123,7 @@ def lock_participant(body: LockBody, db: Session = Depends(get_db),
     if p is None:
         raise HTTPException(404, "participant not found")
     if body.locked:
-        p.locked_until = datetime.now(timezone.utc) + security.SESSION_TTL_PARTICIPANT  # far future
+        p.locked_until = datetime.now(timezone.utc) + security.SESSION_TTL_PARTICIPANT
         db.query(models.Session_).filter(models.Session_.participant_id == p.id,
                                          models.Session_.revoked_at.is_(None)).update(
             {"revoked_at": datetime.now(timezone.utc)})
@@ -154,7 +138,7 @@ def lock_participant(body: LockBody, db: Session = Depends(get_db),
 
 
 class CloseStudyBody(BaseModel):
-    confirm: str  # must equal the study id, so this cannot be triggered by a stray click
+    confirm: str
 
 
 @router.post("/study/close", dependencies=[Depends(require_csrf)])
@@ -170,9 +154,6 @@ def close_study(body: CloseStudyBody, db: Session = Depends(get_db),
     return {"ok": True, "status": study.status}
 
 
-# --------------------------------------------------------------------------- #
-# Full research export -- the ONLY place system identity + orientation are exposed.
-# --------------------------------------------------------------------------- #
 
 def _build_export(db: Session, study_id: str) -> bytes:
     study = db.query(models.Study).filter(models.Study.id == study_id).first()
@@ -192,9 +173,9 @@ def _build_export(db: Session, study_id: str) -> bytes:
         models.PaperReading.study_id == study_id)}
 
     ratings_jsonl_lines = []
-    long_rows = []  # one row per task x rater x criterion
+    long_rows = []
     assignments_rows = []
-    completion_counter = {}  # participant_id -> {submitted, total}
+    completion_counter = {}
 
     for a in assignments:
         t = tasks.get(a.task_id)
@@ -203,7 +184,6 @@ def _build_export(db: Session, study_id: str) -> bytes:
         if not (t and paper and participant):
             continue
         final = finals.get(a.id)
-        # A/B -> real systems, using the FROZEN orientation on this assignment.
         sys_a, sys_b = ((t.system_a, t.system_b) if a.orientation == "forward"
                        else (t.system_b, t.system_a))
         rep_a, rep_b = ((t.report_a_id, t.report_b_id) if a.orientation == "forward"
@@ -305,8 +285,6 @@ def _build_export(db: Session, study_id: str) -> bytes:
                        i.created_at.isoformat(), i.resolved])
         z.writestr("technical_issues.csv", out.getvalue())
 
-        # One row per participant x paper: the two background answers (asked once per
-        # paper) and, in a non-pilot study, the reading step before the paper's tasks.
         out = io.StringIO(); w = csv.writer(out)
         w.writerow(["participant_code", "is_test_participant", "paper_id", "familiarity",
                     "read_before", "familiarity_at", "reading_opened_at", "reading_confirmed_at",
@@ -331,8 +309,6 @@ def _build_export(db: Session, study_id: str) -> bytes:
         w.writerows(completion_rows)
         z.writestr("completion.csv", out.getvalue())
 
-        # The raters' own background (asked once, at consent) -- needed to describe the
-        # rater pool; the codes stay pseudonymous.
         out = io.StringIO(); w = csv.writer(out)
         w.writerow(["participant_code", "is_test_participant", "review_experience",
                     "system_involvement", "system_involvement_note", "consent_at",

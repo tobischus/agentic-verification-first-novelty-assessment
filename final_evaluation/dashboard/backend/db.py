@@ -1,31 +1,13 @@
-"""Engine, session factory, and a small portable migration runner.
-
-One SQLAlchemy model definition (models.py) targets both SQLite (local dev,
-`final_evaluation/private/local_study.sqlite`) and PostgreSQL (Supabase, cloud). No
-per-backend fork of the schema or the queries exists anywhere in this package — the
-portability requirement is met by NOT writing dialect-specific SQL, not by maintaining
-two copies.
-
-Migrations are plain Python functions rather than raw `.sql` files on purpose: SQLite and
-PostgreSQL disagree on enough DDL (autoincrement syntax, native ENUM, etc.) that a single
-`.sql` file is not actually portable, and maintaining two dialects of hand-written SQL is
-exactly the "separate fachliche Implementierung" the brief rules out. Each migration gets
-`Base.metadata` and a `Connection` and applies its change with SQLAlchemy Core, which
-compiles to the right dialect for whichever engine it's given. Applied migrations are
-recorded in `schema_migrations`, so re-running `init-db` is a no-op after the first time
-and this doubles as a lightweight "have I already got the current schema?" check.
-"""
+"""Engine, session factory, and a small portable migration runner."""
 from __future__ import annotations
 
 import importlib
 import pkgutil
 from pathlib import Path
-from typing import Iterator
 
 from sqlalchemy import create_engine, text
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import sessionmaker
 
-from . import models
 
 MIGRATIONS_PACKAGE = "final_evaluation.dashboard.migrations"
 
@@ -33,14 +15,8 @@ MIGRATIONS_PACKAGE = "final_evaluation.dashboard.migrations"
 def make_engine(database_url: str):
     connect_args = {}
     if database_url.startswith("sqlite"):
-        # check_same_thread=False: FastAPI's threadpool may hand a request to a
-        # different thread than the one that opened the file-based connection; the ORM
-        # session itself is not shared across threads, only the pooled engine is.
         connect_args = {"check_same_thread": False}
         Path(database_url.replace("sqlite:///", "")).parent.mkdir(parents=True, exist_ok=True)
-    # A small, explicit pool: Supabase's free-tier pooler has few connections to hand
-    # out, and a Render free instance runs one worker anyway -- there is no benefit to
-    # a large local pool and a real cost to exhausting the shared one.
     kwargs = dict(connect_args=connect_args, future=True)
     if not database_url.startswith("sqlite"):
         kwargs.update(pool_size=3, max_overflow=2, pool_pre_ping=True, pool_recycle=300)
@@ -94,9 +70,3 @@ def run_migrations(engine) -> list:
     return applied_now
 
 
-def session_scope(factory: sessionmaker) -> Iterator[Session]:
-    db = factory()
-    try:
-        yield db
-    finally:
-        db.close()

@@ -1,31 +1,8 @@
-"""Materialise the pilot's frozen inputs from config/sources.pilot.yaml.
-
-Reads ONLY that file (plus config/pilot.yaml for the task/system list) -- never globs
-comparison/outputs/ itself, so an untracked draft appearing there later cannot silently
-change what a re-import produces. See sources.pilot.yaml's own header for how each
-(paper, system) source was resolved, including the one ambiguous case.
-
-For `kind: rendered` entries (agent, linear) this CALLS `battle_export.build()` /
-`battle_export.quote_index()` from the main pipeline, live, at import time. That is
-rendering an already-computed, already-frozen review to text -- zero model calls, the
-same deterministic function this repository already uses for its own comparison export
--- not a new review and not "erneute Reportgenerierung" in the sense the brief rules out.
-
-Writes to `final_evaluation/inputs/pilot/<paper>/` and
-`final_evaluation/manifests/pilot/reports.json`. Idempotent: re-running overwrites the
-frozen files and the manifest with the SAME deterministic content (the artifact JSON and
-battle_export.py are the only two things a re-render can pick up; if either has changed,
-that is the intended trigger to refresh with a bumped content_version, not a bug).
-
-Usage
------
-  python -m final_evaluation.cli import-pilot --sources final_evaluation/config/sources.pilot.yaml
-"""
+"""Materialise a study's frozen inputs (reports and submission texts) from its sources config."""
 from __future__ import annotations
 
 import hashlib
 import json
-import shutil
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -37,12 +14,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 FE_ROOT = REPO_ROOT / "final_evaluation"
 SRC_NOVELTY = REPO_ROOT / "src" / "novelty_assessment"
 
-#: Which subdirectory of inputs/ and manifests/ this import writes to. The pilot's own
-#: name is the default, so a call that does not set it behaves exactly as before; run()
-#: sets it from the study config's `inputs_dir`. Without this the main study's import
-#: would overwrite the pilot's frozen inputs, which are cited by already-collected
-#: ratings and must not move.
-_STUDY_DIR = "pilot"
+_STUDY_DIR = "main"
 
 
 def _sha256_bytes(b: bytes) -> str:
@@ -82,9 +54,6 @@ def _write(paper: str, name: str, content: bytes) -> dict:
 
 
 def _import_rendered(be, paper: str, system: str, spec: dict) -> dict:
-    # A run that has not happened yet leaves no artifact. Report that as a blocker so the
-    # manifest says which (paper, system) is still missing, instead of aborting the whole
-    # import over the first one.
     if not spec.get("artifact_a"):
         return {"blocker": "no `artifact_a` in the source entry"}
     artifact_a = REPO_ROOT / spec["artifact_a"]
@@ -129,21 +98,7 @@ def _import_native_pdf(paper: str, system: str, spec: dict) -> dict:
 
 
 def _import_deepreviewer(paper: str, system: str, spec: dict) -> dict:
-    """A completed DeepReviewer job's own output, markdown or their native PDF.
-
-    `file:` decides which: `final_report.md` is the review as text, `final_report.pdf`
-    their rendered report. A `.pdf` is shown the same way OpenNovelty's is -- their
-    layout and branding, no re-rendering by this repository.
-
-    One thing to know before naming a PDF here: DeepReviewer's OWN `final_report.pdf`
-    merges the review with the full annotated submission (measured: 47 pages over a
-    34-page paper). `eval/deepreviewer_review_pdf.py` re-renders the same report through
-    their builder with the merge skipped, writing `final_report_review_only.pdf` beside
-    it; that is the file to name for a study where the submission is already shown
-    separately and report length is a presentation variable.
-    """
-    # `job_dir` is left as a TODO in a generated sources file until the job has actually
-    # been run, so an absent key means "not run yet" and belongs in the manifest.
+    """A completed DeepReviewer job's own output, markdown or their native PDF."""
     if not spec.get("job_dir"):
         return {"blocker": "no `job_dir` in the source entry -- DeepReviewer has not run "
                            "for this paper"}
@@ -191,13 +146,7 @@ def _import_concat_text(paper: str, system: str, spec: dict) -> dict:
 
 
 def _import_submission(paper: str, spec: dict) -> dict:
-    """The submission PDF, plus the frozen text the E1 judge reads.
-
-    Both are recorded as blockers rather than raised when unresolved: a source the study
-    has not settled yet (the main study's submission text comes from DeepReviewer's MinerU
-    output, which does not exist until those jobs run) must show up in the manifest next to
-    the others, not stop the remaining papers from importing at all.
-    """
+    """The submission PDF, plus the frozen text the E1 judge reads."""
     out = {}
     pdf_rel = spec.get("pdf")
     if not pdf_rel:
@@ -219,13 +168,7 @@ def _import_submission(paper: str, spec: dict) -> dict:
 
 
 def _import_opennovelty_e1_text(paper: str, pdf_spec: dict) -> dict:
-    """A TEXT rendering of the OpenNovelty PDF for E1, using the SAME extractor already
-    used (and validated) for the transducing report earlier in this project --
-    eval/pdf_to_md.py, font-size heading inference, nothing summarised or reordered.
-    Explicitly NOT claimed content-equivalent to the native PDF/graphic without a manual
-    check -- see validate_inputs.py's e1_e2 check, which flags this pair for review
-    rather than asserting equivalence.
-    """
+    """A TEXT rendering of the OpenNovelty PDF for E1, using the SAME extractor already used (and validated) for the transducing report earlier in this project -- eval/pdf_to_md.py, font-size heading inference, nothing summarised or reordered. Explicitly NOT claimed content-equivalent to the native PDF/graphic without a manual check -- see validate_inputs.py's e1_e2 check, which flags this pair for review rather than asserting equivalence."""
     pdf_path = REPO_ROOT / pdf_spec["path"]
     if not pdf_path.is_file():
         return {"blocker": f"missing file: {pdf_spec['path']}"}
@@ -234,8 +177,6 @@ def _import_opennovelty_e1_text(paper: str, pdf_spec: dict) -> dict:
     pdf_to_md = importlib.import_module("pdf_to_md")
     text = pdf_to_md.convert(str(pdf_path)) if hasattr(pdf_to_md, "convert") else None
     if text is None:
-        # Fall back to invoking it as a script into a temp file, matching how it was
-        # run earlier in this project (eval/pdf_to_md.py --pdf ... --out ...).
         tmp_out = _out_dir(paper) / "_opennovelty_e1_tmp.md"
         r = subprocess.run([sys.executable, str(REPO_ROOT / "eval" / "pdf_to_md.py"),
                             "--pdf", str(pdf_path), "--out", str(tmp_out)],
@@ -249,14 +190,7 @@ def _import_opennovelty_e1_text(paper: str, pdf_spec: dict) -> dict:
 
 
 def _import_deepreviewer_e1_text(paper: str, spec: dict) -> dict:
-    """E1's text for a DeepReviewer report that E2 shows as a PDF.
-
-    Unlike OpenNovelty's, this needs no extractor and carries no equivalence caveat: the
-    PDF is rendered FROM `final_report.md` by their own builder, so the markdown is the
-    report's source rather than a reading of its output. E1 and E2 therefore see the same
-    content by construction -- `needs_manual_equivalence_check` is False for that reason,
-    not as an assumption.
-    """
+    """E1's text for a DeepReviewer report that E2 shows as a PDF."""
     md = REPO_ROOT / spec["job_dir"] / "final_report.md"
     if not md.is_file():
         return {"blocker": f"missing E1 source: {spec['job_dir']}/final_report.md"}
@@ -265,11 +199,11 @@ def _import_deepreviewer_e1_text(paper: str, spec: dict) -> dict:
             "note": "source markdown of the rendered PDF, not an extraction from it"}
 
 
-def run(sources_path: str, config_path: str = "final_evaluation/config/pilot.yaml") -> dict:
+def run(sources_path: str, config_path: str = "final_evaluation/config/main.yaml") -> dict:
     global _STUDY_DIR
     sources = yaml.safe_load((REPO_ROOT / sources_path).read_text(encoding="utf-8"))
     cfg = yaml.safe_load((REPO_ROOT / config_path).read_text(encoding="utf-8"))
-    _STUDY_DIR = cfg.get("inputs_dir") or "pilot"
+    _STUDY_DIR = cfg.get("inputs_dir") or "main"
     be = _load_battle_export()
 
     manifest = {"generated_at": datetime.now(timezone.utc).isoformat(), "git_head": _git_head(),
@@ -282,7 +216,7 @@ def run(sources_path: str, config_path: str = "final_evaluation/config/pilot.yam
             spec = psrc.get(system)
             if spec is None:
                 entry["blockers" ] = entry.get("blockers", [])
-                manifest["blockers"].append(f"{paper}/{system}: no entry in sources.pilot.yaml")
+                manifest["blockers"].append(f"{paper}/{system}: no entry in the sources config")
                 continue
             kind = spec["kind"]
             if kind == "rendered":
@@ -295,7 +229,6 @@ def run(sources_path: str, config_path: str = "final_evaluation/config/pilot.yam
                 result = _import_concat_text(paper, system, spec)
             else:
                 result = {"blocker": f"unknown source kind: {kind}"}
-            # A report E2 shows as a PDF still needs text for E1.
             if kind == "native_pdf" and system == "opennovelty":
                 result["e1"] = _import_opennovelty_e1_text(paper, spec)
             elif kind == "deepreviewer_job" and result.get("view_type") == "pdf":

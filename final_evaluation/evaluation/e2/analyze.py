@@ -1,15 +1,4 @@
-"""E2: turn an admin export ZIP into win/tie/loss tallies, human-human agreement, and
-(optionally) human-vs-E1-judge agreement. Reads ONLY `ratings.jsonl` from the export
-(each line already carries system_a/system_b/orientation resolved server-side -- see
-routers/admin.py's `_build_export`); this module never touches the live database.
-
-Verified against Krippendorff's own textbook example before being wired into the CLI --
-see the comment at the top of evaluation/e2/stats.py's test in tests/test_e2_stats.py.
-
-Usage
------
-  python -m final_evaluation.cli analyze-human --input final_evaluation/results/pilot/export.zip
-"""
+"""E2: turn an admin export ZIP into win/tie/loss tallies, human-human agreement, and (optionally) human-vs-E1-judge agreement. Reads ONLY `ratings.jsonl` from the export (each line already carries system_a/system_b/orientation resolved server-side -- see routers/admin.py's `_build_export`); this module never touches the live database."""
 from __future__ import annotations
 
 import hashlib
@@ -20,7 +9,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Optional
 
-from .stats import bootstrap_ci, exact_agreement, krippendorff_alpha_nominal
+from .stats import exact_agreement, krippendorff_alpha_nominal
 
 CRITERIA = ("submission_fidelity", "comparison_specificity", "presented_evidence",
            "conclusion_warrant", "reviewer_usefulness")
@@ -48,14 +37,11 @@ def _winner_system(criterion_val: dict, rec: dict) -> Optional[str]:
         return rec["system_b"]
     if w == "tie":
         return "tie"
-    return None  # unclear or missing -> not a preference
+    return None
 
 
 def run(input_path: str, include_test: bool = False) -> dict:
-    """`include_test`: the pilot's two raters are deliberately TEST participants
-    (`is_test=True`), so analysing the pilot at all requires passing True -- the CLI's
-    `--include-test` flag. The default stays False so a main-study analysis can never
-    quietly mix a leftover test account's answers into real results."""
+    """`include_test`: the pilot's two raters are deliberately TEST participants (`is_test=True`), so analysing the pilot at all requires passing True -- the CLI's `--include-test` flag. The default stays False so a main-study analysis can never quietly mix a leftover test account's answers into real results."""
     all_records = _load_ratings(input_path)
     records = [r for r in all_records
               if r.get("status") == "submitted" and not r.get("is_practice")
@@ -63,16 +49,12 @@ def run(input_path: str, include_test: bool = False) -> dict:
     excluded_test = 0 if include_test else sum(
         1 for r in all_records if r.get("is_test_participant"))
 
-    # tallies[criterion][pair_type] -> Counter-ish dict over {sysA_wins, sysB_wins, tie, unclear}
-    # kept as named systems, not "A"/"B", labelled per-cell below.
     tallies = defaultdict(lambda: defaultdict(lambda: {"wins": defaultdict(int), "tie": 0,
                                                        "unclear": 0, "n": 0}))
     per_paper_tallies = defaultdict(lambda: defaultdict(lambda: defaultdict(
         lambda: {"wins": defaultdict(int), "tie": 0, "unclear": 0, "n": 0})))
 
-    # For agreement: unit_id -> {criterion: {participant: category}}, scoped per pair_type
-    # so alpha/agreement are computed WITHIN a comparable pair, never across different pairs.
-    units_by_pair_crit = defaultdict(lambda: defaultdict(dict))  # (pair_type) -> crit -> unit -> {participant: cat}
+    units_by_pair_crit = defaultdict(lambda: defaultdict(dict))
 
     for rec in records:
         pt = _pair_type(rec)
@@ -95,7 +77,6 @@ def run(input_path: str, include_test: bool = False) -> dict:
                     target["wins"][winner_sys] += 1
             units_by_pair_crit[pt][crit].setdefault(unit_id, {})[rec["participant_code"]] = winner_sys
 
-    # Human-human agreement + Krippendorff's alpha, per criterion per pair_type.
     agreement = {}
     for pt, by_crit in units_by_pair_crit.items():
         agreement[pt] = {}
@@ -145,8 +126,7 @@ PROMPTS = Path(__file__).resolve().parents[2] / "prompts"
 
 
 def criteria_text(rubric_text: str) -> Optional[str]:
-    """A rubric's CRITERIA section -- from the line `CRITERIA` to the line `PROCEDURE`,
-    the part criteria.json and the rating form copy for the raters. None if absent."""
+    """A rubric's CRITERIA section -- from the line `CRITERIA` to the line `PROCEDURE`, the part criteria.json and the rating form copy for the raters. None if absent."""
     m = re.search(r"^CRITERIA\n(.*?)^PROCEDURE\n", rubric_text, re.S | re.M)
     return m.group(1) if m else None
 
@@ -173,17 +153,7 @@ def _judge_system(judge: dict, crit: str) -> Optional[str]:
 
 
 def compare_to_e1(export_path: str, e1_jsonl_path: str, include_test: bool = False) -> dict:
-    """Each human judgement against the E1 judge call of the SAME task in the SAME A/B
-    orientation -- and only where the judge read the same criteria and the same report
-    content: the CRITERIA section of the call's rubric must equal the one in the export's
-    rubric.txt, and the call's `content_version_a/_b` must equal the export's
-    manifest.json for exactly those reports. Anything else is `not_comparable`
-    with its reason; nothing is matched by task id alone, since a task id is no proof the
-    underlying text was the same. Human and judge votes are compared, never pooled.
-
-    `unclear` on either side is a missing value, as in the human-human agreement, and is
-    counted separately. `judge_stable` restricts to units where the judge named the same
-    winner in the other orientation too (position-robust judge verdicts)."""
+    """Each human judgement against the E1 judge call of the SAME task in the SAME A/B orientation -- and only where the judge read the same criteria and the same report content: the CRITERIA section of the call's rubric must equal the one in the export's rubric.txt, and the call's `content_version_a/_b` must equal the export's manifest.json for exactly those reports. Anything else is `not_comparable` with its reason; nothing is matched by task id alone, since a task id is no proof the underlying text was the same. Human and judge votes are compared, never pooled."""
     manifest = _load_export_manifest(export_path)
     versions = {(r["paper_id"], r["system_id"]): r["content_version"]
                 for r in manifest.get("reports") or []}
@@ -197,7 +167,7 @@ def compare_to_e1(export_path: str, e1_jsonl_path: str, include_test: bool = Fal
                if r.get("status") == "submitted" and not r.get("is_practice")
                and (include_test or not r.get("is_test_participant"))]
 
-    not_comparable = defaultdict(int)          # reason -> human responses
+    not_comparable = defaultdict(int)
     per_crit = {c: {"compared": 0, "agree": 0, "human_unclear": 0, "judge_unclear": 0,
                     "stable_compared": 0, "stable_agree": 0, "confusion": defaultdict(int)}
                 for c in CRITERIA}
@@ -212,7 +182,6 @@ def compare_to_e1(export_path: str, e1_jsonl_path: str, include_test: bool = Fal
         if judge.get("content_version_a") is None or judge.get("content_version_b") is None:
             not_comparable["judge record carries no content versions (older E1 output)"] += 1
             continue
-        # The judge rubric may add judge-only sections; what must match is the criteria.
         judge_criteria = _judge_criteria(judge.get("rubric_version"), criteria_cache)
         if rater_criteria is None or judge_criteria != rater_criteria:
             not_comparable[f"criteria differ (judge {judge.get('rubric_version')})"] += 1

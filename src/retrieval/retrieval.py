@@ -1,4 +1,3 @@
-# Standard library imports
 import argparse
 import json
 import logging
@@ -6,11 +5,10 @@ import os
 import re
 import sys
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 
-# Third-party imports
 import numpy as np
 import requests
 from dataclasses import dataclass, asdict
@@ -26,18 +24,12 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 logger = logging.getLogger(__name__)
 
-# Prior-work cutoff, shared by the retrieval filter and the version pinning in
-# paper_versions: a candidate must stand at least this far before the submission.
-# Own directory on the path first -- this file is imported both as a script and as a
-# module from the orchestrator, and only the script form has it there already.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import paper_versions as pv
 from paper_versions import DEFAULT_MIN_GAP_DAYS as MIN_PRIOR_GAP_DAYS
 
-# Load environment variables
 load_dotenv()
 
-# RankGPT lives in the repo root (cloned alongside this project).
 sys.path.append(str(Path(__file__).resolve().parents[2] / "RankGPT"))
 
 from rank_gpt import (
@@ -79,14 +71,11 @@ class Paper:
     authors: str = ""
     novel: str = None
     cited_paper: bool = False
-    externalIds: dict = None  # S2 external ids (ArXiv/DOI/...) carried through for Step-4 PDF fetch
-    doi: str = None           # convenience copy of externalIds["DOI"], for the PDF fetch
-    relevance: float = 0.0  # SPECTER2 cosine similarity to the submission (0-1), for the UI
-    cluster: int = -1       # topical cluster id among the final related work (UI grouping)
-    cluster_label: str = ""  # human-readable cluster heading
-    # "" when the record's own date clears the prior-work cutoff; "too_recent"/"unknown"
-    # for a CITED paper kept in spite of it (see merge_paper_collections). Carried into
-    # ranked_papers.json so version pinning and the reviewer both see which papers these are.
+    externalIds: dict = None
+    doi: str = None
+    relevance: float = 0.0
+    cluster: int = -1
+    cluster_label: str = ""
     record_date_verdict: str = ""
     embedding: np.ndarray = None
 
@@ -110,28 +99,14 @@ def _abstract_shingles(text: str, n: int = 10):
 
 def is_same_paper(candidate_abstract: str, submission_abstract: str,
                   n: int = 10, min_shared: int = 2, token_ratio: float = 95.0) -> bool:
-    """True when a retrieved paper is the SAME work as the submission (e.g. an earlier
-    arXiv version that was renamed, so the title-similarity check misses it).
-
-    Two versions of one paper reuse long verbatim word runs in the abstract even after
-    heavy editing, whereas different papers -- even on the exact same topic -- essentially
-    never share a 10-word span. Empirically (real rename "Soft Prompts Go Hard" <-
-    "Self-interpreting Adversarial Images"): 9 shared 10-grams vs 0 for the closest
-    genuine related-work paper, while token-set similarity was only ~74% and could not
-    separate them. So the primary signal is shared long n-grams; a high token-set ratio
-    also catches the trivial preprint==published case where abstracts are near-identical.
-    Deliberately strict (>=2 distinct 10-word verbatim runs) so real related work is never
-    dropped -- a false positive would silently hide a legitimate paper from the reviewer.
-    """
+    """True when a retrieved paper is the SAME work as the submission (e.g. an earlier arXiv version that was renamed, so the title-similarity check misses it)."""
     ca = (candidate_abstract or "").strip()
     sa = (submission_abstract or "").strip()
-    # ignore the S2 "No abstract available" placeholder and anything too short to judge
     if len(ca) < 80 or len(sa) < 80 or "no abstract available" in ca.lower():
         return False
     shared = len(_abstract_shingles(ca, n) & _abstract_shingles(sa, n))
     if shared >= min_shared:
         return True
-    # near-identical abstracts (same paper, barely edited) -> very high token overlap
     return fuzz.token_set_ratio(ca.lower(), sa.lower()) >= token_ratio
 
 
@@ -179,21 +154,11 @@ class PaperRankingSystem:
         results_dir: str = "results",
         log_dir: str = "logs",
     ):
-        """
-        Initialize the paper ranking system.
-
-        Args:
-            keyword_model: Model for keyword generation
-            ranking_model: Model for RankGPT ranking
-            embedding_model: Model for computing embeddings
-            results_dir: Directory to save results
-            log_dir: Directory to save log files
-        """
+        """Initialize the paper ranking system."""
         self.base_url = "https://api.semanticscholar.org/graph/v1/paper"
         self.results_dir = Path(results_dir)
         self.results_dir.mkdir(exist_ok=True)
 
-        # Setup logging
         self.log_dir = Path(log_dir)
         self.log_dir.mkdir(exist_ok=True)
         self._setup_logging()
@@ -203,20 +168,14 @@ class PaperRankingSystem:
         self.logger.info(f"Ranking model: {ranking_model}")
         self.logger.info(f"Embedding model: {embedding_model}")
 
-        # Initialize models
-        # temperature=0 -> deterministic keyword generation (same paper -> same queries),
-        # so retrieval is reproducible across runs.
         self.keyword_llm = ChatLiteLLM(model=keyword_model, temperature=0)
         self.ranking_model = ranking_model
         self.embedding_model = SentenceTransformer(embedding_model)
 
-        # Get API keys from environment
         self.openai_api_key = os.getenv("OPENAI_API_KEY")
         self.s2_api_key = os.getenv("SEMANTIC_SCHOLAR_API_KEY")
 
-        # Proactive throttle to respect S2's 1 req/sec (cumulative) limit.
-        # S2 advises staying *below* the threshold, so space requests >1s apart.
-        self._s2_min_interval = 1.1      # adaptive: grows on 429, eases on success
+        self._s2_min_interval = 1.1
         self._s2_floor_interval = 1.1
         self._s2_max_interval = 8.0
         self._s2_last_request = 0.0
@@ -229,14 +188,11 @@ class PaperRankingSystem:
 
     def _setup_logging(self):
         """Setup logging configuration for both file and console output."""
-        # Create logger
         self.logger = logging.getLogger("PaperRankingSystem")
         self.logger.setLevel(logging.INFO)
 
-        # Clear any existing handlers
         self.logger.handlers.clear()
 
-        # Create formatters
         detailed_formatter = logging.Formatter(
             "%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s"
         )
@@ -244,18 +200,15 @@ class PaperRankingSystem:
             "%(asctime)s - %(levelname)s - %(message)s"
         )
 
-        # File handler for detailed logs
         log_file = self.log_dir / f"paper_ranking_{time.strftime('%Y%m%d_%H%M%S')}.log"
         file_handler = logging.FileHandler(log_file)
         file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(detailed_formatter)
 
-        # Console handler for important messages
         console_handler = logging.StreamHandler()
         console_handler.setLevel(logging.INFO)
         console_handler.setFormatter(simple_formatter)
 
-        # Add handlers to logger
         self.logger.addHandler(file_handler)
         self.logger.addHandler(console_handler)
 
@@ -281,11 +234,9 @@ class PaperRankingSystem:
 
                 if response.status_code == 200:
                     self.logger.debug(f"Request successful on attempt {attempt + 1}")
-                    # success -> ease spacing back toward the floor
                     self._s2_min_interval = max(self._s2_floor_interval, self._s2_min_interval * 0.9)
                     return response.json()
                 elif response.status_code == 429:
-                    # Slow future requests down and wait exactly as long as S2 asks.
                     self._s2_min_interval = min(self._s2_max_interval, self._s2_min_interval * 1.5)
                     ra = response.headers.get("Retry-After")
                     try:
@@ -299,7 +250,6 @@ class PaperRankingSystem:
                     time.sleep(wait_time)
                     continue
                 else:
-                    # Other HTTP errors
                     self.logger.warning(f"HTTP {response.status_code}: {response.text}")
                     if attempt == max_retries - 1:
                         self.logger.error(
@@ -381,7 +331,6 @@ class PaperRankingSystem:
 
         except Exception as e:
             self.logger.error(f"Error generating keywords: {str(e)}")
-            # Fallback to simple keywords extracted from title
             fallback_queries = source_paper.title.lower().split()[:4]
             self.logger.warning(
                 f"Using fallback queries from title: {fallback_queries}"
@@ -408,7 +357,7 @@ class PaperRankingSystem:
             self.logger.warning("No Semantic Scholar API key found - using public API")
 
         try:
-            import progress as _progress  # optional sub-progress for the frontend
+            import progress as _progress
         except Exception:
             _progress = None
         if _progress:
@@ -466,32 +415,16 @@ class PaperRankingSystem:
 
         def is_valid_paper(paper: Paper, source_paper: Paper) -> bool:
 
-            # Title similarity check
             if fuzz.ratio(paper.title.lower(), source_paper.title.lower()) >= 90:
                 self.logger.debug(f"Skipping similar title: {paper.title}")
                 return False
 
-            # Same-paper check: an earlier/renamed VERSION of the submission itself (the
-            # title check misses it when the paper was renamed between versions). Detected
-            # via shared long verbatim n-grams in the abstract.
             if is_same_paper(paper.abstract, source_paper.abstract):
                 self.logger.info(
                     f"Skipping the submission's own version (abstract near-duplicate): {paper.title}"
                 )
                 return False
 
-            # The cutoff, over whole date INTERVALS rather than points.
-            #
-            # This used to run in two tiers: full dates were held to a 90-day gap, and
-            # anything left over fell through to "an earlier year is fine". Those two do
-            # not agree. A paper dated 2024 against a submission dated 2025 passed the
-            # year rule while the true gap could be a single day -- December 31st to
-            # January 1st -- which the date rule would have rejected outright. A bare year
-            # is a 365-day interval, not a date, and the only honest reading of one is the
-            # whole span it could mean (see paper_versions.gap_verdict).
-            #
-            # So there is one rule now, and a granularity that cannot settle it says so
-            # rather than guessing in the permissive direction.
             stated = paper.publication_date or paper.year
             source_stated = source_paper.publication_date or source_paper.year
             verdict = pv.gap_verdict(stated, source_stated, MIN_PRIOR_GAP_DAYS)
@@ -503,33 +436,19 @@ class PaperRankingSystem:
                     f"| {paper.title[:60]}"
                 )
                 return False
-            # "unknown": the dates are too coarse to establish the gap. Logged at info,
-            # not debug -- this is a data problem a reviewer may want to know about, and
-            # the old code resolved exactly this case silently in favour of including it.
             self.logger.info(
                 f"Skipping paper whose dating cannot establish a {MIN_PRIOR_GAP_DAYS}-day "
                 f"gap: {stated!r} vs submission {source_stated!r} | {paper.title[:60]}"
             )
             return False
 
-        # Cited papers are kept even when their RECORD looks too recent, but no longer
-        # silently: being cited is good evidence the work predates the submission, while
-        # the date attached to it is the date of the newest record S2 holds -- typically a
-        # later version of the very paper that was cited. Four of the twenty papers in the
-        # graphrag_when_to_use pool arrived this way, two of them dated AFTER the
-        # submission, and both were later marked "published after the cutoff" by hand.
-        #
-        # Which document to actually read is settled downstream by pinning a version
-        # (paper_versions.resolve_version); what belongs here is the flag saying the
-        # record's own date does not clear the cutoff, so that step -- and the reviewer --
-        # can see which papers rest on it.
         for paper in cited_papers:
             if is_same_paper(paper.abstract, source_paper.abstract):
                 self.logger.info(
                     f"Skipping cited paper that is the submission's own version: {paper.title}"
                 )
                 continue
-            paper.cited_paper = True  # Add this flag
+            paper.cited_paper = True
             stated = paper.publication_date or paper.year
             source_stated = source_paper.publication_date or source_paper.year
             verdict = pv.gap_verdict(stated, source_stated, MIN_PRIOR_GAP_DAYS)
@@ -542,7 +461,6 @@ class PaperRankingSystem:
                 )
             unique_papers[paper.paper_id] = paper
 
-        # Add query papers if valid and not duplicate
         filtered_count = 0
         for paper in query_papers:
             if paper.paper_id not in unique_papers and is_valid_paper(
@@ -568,7 +486,6 @@ class PaperRankingSystem:
 
         self.logger.info(f"Computing embeddings for {len(texts)} texts")
 
-        # Filter out empty texts and keep track of indices
         valid_texts = []
         valid_indices = []
         for i, text in enumerate(texts):
@@ -582,10 +499,8 @@ class PaperRankingSystem:
 
         self.logger.debug(f"Computing embeddings for {len(valid_texts)} valid texts")
 
-        # Compute embeddings for valid texts
         embeddings = self.embedding_model.encode(valid_texts, convert_to_numpy=True)
 
-        # Create result array with zeros for empty texts
         result = []
         valid_idx = 0
         for i in range(len(texts)):
@@ -641,8 +556,6 @@ class PaperRankingSystem:
         try:
             if ranking_type == "general":
                 self.logger.debug("Using sliding windows approach for general ranking")
-                # Upstream RankGPT's sliding_windows returns only the reranked item
-                # (no cost); Afzal's fork returned (item, cost). Adapt to upstream.
                 ranked_item_list = sliding_windows(
                     item=item,
                     rank_start=0,
@@ -655,7 +568,6 @@ class PaperRankingSystem:
                 total_cost = 0.0
             else:
                 self.logger.debug("Using purpose-based ranking approach")
-                # Purpose-based ranking
                 import copy
 
                 rank_start = 0
@@ -683,7 +595,6 @@ class PaperRankingSystem:
                         PURPOSE_PROMPT_PREFIX + messages[3:-1] + PURPOSE_PROMPT_POST
                     )
 
-                    # Upstream run_llm returns only the permutation string (no cost).
                     permutation = run_llm(
                         messages,
                         model_name=self.ranking_model,
@@ -697,7 +608,6 @@ class PaperRankingSystem:
                     end_pos = end_pos - step
                     start_pos = start_pos - step
 
-            # Reconstruct paper list from ranked results
             reranked_papers_list = []
             failed_matches = 0
             for r_paper in ranked_item_list["hits"]:
@@ -729,7 +639,7 @@ class PaperRankingSystem:
         except Exception as e:
             self.logger.error(f"Error in RankGPT ranking ({ranking_type}): {str(e)}")
             self.logger.warning("Returning original paper order due to ranking failure")
-            return papers, 0.0  # Return original order if ranking fails
+            return papers, 0.0
 
     def combine_rankings(
         self, general_ranked: List[Paper], purpose_ranked: List[Paper], k: int = 10
@@ -737,11 +647,9 @@ class PaperRankingSystem:
         """Combine the top-k papers from both rankings."""
         unique_papers = {}
 
-        # Add top-k papers from general ranking
         for paper in general_ranked[:k]:
             unique_papers[paper.paper_id] = paper
 
-        # Add top-k papers from purpose ranking
         for paper in purpose_ranked[:k]:
             if paper.paper_id not in unique_papers:
                 unique_papers[paper.paper_id] = paper
@@ -749,9 +657,7 @@ class PaperRankingSystem:
         return list(unique_papers.values())
 
     def cluster_papers(self, papers: List[Paper]) -> None:
-        """Group the FINAL related work into topical clusters (UI navigation aid only,
-        never a judgment input). Uses the already-computed SPECTER2 embeddings (no extra
-        model load) + KMeans; labels each cluster via the LLM (keyword fallback)."""
+        """Group the FINAL related work into topical clusters (UI navigation aid only, never a judgment input). Uses the already-computed SPECTER2 embeddings (no extra model load) + KMeans; labels each cluster via the LLM (keyword fallback)."""
         papers = [p for p in papers if p is not None]
         n = len(papers)
         if n == 0:
@@ -767,7 +673,7 @@ class PaperRankingSystem:
                 )
                 norms = np.linalg.norm(embs, axis=1, keepdims=True)
                 norms[norms == 0] = 1.0
-                embs = embs / norms  # L2-normalize -> KMeans approximates cosine k-means
+                embs = embs / norms
                 k = max(2, min(5, round(n / 4)))
                 labels = KMeans(n_clusters=k, random_state=0, n_init=10).fit_predict(embs)
                 for p, c in zip(papers, labels):
@@ -831,19 +737,16 @@ class PaperRankingSystem:
         self.logger.info(f"Saving results to {self.results_dir}")
 
         try:
-            # Save final ranked papers
             with open(self.results_dir / "ranked_papers.json", "w") as f:
                 json.dump(
                     [p.to_dict() for p in results.final_ranked_papers], f, indent=2
                 )
 
-            # Save all retrieved papers
             with open(self.results_dir / "all_retrieved_papers.json", "w") as f:
                 json.dump(
                     [p.to_dict() for p in results.all_retrieved_papers], f, indent=2
                 )
 
-            # Save metadata
             metadata = {
                 "submission_id": results.submission_id,
                 "queries_used": results.queries_used,
@@ -856,7 +759,6 @@ class PaperRankingSystem:
             with open(self.results_dir / "metadata.json", "w") as f:
                 json.dump(metadata, f, indent=2)
 
-            # Save complete results
             with open(self.results_dir / "complete_results.json", "w") as f:
                 json.dump(results.to_dict(), f, indent=2)
 
@@ -881,20 +783,7 @@ class PaperRankingSystem:
         top_n_similarity: int = 100,
         combination_k: int = 10,
     ) -> RankingResults:
-        """
-        Main pipeline to find papers similar to the source paper.
-
-        Args:
-            source_paper: Paper object containing the paper to compare against
-            cited_papers: List of papers cited by the source paper
-            submission_id: Unique identifier for this submission
-            max_papers_per_query: Maximum papers to retrieve per search query
-            top_n_similarity: Number of papers to keep after similarity filtering
-            combination_k: Number of top papers to take from each ranking
-
-        Returns:
-            RankingResults object containing all results and metadata
-        """
+        """Main pipeline to find papers similar to the source paper."""
         self.logger.info(f"Starting pipeline for submission: {submission_id}")
         self.logger.info(f"Source paper: {source_paper.title}")
         self.logger.info(
@@ -904,25 +793,21 @@ class PaperRankingSystem:
         total_cost = 0.0
 
         try:
-            # Step 1: Generate search queries
             self.logger.info("Step 1: Generating search queries")
             queries, cost = self.generate_search_queries(source_paper)
             total_cost += cost
 
-            # Step 2: Fetch papers from Semantic Scholar
             self.logger.info("Step 2: Fetching papers from Semantic Scholar")
             year = int(source_paper.year) if source_paper.year else None
             query_papers = self.fetch_papers_from_semantic_scholar(
                 queries, max_papers_per_query, year
             )
 
-            # Step 3: Merge paper collections
             self.logger.info("Step 3: Merging paper collections")
             all_papers = self.merge_paper_collections(
                 cited_papers, query_papers, source_paper
             )
 
-            # Step 4: Compute embeddings in batch
             self.logger.info("Step 4: Computing embeddings")
             all_abstracts = [source_paper.abstract] + [p.abstract for p in all_papers]
             embeddings = self.compute_embeddings_batch(all_abstracts)
@@ -931,12 +816,10 @@ class PaperRankingSystem:
             for i, paper in enumerate(all_papers):
                 paper.embedding = embeddings[i + 1]
 
-            # Step 5: Filter top N papers using similarity
             self.logger.info("Step 5: Filtering papers by similarity")
             similarity_scores = self.compute_similarity_scores(
                 source_paper.embedding, [p.embedding for p in all_papers]
             )
-            # Persist the similarity as a 0-1 relevance score for the frontend.
             for i, p in enumerate(all_papers):
                 if i < len(similarity_scores):
                     p.relevance = round(float(similarity_scores[i]), 4)
@@ -948,10 +831,9 @@ class PaperRankingSystem:
                 f"Filtered to top {len(top_n_papers)} papers by similarity"
             )
 
-            # Step 6: Perform RankGPT ranking (two passes: general + purpose)
             self.logger.info("Step 6: Performing RankGPT ranking")
             try:
-                import progress as _progress  # optional sub-progress for the frontend
+                import progress as _progress
             except Exception:
                 _progress = None
             if _progress:
@@ -970,21 +852,18 @@ class PaperRankingSystem:
             if _progress:
                 _progress.report(2, 2)
 
-            # Step 7: Combine rankings
             self.logger.info("Step 7: Combining rankings")
             final_ranked = self.combine_rankings(
                 general_ranked, purpose_ranked, combination_k
             )
             self.logger.info(f"Final ranking contains {len(final_ranked)} papers")
 
-            # Step 8: Cluster the final related work into topical groups (UI grouping)
             self.cluster_papers(final_ranked)
             cited_count, non_cited_count = self.count_cited_papers(final_ranked)
             self.logger.info(
                 f"Final ranking: {cited_count} cited + {non_cited_count} non-cited = {len(final_ranked)} total"
             )
 
-            # Create results object
             results = RankingResults(
                 submission_id=submission_id,
                 source_paper=source_paper,
@@ -998,7 +877,6 @@ class PaperRankingSystem:
                 purpose_ranking=purpose_ranked,
             )
 
-            # Print final summary
             print(f"\n=== FINAL RANKING SUMMARY ===")
             print(f"Total papers in final ranking: {len(final_ranked)}")
             print(f"Cited papers: {cited_count}")
@@ -1009,7 +887,6 @@ class PaperRankingSystem:
                 else "0%"
             )
 
-            # Save results
             self.save_results(results)
 
             self.logger.info(
@@ -1019,7 +896,6 @@ class PaperRankingSystem:
 
         except Exception as e:
             self.logger.error(f"Error in pipeline: {str(e)}", exc_info=True)
-            # Save partial results if possible
             self.logger.info("Attempting to save partial results")
             try:
                 partial_results = RankingResults(
@@ -1043,17 +919,7 @@ class PaperRankingSystem:
 
 
 def process_for_pipeline(data_dir: str, submission_id: str) -> bool:
-    """
-    Process a single submission for pipeline integration.
-    
-    Args:
-        data_dir: Base data directory for pipeline
-        submission_id: ID of the submission
-    
-    Returns:
-        Success status
-    """
-    # Load submission data
+    """Process a single submission for pipeline integration."""
     input_file = Path(data_dir) / submission_id / f"{submission_id}.json"
     
     if not input_file.exists():
@@ -1062,7 +928,6 @@ def process_for_pipeline(data_dir: str, submission_id: str) -> bool:
     with open(input_file, "r", encoding="utf-8") as f:
         submission_data = json.load(f)
     
-    # Initialize ranking system
     ranking_system = PaperRankingSystem(
         keyword_model="gpt-4o",
         ranking_model="gpt-3.5-turbo",
@@ -1072,14 +937,6 @@ def process_for_pipeline(data_dir: str, submission_id: str) -> bool:
     )
     
     try:
-        # Create source paper.
-        # The submission date drives the "prior work" cutoff: papers published in/after
-        # it are filtered out (S2 &year=- param + is_valid_paper). It is extracted from
-        # the PDF header during document processing (grobid_client._resolve_date) and
-        # stored in {id}.json. If the PDF carries no date (e.g. anonymous submissions),
-        # we fall back to *today* -- the paper is "under review now", so recent work is
-        # still valid prior work. NEVER hardcode a past year: that silently drops the
-        # most relevant recent literature.
         _today = datetime.now()
         sub_year = str(submission_data.get("year") or _today.year)
         sub_pub_date = submission_data.get("publication_date") or _today.strftime("%Y-%m-%d")
@@ -1091,7 +948,6 @@ def process_for_pipeline(data_dir: str, submission_id: str) -> bool:
             publication_date=sub_pub_date,
         )
         
-        # Process cited papers
         valid_cited_papers = []
         for cited_paper_data in submission_data.get("cited_papers", []):
             if cited_paper_data.get("ss_paper_obj"):
@@ -1110,7 +966,6 @@ def process_for_pipeline(data_dir: str, submission_id: str) -> bool:
             ranking_system.logger.warning(f"No valid cited papers found for {submission_id}")
             return False
         
-        # Run the pipeline
         ranking_system.find_similar_papers(
             source_paper=source_paper,
             cited_papers=valid_cited_papers,
@@ -1168,7 +1023,6 @@ def main():
     
     args = parser.parse_args()
     
-    # Process single submission
     success = process_for_pipeline(args.data_dir, args.submission_id)
     if success:
         print(f"✅ Successfully processed submission {args.submission_id}")

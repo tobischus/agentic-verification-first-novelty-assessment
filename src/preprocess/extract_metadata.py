@@ -1,9 +1,4 @@
-#!/usr/bin/env python3
-"""
-Enhanced GROBID TEI XML Parser
-Extracts title, abstract, cited papers, and citation contexts from GROBID-parsed PDFs.
-Based on efficient lxml parsing approach.
-"""
+"""Enhanced GROBID TEI XML Parser Extracts title, abstract, cited papers, and citation contexts from GROBID-parsed PDFs. Based on efficient lxml parsing approach."""
 
 import argparse
 import json
@@ -15,10 +10,8 @@ from dataclasses import dataclass, asdict
 from lxml import etree
 from dotenv import load_dotenv
 
-# Load environment variables for consistency
 load_dotenv()
 
-# TEI namespace
 NS = {"tei": "http://www.tei-c.org/ns/1.0"}
 
 
@@ -78,14 +71,11 @@ class EnhancedGrobidParser:
             root = etree.parse(str(tei_path))
             pdf_name = tei_path.stem.replace(".grobid.tei", "").replace(".tei", "")
 
-            # Extract basic paper information
             title = self._extract_title(root)
             abstract = self._extract_abstract(root)
 
-            # Extract cited papers from bibliography
             cited_papers = self._extract_cited_papers(root)
 
-            # Extract citation contexts
             citation_contexts = self._extract_citation_contexts(root, cited_papers)
 
             return ParsedPaper(
@@ -102,14 +92,12 @@ class EnhancedGrobidParser:
 
     def _extract_title(self, root: etree._ElementTree) -> Optional[str]:
         """Extract the paper title."""
-        # Try main title first
         title_elems = root.xpath(
             './/tei:titleStmt/tei:title[@type="main"]', namespaces=self.ns
         )
         if title_elems:
             return self._get_text_content(title_elems[0]).strip()
 
-        # Fallback to any title in titleStmt
         title_elems = root.xpath(".//tei:titleStmt/tei:title", namespaces=self.ns)
         if title_elems:
             return self._get_text_content(title_elems[0]).strip()
@@ -121,7 +109,6 @@ class EnhancedGrobidParser:
         abstract_elems = root.xpath(".//tei:abstract", namespaces=self.ns)
         if abstract_elems:
             abstract_elem = abstract_elems[0]
-            # Get text from all paragraphs in abstract
             paragraphs = abstract_elem.xpath(".//tei:p", namespaces=self.ns)
             if paragraphs:
                 abstract_text = " ".join(
@@ -137,16 +124,13 @@ class EnhancedGrobidParser:
         """Extract cited papers from bibliography."""
         cited_papers = []
 
-        # Find all bibliography entries
         bib_entries = root.xpath(".//tei:listBibl/tei:biblStruct", namespaces=self.ns)
 
         for bib in bib_entries:
-            # Get citation ID
             cite_id = bib.get("{http://www.w3.org/XML/1998/namespace}id")
             if not cite_id:
                 continue
 
-            # Extract title
             title_elems = bib.xpath(
                 './/tei:analytic/tei:title[@type="main"] | .//tei:monogr/tei:title[@type="main"] | .//tei:title',
                 namespaces=self.ns,
@@ -155,7 +139,6 @@ class EnhancedGrobidParser:
                 self._get_text_content(title_elems[0]).strip() if title_elems else None
             )
 
-            # Extract authors
             authors = []
             author_elems = bib.xpath(
                 ".//tei:analytic/tei:author/tei:persName | .//tei:monogr/tei:author/tei:persName",
@@ -177,7 +160,6 @@ class EnhancedGrobidParser:
                 if full_name:
                     authors.append(full_name)
 
-            # Extract year
             year = None
             date_elems = bib.xpath(
                 './/tei:imprint/tei:date[@type="published"]', namespaces=self.ns
@@ -187,7 +169,6 @@ class EnhancedGrobidParser:
                 if when_attr and len(when_attr) >= 4:
                     year = when_attr[:4]
 
-            # Extract venue
             venue_elems = bib.xpath(
                 './/tei:monogr/tei:title[@type="main"]', namespaces=self.ns
             )
@@ -195,11 +176,9 @@ class EnhancedGrobidParser:
                 self._get_text_content(venue_elems[0]).strip() if venue_elems else None
             )
 
-            # Extract DOI
             doi_elems = bib.xpath('.//tei:idno[@type="DOI"]', namespaces=self.ns)
             doi = self._get_text_content(doi_elems[0]).strip() if doi_elems else None
 
-            # Get raw citation XML
             raw_citation = etree.tostring(bib, encoding="unicode")
 
             cited_paper = CitedPaper(
@@ -222,10 +201,8 @@ class EnhancedGrobidParser:
         """Extract citation contexts at sentence level."""
         citation_contexts = []
 
-        # Create mapping of citation IDs for quick lookup
         cited_paper_ids = {cp.id for cp in cited_papers}
 
-        # Find all reference pointers to bibliographic entries
         ref_elems = root.xpath('.//tei:ref[@type="bibr"]', namespaces=self.ns)
 
         for ref in ref_elems:
@@ -235,18 +212,15 @@ class EnhancedGrobidParser:
                 if bid not in cited_paper_ids:
                     continue
 
-                # Find the parent sentence element containing this citation
                 sentence_elem = self._find_parent_sentence(ref)
                 if sentence_elem is None:
                     continue
 
-                # Extract sentence text
                 sentence_text = " ".join(sentence_elem.itertext()).strip()
                 sentence_id = sentence_elem.get(
                     "{http://www.w3.org/XML/1998/namespace}id", ""
                 )
 
-                # Try to find the section this sentence belongs to
                 section_title = self._find_section_title(sentence_elem)
 
                 citation_context = CitationContext(
@@ -271,7 +245,6 @@ class EnhancedGrobidParser:
         """Find the section title for a given element by traversing up the tree."""
         node = element
         while node is not None:
-            # Look for a parent div with a head element
             if node.tag == f"{{{self.ns['tei']}}}div":
                 head_elems = node.xpath("./tei:head", namespaces=self.ns)
                 if head_elems:
@@ -286,13 +259,7 @@ class EnhancedGrobidParser:
         return " ".join(element.itertext()).strip()
 
     def extract_full_text_sections(self, root: etree._ElementTree) -> List[dict]:
-        """Extract the body as a list of {"section", "text"} entries.
-
-        Sections are the top-level <div> elements of <text><body>. The head
-        (<head>) is the section title; the text is the concatenation of the
-        section's paragraphs. This is the submission's full text with sections,
-        sourced directly from GROBID (no separate OCR tool required).
-        """
+        """Extract the body as a list of {"section", "text"} entries."""
         sections: List[dict] = []
         body = root.xpath(".//tei:text/tei:body", namespaces=self.ns)
         if not body:
@@ -308,7 +275,6 @@ class EnhancedGrobidParser:
                     self._get_text_content(p).strip() for p in paragraphs
                 ).strip()
             else:
-                # No <p>: fall back to all div text minus the head.
                 text = self._get_text_content(div).strip()
                 if head and text.startswith(head):
                     text = text[len(head):].strip()
@@ -318,25 +284,13 @@ class EnhancedGrobidParser:
         return sections
 
     def process_single_tei_file(self, tei_file_path: str, output_file_path: str) -> ParsedPaper:
-        """
-        Process a single TEI file and save the result to JSON.
-        Pipeline-friendly method for integration with other stages.
-
-        Args:
-            tei_file_path: Path to the TEI XML file
-            output_file_path: Path to save the parsed JSON output
-
-        Returns:
-            ParsedPaper object with extracted information
-        """
+        """Process a single TEI file and save the result to JSON. Pipeline-friendly method for integration with other stages."""
         tei_path = Path(tei_file_path)
         if not tei_path.exists():
             raise FileNotFoundError(f"TEI file not found: {tei_file_path}")
 
-        # Parse the TEI file
         parsed_paper = self.parse_tei_file(tei_path)
 
-        # Save to JSON
         output_path = Path(output_file_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         
@@ -347,18 +301,7 @@ class EnhancedGrobidParser:
         return parsed_paper
 
     def process_for_pipeline(self, tei_file_path: str, data_dir: str, submission_id: str) -> ParsedPaper:
-        """
-        Process a single TEI file and save in the expected pipeline directory structure.
-        
-        Args:
-            tei_file_path: Path to the TEI XML file
-            data_dir: Base data directory for pipeline
-            submission_id: ID of the submission
-            
-        Returns:
-            ParsedPaper object with extracted information
-        """
-        # Create the expected output path: data_dir/submission_id/submission_id.json
+        """Process a single TEI file and save in the expected pipeline directory structure."""
         output_path = Path(data_dir) / submission_id / f"{submission_id}.json"
         return self.process_single_tei_file(tei_file_path, str(output_path))
 
@@ -391,19 +334,15 @@ def main():
 
     args = parser.parse_args()
 
-    # Use default TEI file path if not provided
     if not args.tei_file:
         args.tei_file = str(Path(args.data_dir) / args.submission_id / f"{args.submission_id}_fulltext.tei.xml")
 
-    # Configure logging
     log_level = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(level=log_level, format="%(asctime)s %(levelname)s %(message)s")
 
-    # Initialize parser
     grobid_parser = EnhancedGrobidParser()
 
     try:
-        # Process for pipeline
         parsed_paper = grobid_parser.process_for_pipeline(
             args.tei_file, args.data_dir, args.submission_id
         )

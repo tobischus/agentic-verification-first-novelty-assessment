@@ -1,44 +1,4 @@
-#!/usr/bin/env python3
-"""Everything measurable about a finished run, read back out of the artifacts.
-
-The run itself already records what it did -- per-claim cost and wall clock, the model
-and effort per role, the git commit it ran at, which papers it opened and how deeply it
-read them, and every evidence check. What was missing is one place that collects it, so a
-run can be reported without re-deriving the numbers by hand from three JSON files each
-time, and so the same numbers come out the same way for all ten papers.
-
-This script makes NO model calls and changes nothing. It reads
-
-    {id}_artifact_a_{variant}.json   the comparisons, costs and run logs
-    {id}_artifact_b_{variant}.json   the per-claim verdicts and the paper summary
-
-and writes a machine-readable record plus a report meant to be read:
-
-    {id}__metrics.json       everything, nested by variant -> claim -> comparison
-    {id}__metrics.md         the tables below
-    {id}__comparisons.csv    one row per (variant, claim, paper), for the thesis
-
-Three things are worth saying about how the numbers are formed, because they are easy to
-get subtly wrong:
-
-  cost        `run_cost.usd` in the artifact is what the claim-level run spent. The
-              paper-level summary (step 5b) is a separate call and is NOT in that total,
-              so it is priced here from its recorded token counts with the run's own
-              price table -- never a second copy of the prices.
-  degree      Overlap degree and evidence status come from `verdict.py`, the same module
-              the exporter and the frontend use. A local re-implementation would be a
-              second rule that drifts from the first.
-  agreement   Agent and linear are compared over EVERY (claim, paper) either run
-              produced -- nothing is filtered out. A paper only one variant compared
-              shows as a difference with "-" on the other side, and the agent-only /
-              linear-only counts are printed next to it.
-
-Usage
------
-  python eval/run_metrics.py --submission llms_get_lost_in_multi_turn_conversation
-  python eval/run_metrics.py --submission ID --variant agent
-  python eval/run_metrics.py --all            # every submission that has both artifacts
-"""
+"""Everything measurable about a finished run, read back out of the artifacts."""
 from __future__ import annotations
 
 import argparse
@@ -55,13 +15,9 @@ import verdict as vd  # noqa: E402  -- the single source of the degree/evidence 
 
 VARIANTS = ("agent", "linear")
 
-#: What paper_synthesis calls "substantial-or-stronger" when it splits its findings into
-#: supported and merely proposed. Narrower than vd.OVERLAP_DEGREES, which also admits
-#: `partial` -- the two bands answer different questions and are reported separately.
 STRONG_DEGREES = ("same", "substantial")
 
 
-# ------------------------------------------------------------------ helpers --
 
 def _load(p: Path):
     try:
@@ -71,8 +27,7 @@ def _load(p: Path):
 
 
 def _usd_for(model: str, pt: int, ct: int) -> float:
-    """Price a call with the run's own table. Imported lazily: claim_agent pulls the
-    model stack in, and most of this script never needs it."""
+    """Price a call with the run's own table. Imported lazily: claim_agent pulls the model stack in, and most of this script never needs it."""
     from agent.claim_agent import _usd
     return _usd(model, pt or 0, ct or 0)
 
@@ -98,13 +53,10 @@ def _pairs(cmp_: dict) -> dict:
 
 
 def _calls(entry: dict) -> int:
-    """Model calls the claim actually made, counted from the run log's own record of
-    them. `run_cost` says what they cost; this says how many there were, which is the
-    number that separates the two control flows."""
+    """Model calls the claim actually made, counted from the run log's own record of them. `run_cost` says what they cost; this says how many there were, which is the number that separates the two control flows."""
     return sum(len(p.get("rounds") or []) for p in (entry.get("run_log") or {}).get("prior_work", []))
 
 
-# ------------------------------------------------------------- per variant --
 
 def comparison_row(variant: str, claim_id: str, cmp_: dict) -> dict:
     """One comparison, flattened. This is the unit the study is actually about."""
@@ -122,17 +74,11 @@ def comparison_row(variant: str, claim_id: str, cmp_: dict) -> dict:
         "source": cmp_.get("source", ""),
         "overlap_degree": deg,
         "is_overlap": vd.is_overlap(cmp_),
-        # A refutation qualifies whatever the degree says, so it is its own column.
         "refutes": vd.challenges(cmp_),
-        # An empty status means no evidence check ran for this comparison at all, which
-        # is a result in its own right -- naming it keeps it from reading as a blank cell.
         "evidence_status": vd.evidence_status(cmp_) or "no_check",
         "proposed_degree_supported": ec.get("proposed_degree_supported"),
         "evidence_prompt_version": ec.get("prompt_version") or "unversioned",
         "conflict": bool(vd.conflicts(cmp_)),
-        # How much of the paper the comparison actually rests on. `depth` is the ladder
-        # (abstract_only < abstract_intro < targeted_sections < fulltext_complete);
-        # `fulltext_fetch_status` says whether a PDF was there to read at all.
         "depth": cmp_.get("depth", ""),
         "fulltext_fetch_status": cmp_.get("fulltext_fetch_status", ""),
         "n_sections_used": len(cmp_.get("sections_used") or []),
@@ -189,8 +135,6 @@ def variant_metrics(sub: Path, sid: str, variant: str) -> dict | None:
     cached = sum(c["cost"].get("cached_prompt_tokens", 0) for c in claims)
     run_usd = round(sum(c["cost"]["usd"] for c in claims), 4)
 
-    # Step 5b is a separate call and is not in run_cost_total; price it from its own
-    # recorded usage so the reported total is what the run really cost.
     ps = (b.get("paper_summary") or {})
     ps_usage = ps.get("usage") or {}
     ps_pt, ps_ct = ps_usage.get("prompt_tokens") or 0, ps_usage.get("completion_tokens") or 0
@@ -199,9 +143,6 @@ def variant_metrics(sub: Path, sid: str, variant: str) -> dict | None:
     cfg = ((a.get("claims") or [{}])[0].get("run_log") or {}).get("config") or {}
     git = cfg.get("git") or {}
     n_cmp = len(rows)
-    # The same two conditions paper_synthesis splits its FINDINGS on: substantial-or-
-    # stronger degree, and an evidence check that came back `material`. Reused rather
-    # than restated, so the report cannot disagree with the summary the run wrote.
     strong = [r for r in rows if r["overlap_degree"] in STRONG_DEGREES]
     supported = [r for r in strong if r["evidence_status"] == "material"]
 
@@ -225,9 +166,6 @@ def variant_metrics(sub: Path, sid: str, variant: str) -> dict | None:
             "completion_tokens": ct,
             "total_tokens": pt + ct,
             "model_calls": sum(c["model_calls"] for c in claims),
-            # What OpenAI served from its own prompt cache. `run_usd` prices every prompt
-            # token at the full rate, so the real bill is lower -- which is why every USD
-            # figure here is a ceiling rather than an amount that was charged.
             "cached_prompt_tokens": cached,
             "cache_hit_rate": round(cached / pt, 3) if pt else 0.0,
         },
@@ -247,26 +185,16 @@ def variant_metrics(sub: Path, sid: str, variant: str) -> dict | None:
             "completion_tokens": ps_ct,
             "usd": round(ps_usd, 4),
         } if ps else {},
-        # Which rubric judged these comparisons. Artifacts written before the evidence
-        # check recorded a version show as "unversioned" -- worth seeing, because a run
-        # whose two variants carry different versions is not a clean control-flow
-        # comparison, and that fact belongs in the data rather than in a footnote.
         "evidence_check_prompt_versions": _counter(r["evidence_prompt_version"] for r in rows),
         "distributions": {
             "degrees": _counter(r["overlap_degree"] for r in rows),
             "evidence": _counter(r["evidence_status"] for r in rows),
             "depth": _counter(r["depth"] or "-" for r in rows),
             "fulltext_fetch_status": _counter(r["fulltext_fetch_status"] or "-" for r in rows),
-            # The crosstab is the finding, not the raw degree counts: a substantial
-            # overlap the evidence check did not support is a different result from one
-            # it did, and only the pair of them says which.
             "degree_x_evidence": _counter(
                 f"{r['overlap_degree']} / {r['evidence_status']}" for r in rows),
         },
         "findings": {
-            # Two different bands, named apart because they answer different questions.
-            # `strong` is what the paper-level summary treats as a real novelty concern;
-            # `partial_or_stronger` is the wider band the exporter surfaces as overlap.
             "strong_proposed": len(strong),
             "strong_supported": len(supported),
             "partial_or_stronger": sum(1 for r in rows
@@ -277,9 +205,6 @@ def variant_metrics(sub: Path, sid: str, variant: str) -> dict | None:
             "evidence_pairs_kept": sum(r["pairs_kept"] for r in rows),
             "evidence_pairs_unverified": sum(r["pairs_unverified"] for r in rows),
             "map_call_failed": sum(1 for r in rows if r["pairs_call_failed"]),
-            # Reading depth is the one that decides how much a comparison is worth:
-            # a "no overlap" concluded from an abstract is not the same finding as one
-            # concluded from the full text.
             "comparisons_on_abstract_only": sum(1 for r in rows if r["depth"] == "abstract_only"),
         },
         "claims": claims,
@@ -287,15 +212,9 @@ def variant_metrics(sub: Path, sid: str, variant: str) -> dict | None:
     }
 
 
-# ------------------------------------------------------------- agent/linear --
 
 def agreement(av: dict, lv: dict) -> dict:
-    """Where the two control flows landed differently.
-
-    Over EVERY (claim, paper) either run produced -- nothing is filtered out. A paper only
-    one variant compared counts as a difference and is listed with "-" on the other side,
-    because that is what the two runs did. `agent_only` / `linear_only` are reported
-    alongside so the shape of the difference stays visible in the numbers."""
+    """Where the two control flows landed differently."""
     by = {v["variant"]: {(r["claim_id"], r["paper_id"]): r for r in v["_rows"]}
           for v in (av, lv)}
     a_keys, l_keys = set(by["agent"]), set(by["linear"])
@@ -346,7 +265,6 @@ def agreement(av: dict, lv: dict) -> dict:
     }
 
 
-# ----------------------------------------------------------------- reports --
 
 def _tbl(rows: list[list], head: list[str]) -> list[str]:
     w = [max(len(str(r[i])) for r in [head] + rows) for i in range(len(head))]
@@ -467,14 +385,9 @@ def report(rec: dict) -> str:
     return "\n".join(out)
 
 
-# -------------------------------------------------------------------- main --
 
 def prep_metrics(sub: Path, sid: str) -> dict:
-    """What the four preparation stages cost before either variant ran.
-
-    Document processing, claim extraction, retrieval and the PDF fetch happen ONCE per
-    paper and are shared by both variants, so they belong in the paper's total but not in
-    either variant's. Reported separately for exactly that reason."""
+    """What the four preparation stages cost before either variant ran."""
     st = _load(sub / f"{sid}_pipeline_state.json") or {}
     stages, tot = {}, {"seconds": 0.0, "prompt_tokens": 0, "completion_tokens": 0, "usd": 0.0}
     for name, m in (st.get("metrics") or {}).items():
@@ -523,7 +436,6 @@ def collect(data_dir: Path, sid: str, variants: tuple) -> dict:
             rec["variants"][v] = m
     if {"agent", "linear"} <= set(rec["variants"]):
         rec["agreement"] = agreement(rec["variants"]["agent"], rec["variants"]["linear"])
-    # The number a budget is planned against: preparation once, plus every variant run.
     rec["paper_total"] = {
         "usd": round(rec["prep"]["totals"]["usd"]
                      + sum(v["totals"]["total_usd"] for v in rec["variants"].values()), 4),
@@ -541,8 +453,6 @@ def write_out(rec: dict, out_dir: Path) -> None:
     sid = rec["submission"]
     rows = [r for v in rec["variants"].values() for r in v["_rows"]]
 
-    # `_rows` is the CSV; keeping it in the JSON too would duplicate the biggest part of
-    # the file for no reader that needs it there.
     slim = json.loads(json.dumps(rec))
     for v in slim["variants"].values():
         v.pop("_rows", None)
@@ -557,7 +467,7 @@ def write_out(rec: dict, out_dir: Path) -> None:
             w.writerows(rows)
     try:
         where = out_dir.relative_to(REPO).as_posix()
-    except ValueError:                      # an --out outside the repo is fine, just absolute
+    except ValueError:
         where = out_dir.as_posix()
     print(f"written: {where}/{sid}__metrics.{{json,md}} "
           f"+ __comparisons.csv ({len(rows)} rows)")

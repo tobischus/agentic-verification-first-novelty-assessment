@@ -1,13 +1,4 @@
-#!/usr/bin/env python3
-"""Figures of the thesis, computed from the frozen result files of the evaluation.
-
-Reads only (no model calls):
-  final_evaluation/results/main/e1/e1_analysis.json             E1 (LLM judge)
-  final_evaluation/results/main/agent_linear/agent_linear.json   run records
-
-Writes PDFs to final_evaluation/results/main/figures.
-Usage:  python final_evaluation/scripts/thesis_figures.py
-"""
+"""Figures of the thesis, computed from the frozen result files of the evaluation."""
 import json
 from pathlib import Path
 

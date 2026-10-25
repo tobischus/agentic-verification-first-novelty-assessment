@@ -4,7 +4,6 @@ from typing import Dict
 from langchain_openai import ChatOpenAI
 from dotenv import load_dotenv
 
-# Load environment variables
 load_dotenv()
 
 reviewer_summary_prompt = """
@@ -16,18 +15,10 @@ Summarize the following assessment in 5 sentences for a reviewer reviewing at an
 
 
 class ReviewGuidanceGenerator:
-    """
-    Generates targeted guidance for reviewers based on novelty assessment and research landscape analysis.
-    """
+    """Generates targeted guidance for reviewers based on novelty assessment and research landscape analysis."""
 
     def __init__(self, model_name: str = "gpt-4.1", temperature: float = 0.0):
-        """
-        Initialize the review guidance generator with the specified LLM.
-
-        Args:
-            model_name: Name of the OpenAI model to use
-            temperature: Temperature setting for the LLM
-        """
+        """Initialize the review guidance generator with the specified LLM."""
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise ValueError("OPENAI_API_KEY environment variable is not set")
@@ -39,15 +30,7 @@ class ReviewGuidanceGenerator:
         )
 
     def load_novelty_assessment(self, assessment_file: str) -> str:
-        """
-        Load the novelty assessment from file.
-
-        Args:
-            assessment_file: Path to the novelty assessment file
-
-        Returns:
-            Content of the novelty assessment
-        """
+        """Load the novelty assessment from file."""
         if not os.path.exists(assessment_file):
             raise ValueError(f"Novelty assessment file not found: {assessment_file}")
 
@@ -60,17 +43,7 @@ class ReviewGuidanceGenerator:
     def generate_guidance(
         self, novelty_assessment: str
     ) -> str:
-        """
-        Generate reviewer guidance based on novelty assessment and landscape analysis.
-
-        Args:
-            novelty_assessment: Novelty assessment of the submission paper
-            landscape_analysis: Research landscape analysis
-
-        Returns:
-            Reviewer guidance
-        """
-        # Generate the summary
+        """Generate reviewer guidance based on novelty assessment and landscape analysis."""
         prompt = reviewer_summary_prompt.format(novelty_assessment=novelty_assessment)
 
         guidance = self.llm.invoke(prompt)
@@ -80,24 +53,12 @@ class ReviewGuidanceGenerator:
     def run_guidance_generation(
         self, data_dir: str, submission_id: str
     ) -> str:
-        """
-        Run the complete review guidance generation pipeline.
-
-        Args:
-            data_dir: Directory containing paper information JSON files
-            submission_id: ID of the submission paper
-
-        Returns:
-            Reviewer guidance
-        """
-        # Load novelty assessment (standard path)
+        """Run the complete review guidance generation pipeline."""
         assessment_file = os.path.join(data_dir, submission_id, "novelty_delta_analysis.txt")
         novelty_assessment = self.load_novelty_assessment(assessment_file)
 
-        # Generate guidance
         guidance = self.generate_guidance(novelty_assessment)
 
-        # Save guidance to file (standard path)
         output_file = os.path.join(data_dir, submission_id, "summary.txt")
         with open(output_file, "w", encoding="utf-8") as f:
             f.write(guidance.content)
@@ -115,7 +76,6 @@ class ReviewGuidanceGenerator:
             )
         )
 
-        # Extract data_dir from output_file path to construct metadata path
         data_dir = os.path.dirname(os.path.dirname(output_file))
         meta_path = os.path.join(data_dir, "metadata.json")
         
@@ -137,23 +97,10 @@ class ReviewGuidanceGenerator:
         assessment_file: str = "novelty_delta_analysis.txt",
         model_name: str = "gpt-4.1",
     ) -> str:
-        """
-        Prepare data for batched inference with OpenAI API for review guidance generation.
-
-        Args:
-            data_dir: Directory containing paper information and assessments
-            submission_ids: List of submission paper IDs to process
-            assessment_file: Name of the novelty assessment file
-            landscape_file: Name of the landscape analysis file
-            model_name: Name of the OpenAI model to use
-
-        Returns:
-            Path to the generated JSONL batch file
-        """
+        """Prepare data for batched inference with OpenAI API for review guidance generation."""
         batch_entries = []
         submission_ids = os.listdir(data_dir)
 
-        # Statistics for reporting
         total_submissions = len(submission_ids)
         valid_submissions = 0
         missing_assessment = 0
@@ -161,7 +108,6 @@ class ReviewGuidanceGenerator:
 
         for submission_id in submission_ids:
             try:
-                # Check if required files exist
                 assessment_path = os.path.join(
                     data_dir, submission_id, "ours", assessment_file
                 )
@@ -170,15 +116,12 @@ class ReviewGuidanceGenerator:
                     missing_assessment += 1
                     continue
 
-                # Load novelty assessment
                 novelty_assessment = self.load_novelty_assessment(assessment_path)
 
-                # Prepare the prompt
                 prompt = reviewer_summary_prompt.format(
                     novelty_assessment=novelty_assessment
                 )
 
-                # Create the batch entry
                 batch_entry = {
                     "custom_id": f"reviewer-guidance-{submission_id}",
                     "method": "POST",
@@ -196,7 +139,6 @@ class ReviewGuidanceGenerator:
             except Exception as e:
                 print(f"Error preparing batch data for {submission_id}: {e}")
 
-        # Report statistics
         print(
             f"Valid submissions for review guidance: {valid_submissions}/{total_submissions} ({valid_submissions/total_submissions*100:.1f}%)"
         )
@@ -205,10 +147,8 @@ class ReviewGuidanceGenerator:
         if missing_landscape > 0:
             print(f"Submissions missing landscape analysis: {missing_landscape}")
 
-        # Create output directory if it doesn't exist
         os.makedirs("./openai_inputs", exist_ok=True)
         
-        # Write to JSONL file
         output_path = os.path.join(
             "./openai_inputs", "batch_reviewer_guidance_input.jsonl"
         )
@@ -227,22 +167,11 @@ class ReviewGuidanceGenerator:
         results_file: str,
         output_file: str = "reviewer_guidance.txt",
     ) -> Dict:
-        """
-        Process the results from batched inference for review guidance generation.
-
-        Args:
-            data_dir: Directory to store processed data
-            results_file: Path to the batch results file (JSONL)
-            output_file: Name of the output file for each submission
-
-        Returns:
-            Dict with processing statistics
-        """
+        """Process the results from batched inference for review guidance generation."""
         from litellm import cost_per_token
 
         print(f"Processing review guidance batch results from {results_file}")
 
-        # Statistics for reporting
         stats = {
             "total_processed": 0,
             "successful": 0,
@@ -251,11 +180,9 @@ class ReviewGuidanceGenerator:
             "submissions": [],
         }
 
-        # Load the results
         with open(results_file, "r", encoding="utf-8") as f:
             results = [json.loads(line) for line in f]
 
-        # Process each result
         for result in results:
             custom_id = result.get("custom_id", "")
 
@@ -265,10 +192,8 @@ class ReviewGuidanceGenerator:
 
             stats["total_processed"] += 1
 
-            # Extract submission_id from custom_id
             submission_id = custom_id.replace("reviewer-guidance-", "")
 
-            # Extract the guidance content
             response_data = result.get("response", {}).get("body", {})
             choices = response_data.get("choices", [])
 
@@ -282,7 +207,6 @@ class ReviewGuidanceGenerator:
                 stats["submissions"].append(submission_stats)
                 continue
 
-            # Get the content from the first choice
             content = choices[0].get("message", {}).get("content", "")
 
             if not content:
@@ -293,7 +217,6 @@ class ReviewGuidanceGenerator:
                 stats["submissions"].append(submission_stats)
                 continue
 
-            # Save the content to a file
             submission_dir = os.path.join(data_dir, submission_id, "ours")
             os.makedirs(submission_dir, exist_ok=True)
 
@@ -303,10 +226,8 @@ class ReviewGuidanceGenerator:
 
             print(f"Saved review guidance for {submission_id}")
 
-            # Save metadata
             token_usage = response_data.get("usage", {})
 
-            # Calculate cost
             prompt_tokens = token_usage.get("prompt_tokens", 0)
             completion_tokens = token_usage.get("completion_tokens", 0)
 
@@ -326,7 +247,6 @@ class ReviewGuidanceGenerator:
 
             submission_stats["token_usage"] = token_usage
 
-            # Update metadata file
             meta_path = os.path.join(submission_dir, "metadata.json")
             current_meta = {}
 
@@ -348,7 +268,6 @@ class ReviewGuidanceGenerator:
             stats["successful"] += 1
             stats["submissions"].append(submission_stats)
 
-        # Create summary statistics
         success_rate = (
             (stats["successful"] / stats["total_processed"]) * 100
             if stats["total_processed"] > 0
@@ -359,10 +278,8 @@ class ReviewGuidanceGenerator:
         )
         print(f"Total estimated cost: ${stats['total_cost']:.4f}")
 
-        # Create output directory if it doesn't exist
         os.makedirs("./openai_outputs", exist_ok=True)
         
-        # Save summary
         summary_path = os.path.join(
             "./openai_outputs", "reviewer_guidance_processing_summary.json"
         )
@@ -427,14 +344,12 @@ if __name__ == "__main__":
     generator = ReviewGuidanceGenerator(model_name=args.model)
     
     if args.submission_id:
-        # Single submission processing
         generator.run_guidance_generation(
             args.data_dir,
             args.submission_id
         )
     
     if args.prepare:
-        # Prepare batch inference data
         generator.prepare_batch_inference_data(
             args.data_dir,
             args.assessment_file,
@@ -442,7 +357,6 @@ if __name__ == "__main__":
         )
     
     if args.process:
-        # Process batch results
         generator.process_batch_results(
             args.data_dir,
             args.results_file,

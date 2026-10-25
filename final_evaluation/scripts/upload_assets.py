@@ -1,22 +1,4 @@
-"""Push locally-materialised assets to Supabase Storage and repoint the Asset rows in
-whatever DATABASE_URL is currently configured -- normally the cloud Postgres database,
-set in the environment before running this (see SETUP_HOSTING.md).
-
-Requires the study to have been seeded LOCALLY first (STORAGE_BACKEND=local), so each
-Asset has bytes sitting under LOCAL_ASSET_ROOT to read and re-hash before upload; this
-script never re-derives an asset from `inputs/pilot/` on its own, so what gets uploaded
-is provably the same bytes the local pilot already ran against.
-
-Reports total size and the largest file BEFORE uploading anything, against Supabase
-Free's published limits (500MB DB / 1GB storage / 50MB per file -- see
-SETUP_HOSTING.md's cited sources), and stops with a clear message rather than uploading
-partway if a limit would be exceeded. It never upgrades a plan or trims content to fit.
-
-Usage
------
-  STORAGE_BACKEND=supabase DATABASE_URL=<supabase postgres url> \\
-    python -m final_evaluation.cli upload-assets --study dashboard_pilot_v1
-"""
+"""Push locally-materialised assets to Supabase Storage and repoint the Asset rows in whatever DATABASE_URL is currently configured -- normally the cloud Postgres database, set in the environment before running this (see SETUP_HOSTING.md)."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -42,7 +24,7 @@ def run(study_id: str) -> None:
         assets = db.query(models.Asset).filter(models.Asset.study_id == study_id).all()
         if not assets:
             print(f"No assets found for study {study_id!r} in {settings.database_url}. "
-                 "Did you seed this database (init-db/seed-pilot) first?")
+                 "Did you seed this database (init-db/seed-study) first?")
             return
 
         local_root = Path(get_settings().local_asset_root)
@@ -57,7 +39,7 @@ def run(study_id: str) -> None:
                 resolved = local.resolve(a.storage_key, a.content_type)
             except FileNotFoundError:
                 print(f"SKIP {a.id}: no local file at {local_root / a.storage_key} -- "
-                     "this asset was never materialised locally; re-run seed-pilot with "
+                     "this asset was never materialised locally; re-run seed-study with "
                      "STORAGE_BACKEND=local against this same study first.")
                 continue
             size = resolved.path.stat().st_size
@@ -85,7 +67,7 @@ def run(study_id: str) -> None:
             actual_sha = storage.sha256_file(path)
             if actual_sha != a.sha256:
                 print(f"SKIP {a.id}: local file hash changed since it was recorded "
-                     f"({a.sha256[:12]} -> {actual_sha[:12]}) -- re-run seed-pilot before uploading.")
+                     f"({a.sha256[:12]} -> {actual_sha[:12]}) -- re-run seed-study before uploading.")
                 continue
             key = backend.put(study_id, a.id, path, a.content_type)
             a.storage_backend = "supabase"

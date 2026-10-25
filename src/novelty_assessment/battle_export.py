@@ -1,13 +1,4 @@
-#!/usr/bin/env python3
-"""Deterministic reviewer export, layout v3.
-
-Drop-in replacement for src/novelty_assessment/battle_export.py.
-Uses existing Artifact A/B and embedded run provenance. Makes no model calls,
-changes no verdicts, and never fills historical version metadata from a live pool.
-Comparison cells contain the complete recorded text. Quote text is not shortened.
---check-sources diagnoses missing run-bound version metadata without generating a
-report, modifying artifacts, downloading documents, or calling a model.
-"""
+"""Deterministic reviewer export, layout v3."""
 import argparse
 import json
 import re
@@ -17,62 +8,6 @@ from typing import List
 import source_refs
 import verdict as vd
 
-# v3.2 reorders and links what v3.1 already printed; it adds no field and removes no
-# recorded text. Changes: every assessment in the two overview tables is a link to the
-# comparison it names (anchor scheme in _anchor); "Closest comparisons" drops the two
-# prose columns that were repeated verbatim in each section below and names the source
-# with its title; a comparison section leads with its metadata and assessment, then the
-# prior paper's own realization (renamed "Prior work summary" and moved above the
-# comparison), then the comparison, then the evidence pairs the check accepted, with the
-# rest under "Pairs not used to support overlap". Any renderer keyed to v3.1's order
-# needs updating; the two in this repository are.
-#
-# v3.3 opens the document with "## Novelty summary" when Artifact B carries one, before
-# "## Extracted claims". It is rendered, never generated here -- paper_synthesis.py writes
-# it -- and a summary whose claim results have since changed is printed with that stated.
-#
-# v4.0 reorders for reading, not for completeness -- the SAME recorded text, all of it.
-# A reviewer reads the paper-level summary first and then one claim at a time, so each
-# claim is now one top-level section ("# Claim N — Review") that opens with the facts its
-# collapsed row shows (claim text, verdict, number of detailed comparisons, open points)
-# and carries everything else underneath: the claim-level assessment, its submission
-# passage (formerly under "## Extracted claims"), coverage and evidence limits, then its
-# detailed comparisons. "Closest comparisons" is gone: every row it listed is a detailed
-# comparison below, with the same source id and assessment. Each comparison shows its
-# source, version, assessment, novelty argument and open points directly, then two blocks
-# the renderers fold -- "Evidence check and limitations" and "Full comparison and quoted
-# passages". Metadata and the related-work matrix move to their own sections at the end.
-# Open points are derived from stored fields only (see _open_points); nothing is judged
-# here. The renderers recognise this layout by its "# Metadata" section and keep
-# rendering older frozen reports (the pilot's) by their old rules.
-#
-# v4.1 (requested by the study author after reading v4.0):
-#   - "# How to read the assessments" (a legend of the overlap levels and evidence-check
-#     statuses, worded after the definitions the comparisons were made under) and
-#     "# Related work examined" now come right after the novelty summary, before the claims.
-#   - the claim row names the overlap levels of its detailed comparisons ("13 (partial
-#     overlap)") and no longer carries an "Open points" count; each comparison still
-#     states its own open points.
-#   - "## Coverage and limitations" is dropped. Its counts and lists are the claim's
-#     column of the related-work table, now directly above; the per-comparison stopping
-#     reasons and unresolved questions stay in each comparison's evidence check.
-#   - in a comparison, "Full comparison and quoted passages" comes before "Evidence check
-#     and limitations", so the pairs the check refers to by number are read first.
-#   - the labels "Main novelty concern", "Remaining contribution" and the claim-level
-#     "Assessment" stand on their own line; the text follows as its own paragraph.
-#
-# v4.2: authors and publication date stand under the title; the "# Metadata" section is
-# gone. The renderers recognise v4.x by "# How to read the assessments" (or "# Metadata").
-#
-# v4.3: the claim-level assessment carries a claim-specific explanation of its verdict
-# (claim_assessment.py, stored in Artifact B as per_claim[i].claim_assessment), between the
-# verdict line and the general sentence on what the verdict means; a stored explanation
-# whose comparisons have since changed is printed marked out of date.
-#
-# v4.4: the general sentence on what a verdict means (formerly _ASSESSMENT_GLOSS) and the
-# per-claim "## Submission passages" section (the claim's single anchor quote) are removed.
-# quote_index() gives each claim's anchor as "claim_anchors"; the renderers make the claim
-# text itself the link to that passage in the submission PDF.
 EXPORT_LAYOUT_VERSION = "reviewer-v4.4"
 
 _LQ, _RQ = "“", "”"
@@ -84,12 +19,7 @@ def _load(path: Path):
         return None
 
 def _authors_from_tei(sub: Path, sid: str) -> str:
-    """Author list of the submission, read from the GROBID header.
-
-    Document processing stores title, date and abstract in {id}.json but not the authors,
-    even though GROBID extracts them -- so read them here rather than leave the field out.
-    Only the teiHeader is searched; the bibliography further down is full of persName too.
-    """
+    """Author list of the submission, read from the GROBID header."""
     tei = sub / f"{sid}.grobid.tei.xml"
     if not tei.exists():
         return ""
@@ -110,14 +40,7 @@ def _quote(text: str) -> str:
     return f"{_LQ}{' '.join((text or '').split())}{_RQ}"
 
 def _segments(segs, out: List[str]) -> None:
-    """Verified spans in quotation marks, the system's prose plain, and rejected quotes
-    labelled as such.
-
-    A quote that fails verification is stored as {"kind": "text", "verified": False} while
-    genuine prose carries no `verified` key at all. Rendering both the same way would pass
-    copied text off as the system's own words and make the closing note untrue, which is
-    the opposite of what this document is for.
-    """
+    """Verified spans in quotation marks, the system's prose plain, and rejected quotes labelled as such."""
     for s in segs or []:
         content = (s.get("content") or "").strip()
         if not content:
@@ -135,9 +58,7 @@ _EC_PHRASE = {
 }
 
 def _claim_verdict(comparisons: list, recorded: str):
-    """(verdict, is_derived). Prefers Artifact B's own verdict; falls back to the same
-    challenges()-over-comparisons rule the per-paper review already uses, so a missing
-    synthesis does not silently read as "no assessment" further down the document."""
+    """(verdict, is_derived). Prefers Artifact B's own verdict; falls back to the same challenges()-over-comparisons rule the per-paper review already uses, so a missing synthesis does not silently read as "no assessment" further down the document."""
     if recorded:
         return recorded, False
     derived = "challenged" if any(vd.challenges(c) for c in comparisons or []) else "not_challenged"
@@ -145,9 +66,7 @@ def _claim_verdict(comparisons: list, recorded: str):
 
 def _claim_assessment(comparisons: list, recorded_verdict: str, recorded_rationale: str,
                       stored: dict = None, stale: bool = False) -> List[str]:
-    """The claim-level assessment as paragraphs: the verdict on the label's own line, then
-    why this claim got it (claim_assessment.py, stored in Artifact B). Without a stored
-    assessment: the older recorded rationale, if any."""
+    """The claim-level assessment as paragraphs: the verdict on the label's own line, then why this claim got it (claim_assessment.py, stored in Artifact B). Without a stored assessment: the older recorded rationale, if any."""
     verdict, derived = _claim_verdict(comparisons, recorded_verdict)
     paragraphs = [f"**Assessment:** {vd.verdict_label(verdict)}."]
     text = str((stored or {}).get("text") or "").strip()
@@ -167,9 +86,7 @@ def _claim_assessment(comparisons: list, recorded_verdict: str, recorded_rationa
 
 
 def _degree_counts(details: list) -> str:
-    """"13 (partial overlap)" or "13 (12 partial overlap, 1 superficial)": the claim
-    row's count of detailed comparisons with the overlap levels behind it, strongest
-    first, levels that do not occur left out."""
+    """"13 (partial overlap)" or "13 (12 partial overlap, 1 superficial)": the claim row's count of detailed comparisons with the overlap levels behind it, strongest first, levels that do not occur left out."""
     counts: dict = {}
     for c in details:
         d = vd.degree(c) or "not compared"
@@ -215,9 +132,6 @@ def _status(c: dict) -> str:
     return str((c.get("evidence_check") or {}).get("status") or "").strip().lower()
 
 
-# The same predicate the paper-level synthesis uses to find decision-relevant conflicts.
-# It lives in verdict.py because it IS a rule about what a comparison means, and two
-# modules acting on it had to be unable to drift apart.
 _conflict = vd.conflicts
 
 
@@ -235,11 +149,7 @@ def _ref(c: dict, refs: dict) -> str:
 
 
 def _snapshot(entry: dict, c: dict) -> dict:
-    """Only this claim's embedded run record (or inline fields), never a current manifest.
-
-    RunLog.to_dict() exports its comparisons as the prior_work LIST. This is the
-    immutable source record associated with the assessment, not the retrieval pool.
-    """
+    """Only this claim's embedded run record (or inline fields), never a current manifest."""
     result = {k: c[k] for k in ("pinned_version", "pinned_version_date", "pinned_url",
                                "version_status", "final_state", "unresolved_reason",
                                "unresolved_deficit") if c.get(k) is not None}
@@ -259,8 +169,6 @@ def _document_label(snapshot: dict) -> str:
     if version.isdigit():
         version = "v" + version
     date = str(snapshot.get("pinned_version_date") or "").strip()
-    # Preserve a recorded ISO calendar day, not just the year. Do not invent a day
-    # for old runs that recorded only a year, or infer one from an arXiv identifier.
     match = re.match(r"^\d{4}-\d{2}-\d{2}(?:$|[T ])", date)
     day = date[:10] if match else "exact date not recorded"
     label = f"{version or 'version not recorded'} · {day}"
@@ -271,19 +179,13 @@ def _document_label(snapshot: dict) -> str:
 
 
 def _related_cell(entry) -> str:
-    """Degree and evidence status in one cell -- plus, when they part company, the fact
-    that the check did not confirm the degree. Without that third piece "partial ·
-    material evidence" reads as an established partial overlap even where the check said
-    the opposite."""
+    """Degree and evidence status in one cell -- plus, when they part company, the fact that the check did not confirm the degree. Without that third piece "partial · material evidence" reads as an established partial overlap even where the check said the opposite."""
     if entry is None:
         return "not assessed"
     degree, status = entry[0], entry[1]
     confirmed = entry[2] if len(entry) > 2 else None
     cell = (f"{vd.overlap_label(degree) or degree or 'not compared'} · "
             + _EC_PHRASE.get(status, "no evidence check"))
-    # Only where a degree was actually proposed. `none`/`superficial` propose no overlap,
-    # so the check leaves proposed_degree_supported null for them and there is nothing to
-    # confirm -- annotating those said "not confirmed" about a claim nobody made.
     if (status == "material" and confirmed is False
             and (degree or "").lower() in vd.OVERLAP_DEGREES):
         cell += "; proposed degree not confirmed"
@@ -291,28 +193,12 @@ def _related_cell(entry) -> str:
 
 
 def _has_detail(c: dict) -> bool:
-    """Whether this comparison gets its own section under "Detailed comparisons".
-
-    Mirrors build()'s own filter exactly. An assessment cell is only ever linked when
-    this is true -- a link to a section that was never written is worse than plain text,
-    and silently linking every cell would produce dead jumps for the majority of them
-    (most comparisons are superficial and carry no detail section).
-    """
+    """Whether this comparison gets its own section under "Detailed comparisons"."""
     return bool(vd.is_overlap(c) or _conflict(c))
 
 
 def _anchor(claim_index: int, ref: str) -> str:
-    """The jump target for one (claim, source) detail section.
-
-    Deliberately NOT written into the text as an HTML anchor: this file's output is also
-    the plain-text artifact used in the system comparison, and embedding `<a id=…>` in it
-    would put markup into the thing being compared. The two renderers
-    (frontend/src/components/ReviewSummary.jsx and
-    final_evaluation/dashboard/.../ReportRenderer.jsx) derive the SAME id from the
-    "# Claim N — Review" heading they last passed plus the "### R# — …" heading they are
-    rendering, so the link resolves in the UI and degrades to readable label text
-    anywhere else.
-    """
+    """The jump target for one (claim, source) detail section."""
     return f"cmp-{claim_index}-{ref}"
 
 
@@ -320,9 +206,6 @@ def _linked(label: str, claim_index: int, ref: str, linkable: bool) -> str:
     return f"[{label}](#{_anchor(claim_index, ref)})" if linkable else label
 
 
-# The overlap levels are explained in the wording of the definitions the comparisons were
-# made under (agent/claim_agent.py, the close-comparison prompt), shortened, not changed.
-# The labels are the ones the report prints (verdict.DEGREE_LABEL for overlaps).
 _LEGEND = [
     "# How to read the assessments", "",
     "Each comparison carries two separate assessments: the overlap level proposed by the "
@@ -348,9 +231,6 @@ _LEGEND = [
     "Missing support does not establish that there is no overlap.", "",
 ]
 
-# Open points, one sentence each, keyed by the stored field they come from. Nothing here
-# judges a comparison: each is a restatement of a recorded status, so the same record
-# always yields the same sentences, for agent and linear alike.
 _HINT = {
     "insufficient": "The available evidence did not resolve this comparison.",
     "nocheck": "No evidence check was recorded for this comparison.",
@@ -360,15 +240,7 @@ _HINT = {
 
 
 def _open_points(c: dict) -> list:
-    """Which open-point sentences apply to one comparison, from stored fields only.
-
-    `proposed_degree_supported` is read as a three-valued field: False is a recorded
-    rejection of the proposed level, None means the check was never asked (none /
-    superficial proposals, or no check at all) and says nothing. The rejection is only
-    named where it is not already implied by another point -- for an inconclusive check,
-    or for a nonmaterial one that contradicts an overlap degree (a conflict), the
-    rejection is what those already say, and repeating it would count one fact twice.
-    """
+    """Which open-point sentences apply to one comparison, from stored fields only."""
     status = _status(c)
     keys = []
     if status not in _EC_PHRASE:
@@ -413,14 +285,7 @@ def _pair_use_label(status: str, index: int, supporting: set) -> str:
 
 
 def _evidence_check_block(c: dict, out: List[str], snapshot: dict = None) -> None:
-    """Everything the evidence check recorded about one comparison, in one place.
-
-    Folded by the renderers: it is where a reader goes to find out WHY a comparison carries
-    the open points shown above it, not what they read first. Nothing is shortened. Both
-    open questions are printed -- the check's own `unresolved_question` and the run's
-    `unresolved_deficit` -- because they differ in a minority of comparisons and the first
-    was never printed at all before v4.0; identical ones are printed once.
-    """
+    """Everything the evidence check recorded about one comparison, in one place."""
     snapshot = snapshot or {}
     pairs = c.get("evidence_pairs") or []
     check = c.get("evidence_check") or {}
@@ -458,14 +323,7 @@ def _evidence_check_block(c: dict, out: List[str], snapshot: dict = None) -> Non
 
 
 def _evidence_pair_list(c: dict, out: List[str]) -> None:
-    """Every pair, with its original index, its label and both quotes.
-
-    Pairs the evidence check relied on come first; the others keep their index and label
-    under their own heading. Nothing is dropped and nothing renumbered -- the check's
-    reasoning refers to these numbers. A repeated submission span is cross-referenced to
-    the earliest pair that carries it, decided before either group is written so the
-    reference is the same whichever group the referring pair ends up in.
-    """
+    """Every pair, with its original index, its label and both quotes."""
     pairs = c.get("evidence_pairs") or []
     check = c.get("evidence_check") or {}
     status = _status(c)
@@ -480,8 +338,6 @@ def _evidence_pair_list(c: dict, out: List[str]) -> None:
         first_seen.setdefault((cq, bool(p.get("claim_quote_verified"))), i)
 
     def render(index: int, p: dict) -> None:
-        # extend, not += : `out +=` inside this closure would rebind the enclosing
-        # function's parameter name and raise before writing anything.
         out.extend([f"**Pair {index} — {_pair_use_label(status, index, supporting)}**", ""])
         cq = str(p.get("claim_quote") or "").strip()
         key = (" ".join(cq.split()), bool(p.get("claim_quote_verified")))
@@ -518,16 +374,7 @@ def _evidence_pair_list(c: dict, out: List[str]) -> None:
 
 def _comparison_detail(c: dict, entry: dict, refs: dict, pool: dict,
                        out: List[str]) -> None:
-    """One comparison: what is read first, then two blocks the renderers fold.
-
-    Shown directly: source id and full title, the version read and its date, the
-    assessment, the full novelty argument, and the open points. The assessment line
-    carries the degree and the check's status only -- a rejected overlap level is stated
-    once, as an open point directly below it, rather than twice. Then "Full comparison and
-    quoted passages" (shared contribution, reported difference, prior-work context and
-    every pair) and "Evidence check and limitations" (the check's full record, which
-    refers to those pairs by number).
-    """
+    """One comparison: what is read first, then two blocks the renderers fold."""
     snapshot = _snapshot(entry, c)
     pm = pool.get(_pid(c), {})
     pairs = c.get("evidence_pairs") or []
@@ -543,7 +390,6 @@ def _comparison_detail(c: dict, entry: dict, refs: dict, pool: dict,
     for k in _open_points(c):
         out += ["**Open point:** " + _HINT[k], ""]
 
-    # The pairs first: the check below refers to them by number ("Pair 2 does not ...").
     noun = "pair" if len(pairs) == 1 else "pairs"
     out += [f"#### Full comparison and quoted passages · {len(pairs)} {noun}", ""]
     for label, key in (("Shared contribution", "what_is_shared"),
@@ -561,17 +407,7 @@ def _comparison_detail(c: dict, entry: dict, refs: dict, pool: dict,
 
 def _paper_summary(b: dict, a: dict, order: list, claims: list, refs: dict,
                    out: List[str]) -> None:
-    """The paper-level summary, rendered — never generated here.
-
-    paper_synthesis.py produces it once from the finished claim reviews and stores it in
-    Artifact B; this file only prints what is already on disk, because its output is the
-    artifact the system comparison uses and must stay free of model calls.
-
-    If the claim results have changed since the summary was written, it is printed with
-    that fact stated. Dropping it silently would hide that a summary exists, and printing
-    it silently would let a confident paragraph stand over a report that no longer says
-    what it summarises.
-    """
+    """The paper-level summary, rendered — never generated here."""
     summary = (b or {}).get("paper_summary") or {}
     concern = str(summary.get("main_novelty_concern") or "").strip()
     remaining = str(summary.get("remaining_contribution") or "").strip()
@@ -582,9 +418,6 @@ def _paper_summary(b: dict, a: dict, order: list, claims: list, refs: dict,
         import paper_synthesis
         names = {c["id"]: c.get("claim_name") or c.get("name") or ""
                  for c in claims if c.get("id")}
-        # Exactly the order paper_synthesis derived the summary from -- claims without an
-        # Artifact A entry are dropped there too. Passing them here would change the
-        # findings text and so the fingerprint, and every render would cry "out of date".
         a_ids = {e.get("claim_id") for e in (a or {}).get("claims", []) or []}
         findings = paper_synthesis.build_findings(
             a, b, [cid for cid in order if cid in a_ids], names, refs)
@@ -592,8 +425,6 @@ def _paper_summary(b: dict, a: dict, order: list, claims: list, refs: dict,
             out += ["**Out of date:** the claim results below have changed since this "
                     "summary was written. It has not been regenerated.", ""]
     except Exception:
-        # A missing or broken synthesis module must not cost the reader the summary that
-        # is sitting right there; it only costs the staleness check.
         pass
     if concern:
         out += ["**Main novelty concern:**", "", concern, ""]
@@ -611,7 +442,6 @@ def build(data_dir: str, submission_id: str, variant: str = "") -> str:
     meta = _load(sub / f"{submission_id}.json") or {}
     claims_doc = _load(sub / f"{submission_id}_claims.json") or {"claims": []}
     ranked = _load(sub / "related_work_data" / "ranked_papers.json") or []
-    # The live pool supplies bibliographic authors/year only, NEVER pinned versions.
     pool = {_pid(p): p for p in ranked}
     claims = [c for c in claims_doc.get("claims", []) if c.get("status") != "rejected"]
     a_by = {e.get("claim_id"): e for e in a.get("claims", [])}
@@ -629,8 +459,6 @@ def build(data_dir: str, submission_id: str, variant: str = "") -> str:
             row["claims"][cid] = (vd.degree(c), _status(c), vd.degree_confirmed(c))
             row["detail"][cid] = _has_detail(c)
             row["versions"][cid] = _document_label(_snapshot(entry, c))
-    # Shared with the paper-level synthesis, so a summary that cites R7 and the table
-    # that lists R7 always mean the same paper.
     titles = {pid: row["title"] for pid, row in by_paper.items()}
     paper_order = source_refs.order_from_titles(titles)
     refs = source_refs.assign_from_titles(titles)
@@ -638,7 +466,6 @@ def build(data_dir: str, submission_id: str, variant: str = "") -> str:
     title = meta.get("title") or claims_doc.get("title")
     if title:
         out += [f"**{title}**", ""]
-    # Authors and date directly under the title (v4.2; formerly a folded "# Metadata").
     authors = _authors_from_tei(sub, submission_id)
     if authors:
         out += [f"**Authors:** {authors}", ""]
@@ -647,7 +474,6 @@ def build(data_dir: str, submission_id: str, variant: str = "") -> str:
     _paper_summary(b, a, order, claims, refs, out)
     out += ["---", ""] + _LEGEND
 
-    # 1-based claim numbers, matching the "# Claim N — Review" headings and the anchors.
     cols = [(cid, f"Claim {i + 1}", i + 1) for i, cid in enumerate(order) if cid in a_by]
     if by_paper:
         out += ["---", "", "# Related work examined", "",
@@ -659,9 +485,6 @@ def build(data_dir: str, submission_id: str, variant: str = "") -> str:
             version = documents[0] if len(documents) == 1 else "; ".join(
                 f"{label}: {row['versions'][cid]}" for cid, label, _n in cols if cid in row["versions"])
             name = " — ".join(x for x in (row["title"], row["cite"]) if x)
-            # Each assessment links to that source's section for THAT claim, where one
-            # exists (see _has_detail): the table says what was concluded, the link says
-            # on what -- without it a reader has to scroll for the matching "### R# — …".
             assessments = [_linked(_related_cell(row["claims"].get(cid)), n, refs[pid],
                                    bool(row["detail"].get(cid)))
                            for cid, _label, n in cols]
@@ -677,8 +500,6 @@ def build(data_dir: str, submission_id: str, variant: str = "") -> str:
                       or (entry or {}).get("claim_name") or "").strip()
         out += ["---", "", f"# Claim {i} — Review", "", claim_text, ""]
         if entry is None:
-            # A claim with no review on record stays visible; it is not dropped, and it is
-            # not presented as assessed either.
             out += ["**Detailed comparisons:** none recorded", "",
                     "## Claim-level assessment", "", "No review is recorded for this claim.", ""]
             continue
@@ -688,8 +509,6 @@ def build(data_dir: str, submission_id: str, variant: str = "") -> str:
         details.sort(key=vd.sort_key)
         verdict, _derived = _claim_verdict(comparisons, recorded.get("verdict"))
 
-        # What the claim's collapsed row shows. The full assessment follows below; the
-        # verdict is repeated here only so it can be read without opening the claim.
         out += [f"**Verdict:** {vd.verdict_label(verdict)}.", ""]
         out += [f"**Detailed comparisons:** "
                 f"{_degree_counts(details) if details else 'none recorded'}", ""]
@@ -703,8 +522,6 @@ def build(data_dir: str, submission_id: str, variant: str = "") -> str:
                 stale = claim_assessment.is_stale(stored, claim_assessment.build_claim_findings(
                     entry, i, claim_text, recorded.get("verdict") or verdict, refs))
             except Exception:
-                # As for the novelty summary: a broken module costs the staleness check,
-                # never the text that is sitting right there.
                 pass
         for paragraph in _claim_assessment(comparisons, recorded.get("verdict"),
                                            recorded.get("rationale"), stored, stale):
@@ -721,25 +538,7 @@ def build(data_dir: str, submission_id: str, variant: str = "") -> str:
 
 
 def quote_index(data_dir: str, submission_id: str, variant: str = "") -> dict:
-    """Every VERIFIED quote this export blockquotes, keyed by its own normalised text.
-
-    Built for the frontend's Summary tab: it renders `build()`'s own text verbatim (so
-    the tab's content stays byte-identical to the export by construction) and needs a
-    side channel to know, for a given rendered blockquote, which document it can be
-    found in and what id to scroll the PDF viewer to. `_quote()` normalises with
-    `' '.join(text.split())` before wrapping in curly quotes; this index normalises the
-    SAME way, so a rendered blockquote's text (curly quotes stripped) is the exact key
-    to look up here -- no fuzzy matching needed.
-
-    Unverified spans are not indexed: `_span()` renders them as "Not confirmed verbatim"
-    prose, not a clickable quote, and a search for text that is not actually in the PDF
-    would silently fail there anyway.
-
-    Returns {"submission": [{"id","text"}], "papers": {paper_id: {"title", "quotes":
-    [{"id","text"}]}}, "refs": {paper_id: "R#"}} -- `refs` lets the frontend resolve the
-    "### R7 — Title" headings it walks past back to a paper_id, the same numbering
-    `build()` itself assigns.
-    """
+    """Every VERIFIED quote this export blockquotes, keyed by its own normalised text."""
     sub = Path(data_dir) / submission_id
     suffix = f"_{variant}" if variant else ""
     a = _load(sub / f"{submission_id}_artifact_a{suffix}.json")
@@ -758,8 +557,6 @@ def quote_index(data_dir: str, submission_id: str, variant: str = "") -> dict:
         sub_list.append(item)
         sub_seen[key] = item["id"]
 
-    # The claim anchors are no longer printed (v4.4); the renderers link each claim's text
-    # to its anchor in the submission PDF instead. Claim numbers as build() numbers them.
     claim_anchors = {}
     for n, c in enumerate(claims, 1):
         if c.get("evidence_verified") and str(c.get("evidence_verified")) != "False":
@@ -796,13 +593,10 @@ def quote_index(data_dir: str, submission_id: str, variant: str = "") -> dict:
     for p in papers.values():
         p.pop("_seen", None)
 
-    # The SAME paper_order/refs assignment build() uses, so "### R7 —" in the rendered
-    # text resolves to the paper_id this index filed its quotes under.
     by_paper_titles = {pid: papers[pid]["title"] for pid in papers}
     for entry in a.get("claims", []) or []:
         for c in entry.get("comparisons", []) or []:
             by_paper_titles.setdefault(_pid(c), c.get("title") or _pid(c))
-    paper_order = source_refs.order_from_titles(by_paper_titles)
     refs = source_refs.assign_from_titles(by_paper_titles)
 
     return {"submission": sub_list, "papers": papers, "refs": refs,
@@ -810,11 +604,7 @@ def quote_index(data_dir: str, submission_id: str, variant: str = "") -> dict:
 
 
 def check_sources(data_dir: str, submission_id: str, variant: str = "") -> str:
-    """Read-only diagnosis. Current manifest entries are NOT historical provenance.
-
-    The report is deliberately not repaired from the latest manifest or an arbitrary
-    log for the same paper. Such a log may belong to another review/run/version.
-    """
+    """Read-only diagnosis. Current manifest entries are NOT historical provenance."""
     sub = Path(data_dir) / submission_id
     suffix = f"_{variant}" if variant else ""
     artifact_path = sub / f"{submission_id}_artifact_a{suffix}.json"
@@ -843,8 +633,6 @@ def check_sources(data_dir: str, submission_id: str, variant: str = "") -> str:
             p = prior_by.get(pid)
             if p is not None:
                 matched += 1
-            # Mirror the export's supported format; malformed historical logs are
-            # reported above rather than allowed to crash this diagnostic command.
             if isinstance(log, dict) and (raw_prior is None or isinstance(raw_prior, list)):
                 snap = _snapshot(entry, c)
             else:

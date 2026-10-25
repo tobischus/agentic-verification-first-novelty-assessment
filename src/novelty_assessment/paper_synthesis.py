@@ -1,38 +1,4 @@
-#!/usr/bin/env python3
-"""Step 5b: the paper-level novelty summary.
-
-Final claim reviews -> THIS STEP -> stored in Artifact B -> rendered by battle_export.
-
-The report already answers "what happened to each claim". It does not answer the question a
-reviewer actually opens it with: does this submission, as a whole, have a novelty problem?
-Reading fifteen per-claim sections to find out is the work this step does once.
-
-What it is NOT allowed to do:
-
-- change any claim verdict or any paper-pair judgement. It summarises decisions that are
-  already fixed in Artifact A/B; the deterministic controller owns them.
-- treat a PROPOSED overlap degree as an established one. The context below separates
-  "substantial and supported by the evidence check" from "substantial but not supported"
-  STRUCTURALLY, not just in prose, so the two cannot be blurred by a careless reading:
-  a proposed `substantial` whose evidence check came back insufficient is exactly the
-  case that must not be summarised as a secured overlap.
-- recommend acceptance or rejection, or mention literature that is not in the artifacts.
-
-Why it lives here and not in battle_export: the export renders, it does not decide, and it
-makes no model calls -- it is the artifact the system comparison uses. The summary is
-generated once, stored beside the claim results it was derived from, and fingerprinted
-against them, so a later change to those results marks it stale instead of leaving a
-confident paragraph standing over a report that no longer says that (see `is_stale`).
-
-The agent and the linear baseline run the SAME step with the same prompt and model, so a
-difference between their reports stays a difference in their reviews rather than in how
-their reviews were summarised.
-
-Usage
------
-  python paper_synthesis.py --data-dir data --submission-id <id> [--variant agent]
-  python paper_synthesis.py --data-dir data --submission-id <id> --check   # no model call
-"""
+"""Step 5b: the paper-level novelty summary."""
 import argparse
 import hashlib
 import json
@@ -45,26 +11,9 @@ from typing import List, Optional
 import source_refs
 import verdict as vd
 
-# pydantic and langchain are imported only where the model is actually called. Everything
-# above that -- the findings context, the fingerprint, the staleness test -- is pure, so
-# battle_export can import this module to decide whether a stored summary is still current
-# without dragging the model stack into the renderer.
 
-#: v2 separates "the evidence check confirmed this overlap" from "a shared element was
-#: found": v1 split its findings on `material` alone, so comparisons the check had
-#: declined were summarised as established overlap, and it gave the model nothing below
-#: `substantial`, so "no supported substantial overlap" came out as "no overlap at all".
-#: v3 adds rule 10. v2 could name a claim's confirmed partial overlaps in one section and
-#: then, in the other, describe the same comparisons as not establishing their proposed
-#: degree -- taking the confirmation back in a sentence that was really about a DIFFERENT
-#: comparison (one substantial proposal the check declined). The two statements were each
-#: defensible in isolation and contradictory together.
 PROMPT_VERSION = "paper_synthesis_v3_consistent_evidence_statements"
 
-# Deliberately without a worked example. A single example of a filled-in summary would be
-# copied in shape and in emphasis by every run, and the pilot papers are the ones whose
-# examples were at hand -- so the rules are stated instead, and the model writes from the
-# evidence it is given rather than from a template it has seen.
 PAPER_SYNTHESIS_PROMPT = """You are writing the paper-level novelty summary that opens a novelty report for a peer reviewer.
 
 Everything you need is in FINDINGS below. It is a condensed view of decisions that have
@@ -162,7 +111,6 @@ def _schema():
     return PaperSummary
 
 
-# --------------------------------------------------------------------- context --
 
 def _txt(x) -> str:
     return " ".join(str(x or "").split())
@@ -197,13 +145,7 @@ def _comparison_block(c: dict, ref: str, claim_label: str) -> List[str]:
 
 def build_findings(artifact_a: dict, artifact_b: dict, claim_order: List[str],
                    claim_names: dict, refs: dict) -> str:
-    """The only thing the model sees: recorded results, no traces and no quotes.
-
-    Every comparison carries its assessed degree AND its evidence status on adjacent
-    lines, and the strong comparisons are split into supported and unsupported groups, so
-    the two cannot be read as one. That split is the reason this is built in code rather
-    than handed over as raw JSON.
-    """
+    """The only thing the model sees: recorded results, no traces and no quotes."""
     b_by = {v.get("claim_id"): v for v in (artifact_b or {}).get("per_claim", []) or []}
     a_by = {e.get("claim_id"): e for e in (artifact_a or {}).get("claims", []) or []}
     labels = {cid: f"Claim {i}" for i, cid in enumerate(claim_order, 1)}
@@ -229,10 +171,6 @@ def build_findings(artifact_a: dict, artifact_b: dict, claim_order: List[str],
             if vd.degree(c) not in ("same", "substantial"):
                 continue
             block = _comparison_block(c, refs.get(source_refs.paper_id(c), "R?"), labels[cid])
-            # `material` alone is not confirmation: it says a shared element was found,
-            # not that the element carries the overlap at the proposed degree. Splitting
-            # on it put comparisons the check had explicitly declined into the SUPPORTED
-            # section, where the summary then reported them as established overlap.
             (strong if vd.degree_confirmed(c) else proposed).append(block)
 
     out += ["## SUBSTANTIAL-OR-STRONGER OVERLAP, SUPPORTED BY THE EVIDENCE CHECK", ""]
@@ -253,10 +191,6 @@ def build_findings(artifact_a: dict, artifact_b: dict, claim_order: List[str],
     else:
         out += ["None.", ""]
 
-    # Without this section the findings say nothing at all about claims whose overlaps
-    # stayed below `substantial`, and a summary written from them cannot tell "not
-    # anticipated" from "nothing in common was found". These are confirmed shared
-    # elements -- the check backed both the evidence and the proposed partial degree.
     out += ["## CONFIRMED SHARED ELEMENTS BELOW SUBSTANTIAL", "",
             "Shared elements the evidence check confirmed at `partial` degree. They are "
             "NOT anticipation of the claim, but they are real commonalities: a summary "
@@ -280,9 +214,6 @@ def build_findings(artifact_a: dict, artifact_b: dict, claim_order: List[str],
         conflicting = [c for c in comparisons if vd.conflicts(c)]
         inconclusive = [c for c in comparisons if vd.evidence_status(c) == "insufficient"]
         unchecked = [c for c in comparisons if not vd.evidence_status(c)]
-        # Material evidence, proposed degree declined. Neither an established overlap nor
-        # an absence of one -- so it belongs here, named, rather than silently joining
-        # either side.
         unconfirmed = [c for c in comparisons
                        if vd.evidence_status(c) == "material" and not vd.degree_confirmed(c)
                        and vd.degree(c) in vd.OVERLAP_DEGREES]
@@ -305,8 +236,6 @@ def build_findings(artifact_a: dict, artifact_b: dict, claim_order: List[str],
     out += gaps or ["None recorded."]
     out.append("")
 
-    # Only when there is nothing strong to summarise: the best that WAS found, so the
-    # summary can place the submission rather than saying nothing at all.
     if not strong and not proposed:
         out += ["## STRONGEST COMPARISONS ACTUALLY FOUND", "",
                 "No substantial-or-stronger overlap was proposed at all. These are the "
@@ -327,15 +256,9 @@ def build_findings(artifact_a: dict, artifact_b: dict, claim_order: List[str],
     return "\n".join(out).rstrip() + "\n"
 
 
-# ------------------------------------------------------------------ staleness --
 
 def fingerprint(findings: str) -> str:
-    """Identifies the exact claim results this summary was derived from.
-
-    Taken over the findings text rather than the whole artifact: it changes if and only if
-    something the summary was allowed to see changed, so an unrelated edit elsewhere in
-    Artifact A does not flag a summary that is in fact still accurate.
-    """
+    """Identifies the exact claim results this summary was derived from."""
     return hashlib.sha256(findings.encode("utf-8")).hexdigest()
 
 
@@ -350,7 +273,6 @@ def is_stale(summary: Optional[dict], findings: str) -> bool:
     return summary.get("inputs_fingerprint") != fingerprint(findings)
 
 
-# ----------------------------------------------------------------- the builder --
 
 def _load(path: Path):
     try:
@@ -377,7 +299,6 @@ class PaperSynthesizer:
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise ValueError("OPENAI_API_KEY environment variable is not set")
-        # Same switch artifact_b.py uses: the reasoning models reject `temperature`.
         kw = ({"reasoning_effort": os.getenv("NOVELTY_CONCLUSION_EFFORT", "low")}
               if model_name.startswith(("gpt-5", "o1", "o3", "o4")) else
               {"temperature": temperature})
@@ -387,9 +308,6 @@ class PaperSynthesizer:
     def _invoke(self, prompt: str):
         import warnings
         with warnings.catch_warnings():
-            # LangChain serialises the parsed object back into the AIMessage, and pydantic
-            # warns because the field is typed as None there. Cosmetic, and unrelated to
-            # our own parse, which is checked right below -- but it buries real output.
             warnings.filterwarnings("ignore", message="Pydantic serializer warnings")
             raw = self.llm.with_structured_output(_schema(), include_raw=True).invoke(prompt)
         parsed = raw["parsed"]
@@ -406,10 +324,6 @@ class PaperSynthesizer:
         words = len(f"{parsed.main_novelty_concern} {parsed.remaining_contribution}".split())
         retried = False
         if not WORDS_LO <= words <= WORDS_HI:
-            # One bounded retry, told the actual count. The budget is part of what was
-            # specified, so a single correction is worth its cost; a loop is not, and a
-            # silent overrun would quietly turn the opening summary into another section
-            # to skim. If the retry also misses, the recorded word_count says so.
             retried = True
             second, usage2 = self._invoke(
                 prompt + f"\n\n# REVISION\nYour previous answer was {words} words across "

@@ -1,18 +1,4 @@
-#!/usr/bin/env python3
-"""
-GROBID client: turns a PDF into GROBID TEI XML via the GROBID REST API,
-then reuses EnhancedGrobidParser (extract_metadata.py) to produce the
-pipeline's {id}.json.
-
-This replaces the *manual* GROBID step of the original pipeline. The only
-prerequisite is a running GROBID server -- by default a local Docker
-container on http://localhost:8070:
-
-    docker run --rm -d -p 8070:8070 grobid/grobid:0.8.1
-
-Everything downstream is unchanged: the TEI is parsed by the exact same
-EnhancedGrobidParser used before, so the {id}.json format is identical.
-"""
+"""GROBID client: turns a PDF into GROBID TEI XML via the GROBID REST API, then reuses EnhancedGrobidParser (extract_metadata.py) to produce the pipeline's {id}.json."""
 import argparse
 import json
 import logging
@@ -22,7 +8,6 @@ from pathlib import Path
 
 import requests
 
-# Reuse the existing TEI -> JSON parser (same directory).
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from extract_metadata import EnhancedGrobidParser
 
@@ -59,9 +44,6 @@ class GrobidClient:
             raise FileNotFoundError(f"PDF not found: {pdf}")
 
         url = f"{self.server_url}/api/processFulltextDocument"
-        # segmentSentences=1 is REQUIRED: the citation-context extraction in
-        # extract_metadata relies on <s> sentence elements that wrap each
-        # <ref type="bibr">. Without it, citation_contexts comes back empty.
         data = {
             "segmentSentences": "1",
             "includeRawCitations": "1",
@@ -86,17 +68,8 @@ class GrobidClient:
         recover_missing_title: bool = True,
         title_model: str = "gpt-4.1",
     ) -> dict:
-        """PDF -> TEI -> {id}.json + {id}_fulltext.json + {id}_quality.json.
-
-        If GROBID returns an empty/watermark-polluted title and
-        ``recover_missing_title`` is set, the title is cleaned / recovered from
-        the PDF first page (see title_fallback) and flagged with ``title_source``
-        for reviewer confirmation in the human-in-the-loop step.
-        """
+        """PDF -> TEI -> {id}.json + {id}_fulltext.json + {id}_quality.json."""
         if not self.is_alive():
-            # GROBID may just be (re)starting -- wait a bit before giving up, so a
-            # crash + Docker auto-restart (run it with --restart unless-stopped) doesn't
-            # hard-fail the pipeline.
             logging.warning(
                 f"GROBID not reachable at {self.server_url}; waiting up to ~90s for it…"
             )
@@ -122,11 +95,8 @@ class GrobidClient:
         if recover_missing_title:
             self._resolve_title(json_path, pdf_path, title_model)
 
-        # Submission date -> drives the "prior work" cutoff in retrieval. Extract from
-        # the PDF header if present; otherwise fall back to today (see _resolve_date).
         self._resolve_date(json_path, tei_path)
 
-        # Full text with sections, from the same TEI (no separate OCR tool).
         from lxml import etree
 
         root = etree.parse(str(tei_path))
@@ -145,7 +115,6 @@ class GrobidClient:
             encoding="utf-8",
         )
 
-        # Quality gates: verify everything downstream depends on is present.
         from quality_gates import compute_quality_gates
 
         metadata = json.loads(json_path.read_text(encoding="utf-8"))
@@ -177,20 +146,7 @@ class GrobidClient:
 
     @staticmethod
     def _resolve_date(json_path: Path, tei_path: Path) -> None:
-        """Record the submission's own date (year + publication_date) in the JSON.
-
-        The submission date is the retrieval cutoff for what counts as *prior work*.
-        Resolution order:
-          (1) the arXiv v1 (first-version) date, else Semantic Scholar publicationDate
-              (`_lookup_submission_date`) -- the correct novelty cutoff;
-          (2) the PDF header imprint date -- a weak fallback only, since for an arXiv
-              PDF it reflects whichever *version* was downloaded (e.g. v3 = 2025-06-20),
-              not first disclosure;
-          (3) today, for a genuinely anonymous under-review submission not public
-              anywhere.
-        We never default to a fixed past year (the original code hardcoded 2024, which
-        silently dropped all recent prior work).
-        """
+        """Record the submission's own date (year + publication_date) in the JSON."""
         from datetime import date
         from lxml import etree
 
@@ -198,13 +154,10 @@ class GrobidClient:
         data = json.loads(json_path.read_text(encoding="utf-8"))
         year = pub_date = source = None
 
-        # (1) external lookup: arXiv v1 (correct novelty cutoff) -> S2 publicationDate.
-        #     Preferred over the PDF header, whose date is version-dependent for arXiv.
         looked_up = GrobidClient._lookup_submission_date(data.get("title", ""))
         if looked_up:
             pub_date, year, source = looked_up
 
-        # (2) PDF header imprint date (fallback: papers not found above, e.g. non-public)
         if year is None:
             try:
                 root = etree.parse(str(tei_path))
@@ -222,10 +175,9 @@ class GrobidClient:
                             pub_date = when if len(when) >= 10 else f"{year}-01-01"
                             source = "grobid_header"
                             break
-            except Exception as exc:  # never let date extraction break processing
+            except Exception as exc:
                 logging.warning(f"TEI date extraction failed ({exc})")
 
-        # (3) fall back to today (paper is "under review now", not public anywhere)
         if year is None:
             today = date.today()
             year, pub_date, source = str(today.year), today.isoformat(), "today_fallback"
@@ -233,7 +185,6 @@ class GrobidClient:
         data["year"] = year
         data["publication_date"] = pub_date
         data["date_source"] = source
-        # Only flag for reviewer confirmation when we couldn't find a real date.
         data["date_needs_review"] = source == "today_fallback"
         json_path.write_text(
             json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -244,41 +195,28 @@ class GrobidClient:
 
     @staticmethod
     def _norm_title(s: str) -> str:
-        """Normalized title for matching: lowercase, no whitespace, no hyphens
-        (so GROBID artifacts like 'GEN-ERATION' still match 'generation')."""
+        """Normalized title for matching: lowercase, no whitespace, no hyphens (so GROBID artifacts like 'GEN-ERATION' still match 'generation')."""
         return "".join((s or "").lower().split()).replace("-", "")
 
     @staticmethod
     def _dehyphenate(text: str) -> str:
-        """Join intra-word hyphens so line-break hyphenation stops breaking queries:
-        'LAN-GUAGE' -> 'LANGUAGE', 'META-INSTRUCTIONS' -> 'METAINSTRUCTIONS'. Whitespace
-        collapsed. (GROBID leaves these hyphens in titles; a raw query then tokenizes to
-        'LAN' 'GUAGE' and misses the paper -- a main cause of the today-fallback.)"""
+        """Join intra-word hyphens so line-break hyphenation stops breaking queries: 'LAN-GUAGE' -> 'LANGUAGE', 'META-INSTRUCTIONS' -> 'METAINSTRUCTIONS'. Whitespace collapsed. (GROBID leaves these hyphens in titles; a raw query then tokenizes to 'LAN' 'GUAGE' and misses the paper -- a main cause of the today-fallback.)"""
         import re
 
         return " ".join(re.sub(r"(?<=\w)-(?=\w)", "", text or "").split())
 
     @staticmethod
     def _title_variants(title: str):
-        """Full title + cleaned query variants to try, most specific first.
-
-        Two common cases block a strict title match: (1) GROBID appends the
-        venue/journal ('Title. Venue ...') and (2) a 'Main Title: Subtitle' colon title
-        (S2's match endpoint frequently 404s on the full colon string). Retrying with
-        the leading segment / each side of the colon recovers these. Generalizes the
-        related-work matcher's heuristic (match_papers_to_s2._title_variants). Line-break
-        hyphenation is joined first so tokens are not split ('LAN-GUAGE' -> 'LANGUAGE')."""
+        """Full title + cleaned query variants to try, most specific first."""
         import re
 
         title = GrobidClient._dehyphenate((title or "").strip())
         out = [title]
-        # (1) venue-stripped leading segment ("Title. Venue ..." -> "Title")
         parts = re.split(r"\.\s+", title)
         if len(parts) > 1:
             first = parts[0].strip().rstrip(".")
             if 15 <= len(first) < len(title):
                 out.append(first)
-        # (2) each side of a "Main Title: Subtitle" colon
         if ":" in title:
             head, _, tail = title.partition(":")
             for seg in (head.strip(), tail.strip()):
@@ -294,10 +232,7 @@ class GrobidClient:
 
     @staticmethod
     def _title_close(a: str, b: str) -> bool:
-        """Robust title equality: normalized leading-edge substring OR high fuzzy
-        similarity -- tolerates GROBID hyphen/venue artifacts, subtitles, and minor
-        wording drift, so a real match is not rejected the way a strict prefix test
-        would (this is why the submission date previously fell back to 'today')."""
+        """Robust title equality: normalized leading-edge substring OR high fuzzy similarity -- tolerates GROBID hyphen/venue artifacts, subtitles, and minor wording drift, so a real match is not rejected the way a strict prefix test would (this is why the submission date previously fell back to 'today')."""
         from rapidfuzz import fuzz
 
         na, nb = GrobidClient._norm_title(a), GrobidClient._norm_title(b)
@@ -309,9 +244,7 @@ class GrobidClient:
 
     @staticmethod
     def _arxiv_get(params, attempts: int = 3):
-        """GET the arXiv API with polite backoff on throttling. Returns the 200
-        Response or None. arXiv rate-limits bursts with 429/503; the old single-shot
-        gave up immediately, which is a main reason the date fell back to 'today'."""
+        """GET the arXiv API with polite backoff on throttling. Returns the 200 Response or None. arXiv rate-limits bursts with 429/503; the old single-shot gave up immediately, which is a main reason the date fell back to 'today'."""
         import requests
 
         for i in range(attempts):
@@ -328,26 +261,15 @@ class GrobidClient:
 
     @staticmethod
     def _lookup_submission_date(title: str):
-        """Resolve the submission's date for the retrieval cutoff (best-effort).
-
-        Preference order:
-          (a) arXiv v1 (first-version) date -- the correct novelty cutoff: novelty is
-              judged at first public disclosure, so using a later revision (e.g. v3)
-              would wrongly admit concurrent/later work as 'prior work';
-          (b) Semantic Scholar publicationDate (non-arXiv / published-only papers).
-        Returns (publication_date, year, source) or None. Any error/rate-limit -> None
-        so document processing never blocks on it.
-        """
+        """Resolve the submission's date for the retrieval cutoff (best-effort)."""
         title = (title or "").strip()
         if len(title) < 10:
             return None
 
-        # (a) arXiv title search -> v1 date (independent of S2 throttling)
         pub = GrobidClient._arxiv_search_v1(title)
         if pub and len(pub) >= 4:
             return pub[:10], pub[:4], "arxiv_v1"
 
-        # (b) Semantic Scholar match -> arXiv id (second route to v1), else publicationDate
         s2 = GrobidClient._s2_match(title)
         if not s2:
             return None
@@ -366,11 +288,7 @@ class GrobidClient:
 
     @staticmethod
     def _arxiv_search_v1(title: str):
-        """v1 'published' date for a paper found on arXiv by title (or None).
-
-        Robust like the related-work matcher: tries the full title and a venue-stripped
-        variant, an exact-phrase then a broader query, and validates each candidate by
-        fuzzy title similarity (so a subtitle / GROBID artifact does not block a match)."""
+        """v1 'published' date for a paper found on arXiv by title (or None)."""
         import re
 
         from lxml import etree
@@ -385,7 +303,6 @@ class GrobidClient:
             out = []
             for e in root.findall(".//a:entry", ns):
                 et = e.findtext("a:title", default="", namespaces=ns)
-                # <published> is the v1 date; <updated> would be the latest version.
                 pub = (e.findtext("a:published", default="", namespaces=ns) or "").strip()
                 if et and pub:
                     out.append((et, pub))
@@ -397,7 +314,6 @@ class GrobidClient:
                 continue
             phrase = " ".join(words[:12])
             try:
-                # exact-phrase first (precise), then an unquoted query (broader recall)
                 for sq in (f'ti:"{phrase}"', f"ti:{phrase}"):
                     for et, pub in _query(sq):
                         if GrobidClient._title_close(title, et):
@@ -438,7 +354,7 @@ class GrobidClient:
             except Exception as exc:
                 logging.warning(f"S2 request failed ({exc})")
                 return None
-            if r.status_code == 429:  # throttled -> back off and retry
+            if r.status_code == 429:
                 time.sleep(1.5 * (i + 1))
                 continue
             return r
@@ -446,14 +362,7 @@ class GrobidClient:
 
     @staticmethod
     def _s2_match(title: str):
-        """Best-effort Semantic Scholar lookup returning the raw item dict
-        (title/publicationDate/year/externalIds), or None.
-
-        Two-stage, mirroring how the related-work retrieval finds papers: (a) the strict
-        `search/match` endpoint over title variants (venue-stripped, colon sides), then
-        (b) the lenient `/paper/search` relevance endpoint as a fallback -- the match
-        endpoint 404s on many subtitle titles. Every candidate is fuzzy-title-validated;
-        429s are retried. Best-effort: any hard failure returns None (never blocks)."""
+        """Best-effort Semantic Scholar lookup returning the raw item dict (title/publicationDate/year/externalIds), or None."""
         import os
 
         key = os.getenv("SEMANTIC_SCHOLAR_API_KEY")
@@ -462,16 +371,14 @@ class GrobidClient:
         match_url = "https://api.semanticscholar.org/graph/v1/paper/search/match"
         search_url = "https://api.semanticscholar.org/graph/v1/paper/search"
 
-        # (a) strict match endpoint over each title variant
         for q in GrobidClient._title_variants(title):
             r = GrobidClient._s2_get(match_url, {"query": q, "fields": fields}, headers)
-            if r is None or r.status_code != 200:  # None=throttled, 404=no match for q
+            if r is None or r.status_code != 200:
                 continue
             items = (r.json() or {}).get("data") or []
             if items and GrobidClient._title_close(title, items[0].get("title", "")):
                 return items[0]
 
-        # (b) lenient relevance search as a fallback; fuzzy-validate the top candidates
         r = GrobidClient._s2_get(search_url, {"query": title, "limit": 5, "fields": fields}, headers)
         if r is not None and r.status_code == 200:
             for it in (r.json() or {}).get("data") or []:
@@ -482,14 +389,12 @@ class GrobidClient:
     @staticmethod
     def _resolve_title(json_path: Path, pdf_path: str, title_model: str) -> None:
         """Clean/recover the title in the produced JSON and record its source."""
-        # Lazy import so the GROBID-only path stays dependency-light.
         from title_fallback import resolve_title
 
         data = json.loads(json_path.read_text(encoding="utf-8"))
         title, source = resolve_title(data.get("title"), pdf_path, model=title_model)
         data["title"] = title
         data["title_source"] = source
-        # Anything not taken verbatim from GROBID should be reviewer-confirmed.
         data["title_needs_review"] = source != "grobid"
         json_path.write_text(
             json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"

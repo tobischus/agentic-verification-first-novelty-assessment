@@ -1,44 +1,4 @@
-"""Agent vs linear from the run records -- read-only, no API call.
-
-PROTOCOL 5 names how the agent-linear comparison is made in the main study: by E1 on all
-papers, and by run metrics (number of comparisons, evidence status, quote verification,
-verdict agreement, cost, time). This module computes those run metrics for the 20 E1 papers
-and tests them paired by paper.
-
-Added 2026-09-25, AFTER the per-paper numbers had been computed once ad hoc
-(PROTOCOL 8b). The metrics are the ones section 5 named on
-2026-09-23; the test was chosen afterwards. Every metric below is therefore reported,
-whichever way it points, and the p-values are printed both per metric and Holm-adjusted
-across all tested metrics.
-
-Inputs are exactly the artifacts the frozen reports were rendered from: each
-`artifact_a/b_<variant>.json` is sha256-checked against the provenance recorded in
-`manifests/<set>/reports.json`, each report file against its `text_file` hash, and the run
-refuses on any mismatch. The per-variant numbers come from `eval/run_metrics.py` -- the same
-code that wrote the per-paper `__metrics.json` files -- never from a second implementation.
-
-How a paper ends, read from the run log (`run_log.prior_work[].rounds` and `final_state`):
-
-  dismissed          the agent read sections and decided the paper is a different
-                     contribution before any comparison (linear never dismisses)
-  compared           at least one comparison + evidence check
-  first check failed the evidence gate refused the first comparison
-  resolved by re-entry  ... and a later comparison, after re-reading, passed it (agent only;
-                     linear has no re-entry)
-  unresolved         the gate's objection stands at the end; the paper cannot refute
-
-The agent's dismissals select: linear's single pass rates most of the pairs the agent
-dismissed as `none / insufficient`, so counts over ALL pairs mix what the agent did with the
-papers with what it chose not to do. The second block therefore repeats the grounding
-metrics on the MATCHED pairs only -- the (claim, prior paper) pairs both flows compared --
-where the two flows start from the same pairs and differ only in how they handled them.
-
-Unit: the paper (n = 20). Test: exact two-sided sign test on the per-paper values, papers
-with equal values left out. Metrics that are zero for linear BY CONSTRUCTION (dismissal,
-re-entry, and "compared", which is "recorded minus dismissed") are descriptive only. USD are the run's list-price estimates, not billed amounts
-(GPT-5.6 bills implicit cache writes at 1.25x); the ratio between the two flows is what is
-comparable.
-"""
+"""Agent vs linear from the run records -- read-only, no API call."""
 from __future__ import annotations
 
 import hashlib
@@ -59,8 +19,6 @@ FE = ROOT / "final_evaluation"
 E1_CONFIG = FE / "config" / "e1_main.yaml"
 VARIANTS = ("agent", "linear")
 
-# (key, label, tested). `tested=False`: zero for linear by design, so a test would only
-# restate the design.
 METRICS = [
     ("comparisons_recorded", "comparisons recorded (claim x prior paper)", True),
     ("detailed_in_report", "detailed comparisons shown in the report", True),
@@ -87,7 +45,6 @@ METRICS = [
     ("model_calls", "model calls", True),
 ]
 
-# On the pairs both flows compared. `pairs` is equal by construction.
 MATCHED = [
     ("pairs", "pairs compared by both", False),
     ("first_check_failed", "first evidence check failed", True),
@@ -115,8 +72,7 @@ def _sha(p: Path) -> str:
 
 
 def _checked(path: str, sha: str, base: Path = ROOT) -> Path:
-    """The manifest's artifact paths are relative to the repo, its report paths to
-    final_evaluation/ -- hence `base`."""
+    """The manifest's artifact paths are relative to the repo, its report paths to final_evaluation/ -- hence `base`."""
     p = base / Path(path.replace("\\", "/"))
     got = _sha(p) if p.exists() else "missing"
     if got != sha:
@@ -138,8 +94,7 @@ def paper_entries(config: Path = E1_CONFIG) -> list:
 
 
 def pair_endings(artifact_a: dict) -> dict:
-    """{(claim_id, paper_id): ending} from the run log; endings as in the docstring
-    ("checked" = passed the first evidence check)."""
+    """{(claim_id, paper_id): ending} from the run log; endings as in the docstring ("checked" = passed the first evidence check)."""
     out = {}
     for claim in artifact_a.get("claims") or []:
         for pw in (claim.get("run_log") or {}).get("prior_work") or []:
@@ -172,17 +127,7 @@ _TRACE_STATUS = re.compile(r"^\[(\d+)\] EVIDENCE CHECK: status=(\w+)")
 
 
 def reentry_outcomes(artifact_a: dict, overlap_degrees) -> Counter:
-    """For every pair the agent compared more than once: how it ended, read from the
-    decision trace lines `claim_agent` writes per turn ("[t] SEMANTIC DEGREE: x",
-    "[t] EVIDENCE CHECK: status=y"), first turn against last.
-
-      end       resolved (gate passed after re-reading) / unresolved
-      outcome   overlap_confirmed (last degree partial+ and evidence material),
-                overlap_rejected (last degree none/superficial, evidence not material),
-                disagreement (the two still differ)
-      changed   what moved between the first and the last turn: degree, evidence, both,
-                neither
-    """
+    """For every pair the agent compared more than once: how it ended, read from the decision trace lines `claim_agent` writes per turn ("[t] SEMANTIC DEGREE: x", "[t] EVIDENCE CHECK: status=y"), first turn against last."""
     c = Counter()
     for claim in artifact_a.get("claims") or []:
         for pw in (claim.get("run_log") or {}).get("prior_work") or []:
@@ -268,8 +213,7 @@ def matched_values(ends: dict, rows: list, keys: set, vd) -> dict:
 
 
 def paired(per_paper: dict, key: str, block: str = "") -> dict:
-    """Totals (or mean of per-paper shares), and the sign test over papers. `block`
-    selects a nested block of each paper's record ("matched")."""
+    """Totals (or mean of per-paper shares), and the sign test over papers. `block` selects a nested block of each paper's record ("matched")."""
     rec = [v[block] if block else v for v in per_paper.values()]
     a = [v["agent"][key] for v in rec]
     b = [v["linear"][key] for v in rec]

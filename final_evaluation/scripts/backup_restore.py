@@ -1,19 +1,4 @@
-"""Local CLI backup/restore, on top of (not instead of) the admin export.
-
-The admin export (`/api/admin/export`, `cli.py export`) is the RESEARCH data --
-pseudonymised, no auth secrets, ready to analyse. A backup is the OPERATIONAL data: every
-row of every table for the study, including `participants.code_hash` and `sessions` --
-enough to fully reconstitute the study, which is exactly why it must never be treated as
-a research export (see README.md's export vs. backup distinction) and why it is
-gitignored (`final_evaluation/backups/`) rather than something that could reasonably ship
-in a repository.
-
-Table dump order respects foreign keys both ways: Assets and Papers/Reports/Tasks before
-anything referencing them on backup does not matter (backup just reads), but RESTORE
-writes them back in FK-safe order -- Study, then Asset, then Paper/Report/Task, then
-Participant, then Session/Assignment, then FinalResponse/PaperFamiliarity/AuditEvent/
-TechnicalIssue.
-"""
+"""Local CLI backup/restore, on top of (not instead of) the admin export."""
 from __future__ import annotations
 
 import json
@@ -28,7 +13,6 @@ from ..dashboard.backend.settings import get_settings
 
 FE_ROOT = Path(__file__).resolve().parents[1]
 
-# Backup order (safe for both dump and restore in this sequence).
 TABLES = [models.Study, models.Asset, models.Paper, models.Report, models.Task,
          models.Participant, models.Session_, models.Assignment, models.FinalResponse,
          models.PaperFamiliarity, models.PaperReading, models.AuditEvent, models.TechnicalIssue]
@@ -75,7 +59,6 @@ def backup(study_id: str, out_path: str) -> Path:
 
     dest = Path(out_path)
     if dest.exists():
-        # Never silently clobber an existing backup -- append a timestamp instead.
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         dest = dest.with_name(f"{dest.stem}_{stamp}{dest.suffix}")
     dest.parent.mkdir(parents=True, exist_ok=True)

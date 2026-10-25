@@ -1,20 +1,4 @@
-"""Check the imported pilot materials before they are ever seeded into a study.
-
-What this checks (per PROTOCOL.md section 4): every file the manifest points at exists
-and hashes match, all five systems are present per pilot paper, required PDF assets
-exist, internal anchors resolve, and the E1 (text) / E2 (display) content pairing is at
-least CONSISTENT -- for the four markdown systems E1 and E2 are literally the same file
-(trivially equivalent); for OpenNovelty they are not the same artifact (E2 is the native
-PDF with its taxonomy graphic, E1 is a text extraction of it), and this script does NOT
-claim they are content-equivalent -- extracting text near a diagram is not evidence the
-extracted text states the same relationships the diagram draws. It reports that pair as
-`needs_manual_check` rather than `equivalent`, which is the honest answer a resolvable
-link cannot substitute for.
-
-Usage
------
-  python -m final_evaluation.cli validate-inputs --study dashboard_pilot_v1
-"""
+"""Check the imported study inputs before they are seeded into a study."""
 from __future__ import annotations
 
 import hashlib
@@ -52,9 +36,7 @@ def _check_file_entry(entry: dict | None, findings: list, where: str) -> None:
 
 def _check_anchor_resolution(paper: str, system: str, text_path: Path, qidx_path: Path | None,
                              findings: list) -> dict:
-    """For agent/linear: every '> "..."' blockquote in the rendered text should resolve
-    against the quote index (same check performed manually when quote_index() was first
-    built -- reproduced here as an automated gate)."""
+    """For agent/linear: every '> "..."' blockquote in the rendered text should resolve against the quote index (same check performed manually when quote_index() was first built -- reproduced here as an automated gate)."""
     if qidx_path is None or not qidx_path.is_file():
         return {"resolvable": None, "total": None}
     text = text_path.read_text(encoding="utf-8")
@@ -79,17 +61,15 @@ def _check_anchor_resolution(paper: str, system: str, text_path: Path, qidx_path
     return {"resolvable": resolved, "total": total}
 
 
-def run(study: str, config_path: str = "final_evaluation/config/pilot.yaml") -> dict:
+def run(study: str, config_path: str = "final_evaluation/config/main.yaml") -> dict:
     cfg = yaml.safe_load((REPO_ROOT / config_path).read_text(encoding="utf-8"))
-    # The manifest of the study this config describes (`inputs_dir`, as import_pilot and
-    # seed_pilot use it) -- a fixed "pilot" here reported every main-study paper missing.
-    manifest_path = FE_ROOT / "manifests" / (cfg.get("inputs_dir") or "pilot") / "reports.json"
+    manifest_path = FE_ROOT / "manifests" / (cfg.get("inputs_dir") or "main") / "reports.json"
     findings: list = []
     result = {"study": study, "papers": {}, "findings": findings}
 
     if not manifest_path.is_file():
         findings.append({"level": "error", "where": "manifest",
-                         "msg": f"{manifest_path} not found -- run import-pilot first"})
+                         "msg": f"{manifest_path} not found -- run import-inputs first"})
         return result
 
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -174,4 +154,4 @@ def print_report(result: dict) -> None:
     print(f"\n{result['n_errors']} error(s), {result['n_warnings']} warning(s)")
     for f in result["findings"]:
         print(f"  [{f['level'].upper()}] {f['where']}: {f['msg']}")
-    print("\nVALID -- ready for init-db/seed-pilot" if result["ok"] else "\nNOT VALID -- fix errors above")
+    print("\nVALID -- ready for init-db/seed-study" if result["ok"] else "\nNOT VALID -- fix errors above")

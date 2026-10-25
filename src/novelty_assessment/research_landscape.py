@@ -5,7 +5,6 @@ from pydantic import BaseModel, Field
 from langchain_openai import ChatOpenAI
 from dotenv import load_dotenv
 
-# Load environment variables
 load_dotenv()
 
 
@@ -79,7 +78,6 @@ Ensure your analysis is comprehensive, identifying significant patterns and rela
 """
 
 
-# Define models for structured data
 class PaperInformation(BaseModel):
     """Structured information extracted from a research paper."""
 
@@ -101,18 +99,10 @@ class PaperInformation(BaseModel):
 
 
 class ResearchLandscapeAnalyzer:
-    """
-    Analyzes a collection of papers to create a comprehensive research landscape.
-    """
+    """Analyzes a collection of papers to create a comprehensive research landscape."""
 
     def __init__(self, model_name: str = "gpt-4.1", temperature: float = 0.0):
-        """
-        Initialize the analyzer with the specified LLM.
-
-        Args:
-            model_name: Name of the OpenAI model to use
-            temperature: Temperature setting for the LLM
-        """
+        """Initialize the analyzer with the specified LLM."""
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise ValueError("OPENAI_API_KEY environment variable is not set")
@@ -124,16 +114,7 @@ class ResearchLandscapeAnalyzer:
         self.research_landscape_prompt = research_landscape_prompt
 
     def load_papers(self, data_dir: str, submission_id: str) -> List[PaperInformation]:
-        """
-        Load paper information from JSON files in the specified directory.
-
-        Args:
-            data_dir: Directory containing paper information JSON files
-            submission_id: ID of the submission paper
-
-        Returns:
-            List of PaperInformation objects
-        """
+        """Load paper information from JSON files in the specified directory."""
         papers = []
 
         with open(
@@ -187,16 +168,7 @@ class ResearchLandscapeAnalyzer:
         return papers
 
     def format_papers_for_prompt(self, papers: List[PaperInformation]) -> str:
-        """
-        Format the paper information for the prompt.
-
-        Args:
-            papers: List of PaperInformation objects
-
-        Returns:
-            Formatted string for the prompt
-        """
-        # Separate submission and related papers
+        """Format the paper information for the prompt."""
         submission_papers = [p for p in papers if p.is_submission]
         related_papers = [p for p in papers if not p.is_submission]
 
@@ -205,7 +177,6 @@ class ResearchLandscapeAnalyzer:
 
         submission = submission_papers[0]
 
-        # Format submission paper
         formatted_text = "## SUBMISSION PAPER\n\n"
         formatted_text += f"TITLE: {submission.title}\n\n"
         formatted_text += (
@@ -231,7 +202,6 @@ class ResearchLandscapeAnalyzer:
             + "\n\n"
         )
 
-        # Format related papers
         formatted_text += "## RELATED PAPERS\n\n"
 
         for i, paper in enumerate(related_papers, 1):
@@ -262,52 +232,28 @@ class ResearchLandscapeAnalyzer:
         return formatted_text
 
     def analyze_landscape(self, papers: List[PaperInformation]) -> str:
-        """
-        Analyze the research landscape based on the provided papers.
-
-        Args:
-            papers: List of PaperInformation objects
-
-        Returns:
-            Analysis of the research landscape
-        """
-        # Format papers for the prompt
+        """Analyze the research landscape based on the provided papers."""
         formatted_papers = self.format_papers_for_prompt(papers)
 
         prompt = self.research_landscape_prompt.format(papers=formatted_papers)
 
-        # Run the analysis
         analysis = self.llm.invoke(prompt)
 
         return analysis
 
     def run_analysis(self, data_dir: str, submission_id: str, output_file: str) -> str:
-        """
-        Run the complete analysis pipeline.
-
-        Args:
-            data_dir: Directory containing paper information JSON files
-            submission_id: ID of the submission paper
-            output_file: Path to save the analysis output
-
-        Returns:
-            Analysis of the research landscape
-        """
-        # Load papers
+        """Run the complete analysis pipeline."""
         papers = self.load_papers(data_dir, submission_id)
 
-        # Check if we have enough papers
         if len(papers) < 2:
             raise ValueError(
                 f"Not enough papers found. Need at least 2, got {len(papers)}"
             )
 
-        # Run analysis
         analysis = self.analyze_landscape(papers)
 
         output_path = os.path.join(data_dir, submission_id, output_file)
 
-        # Save analysis to file
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(analysis.content)
 
@@ -343,23 +289,12 @@ class ResearchLandscapeAnalyzer:
     def prepare_batch_inference_data(
         self, data_dir: str, model_name: str = "gpt-4.1", output_dir: str = "./openai_inputs"
     ) -> str:
-        """
-        Prepare data for batched inference with OpenAI API.
-
-        Args:
-            data_dir: Directory containing paper information JSON files
-            model_name: Name of the OpenAI model to use
-            output_dir: Directory to save the batch input file
-
-        Returns:
-            Path to the generated JSONL batch file
-        """
+        """Prepare data for batched inference with OpenAI API."""
         batch_entries = []
 
         submission_ids = os.listdir(data_dir)
 
         for submission_id in submission_ids:
-            # Load papers for this submission
             papers = self.load_papers(data_dir, submission_id)
 
             if len(papers) < 2:
@@ -368,13 +303,10 @@ class ResearchLandscapeAnalyzer:
                 )
                 continue
 
-            # Format papers for the prompt
             formatted_papers = self.format_papers_for_prompt(papers)
 
-            # Prepare the prompt
             prompt = self.research_landscape_prompt.format(papers=formatted_papers)
 
-            # Create the batch entry
             batch_entry = {
                 "custom_id": f"research-landscape-{submission_id}",
                 "method": "POST",
@@ -388,10 +320,8 @@ class ResearchLandscapeAnalyzer:
 
             batch_entries.append(batch_entry)
 
-        # Create output directory if it doesn't exist
         os.makedirs(output_dir, exist_ok=True)
         
-        # Write to JSONL file
         output_path = os.path.join(output_dir, "batch_research_landscape_input.jsonl")
         with open(output_path, "w", encoding="utf-8") as f:
             for entry in batch_entries:
@@ -406,21 +336,11 @@ class ResearchLandscapeAnalyzer:
         return output_path
 
     def process_batch_results(self, results_file: str, data_dir: str) -> Dict:
-        """
-        Process the results from the research landscape batch and save them to the appropriate files.
-
-        Args:
-            results_file: Path to the batch results file (JSONL)
-            data_dir: Directory to store processed data
-
-        Returns:
-            Dict containing processing statistics and information
-        """
+        """Process the results from the research landscape batch and save them to the appropriate files."""
         from litellm import cost_per_token
 
         print(f"Processing research landscape batch results from {results_file}")
 
-        # Statistics for reporting
         stats = {
             "total_processed": 0,
             "successful": 0,
@@ -429,11 +349,9 @@ class ResearchLandscapeAnalyzer:
             "submissions": [],
         }
 
-        # Load the results
         with open(results_file, "r", encoding="utf-8") as f:
             results = [json.loads(line) for line in f]
 
-        # Process each result
         for result in results:
             custom_id = result.get("custom_id", "")
 
@@ -443,10 +361,8 @@ class ResearchLandscapeAnalyzer:
 
             stats["total_processed"] += 1
 
-            # Extract submission_id from custom_id
             submission_id = custom_id.replace("research-landscape-", "")
 
-            # Extract the analysis content
             response_data = result.get("response", {}).get("body", {})
             choices = response_data.get("choices", [])
 
@@ -460,7 +376,6 @@ class ResearchLandscapeAnalyzer:
                 stats["submissions"].append(submission_stats)
                 continue
 
-            # Get the content from the first choice
             content = choices[0].get("message", {}).get("content", "")
 
             if not content:
@@ -471,21 +386,17 @@ class ResearchLandscapeAnalyzer:
                 stats["submissions"].append(submission_stats)
                 continue
 
-            # Create submission directory if it doesn't exist
             submission_dir = os.path.join(data_dir, submission_id, "ours")
             os.makedirs(submission_dir, exist_ok=True)
 
-            # Save the content to a file
             output_path = os.path.join(submission_dir, "research_landscape.txt")
             with open(output_path, "w", encoding="utf-8") as f:
                 f.write(content)
 
             print(f"Saved research landscape analysis for {submission_id}")
 
-            # Save metadata
             token_usage = response_data.get("usage", {})
 
-            # Calculate cost
             prompt_tokens = token_usage.get("prompt_tokens", 0)
             completion_tokens = token_usage.get("completion_tokens", 0)
 
@@ -505,7 +416,6 @@ class ResearchLandscapeAnalyzer:
 
             submission_stats["token_usage"] = token_usage
 
-            # Update metadata file
             meta_path = os.path.join(submission_dir, "metadata.json")
             current_meta = {}
 
@@ -527,7 +437,6 @@ class ResearchLandscapeAnalyzer:
             stats["successful"] += 1
             stats["submissions"].append(submission_stats)
 
-        # Create summary statistics
         success_rate = (
             (stats["successful"] / stats["total_processed"]) * 100
             if stats["total_processed"] > 0
@@ -538,7 +447,6 @@ class ResearchLandscapeAnalyzer:
         )
         print(f"Total estimated cost: ${stats['total_cost']:.4f}")
 
-        # Save summary
         os.makedirs("./openai_outputs", exist_ok=True)
         summary_path = os.path.join(
             "./openai_outputs", "research_landscape_processing_summary.json"
@@ -592,13 +500,10 @@ if __name__ == "__main__":
     analyzer = ResearchLandscapeAnalyzer(model_name=args.model)
     
     if args.submission_id:
-        # Single submission analysis
         analyzer.run_analysis(args.data_dir, args.submission_id, "research_landscape.txt")
     
     if args.prepare:
-        # Prepare batch inference data
         analyzer.prepare_batch_inference_data(args.data_dir, args.model)
     
     if args.process:
-        # Process batch results
         analyzer.process_batch_results(args.results_file, args.data_dir)

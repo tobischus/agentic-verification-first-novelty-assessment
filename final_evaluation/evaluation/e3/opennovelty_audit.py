@@ -1,27 +1,4 @@
-"""E3 for OpenNovelty: are the passages it shows from prior work real, and is that work prior?
-
-Added 2026-10-01, after E1 and after E3's automatic part (PROTOCOL 8c); descriptive, no test.
-Of the three external systems only OpenNovelty shows passages from prior work: each "Prior Art
-Analysis" carries "Evidence k - Rationale: ... - Original: <submission> - Candidate: <prior
-paper>". Afzal et al. and DeepReviewer 2.0 quote the submission only (checked: every quoted
-span of DeepReviewer is in the submission; Afzal's are the authors' phrases, titles and
-category names), so they have nothing to audit here.
-
-Per evidence item:
-  candidate quote   looked up in the candidate paper's full text (arXiv PDF, or the open-access
-                    PDF Semantic Scholar names), same normalisation and threshold as E3:
-                    exact substring, or rapidfuzz partial_ratio >= 90; else not found. A
-                    candidate whose text cannot be fetched is "not auditable".
-  original quote    looked up in the submission text the same way.
-  candidate date    first public date (arXiv v1, else Semantic Scholar) against the
-                    submission's `publication_date`; the candidate being the submission itself
-                    (same arXiv id or same title) is counted separately.
-
-Read-only on the frozen inputs; network only for the candidate papers. The fetched PDFs are
-cached and their sha256 recorded in the output.
-
-  python -m final_evaluation.evaluation.e3.opennovelty_audit [--cache DIR]
-"""
+"""E3 for OpenNovelty: are the passages it shows from prior work real, and is that work prior?"""
 from __future__ import annotations
 
 import argparse
@@ -96,8 +73,7 @@ def direct_pdf(uri: str) -> str | None:
 
 
 def squash(t: str) -> str:
-    """Lowercase letters and digits only: OpenNovelty's text is lowercased and its word
-    boundaries are unreliable ("proposescalinginter- rl"), so spaces cannot be compared."""
+    """Lowercase letters and digits only: OpenNovelty's text is lowercased and its word boundaries are unreliable ("proposescalinginter- rl"), so spaces cannot be compared."""
     return re.sub(r"[^a-z0-9]+", "", t.lower())
 
 
@@ -108,9 +84,7 @@ def _find_one(q: str, text_squashed: str) -> str:
 
 
 def find(quote: str, text_squashed: str) -> str:
-    """OpenNovelty elides with "..." inside a quote, so each piece between ellipses is looked up
-    on its own (pieces under 20 characters are too short to place); the quote is found when
-    every piece is, and is "near" when any piece needed the fuzzy match."""
+    """OpenNovelty elides with "..." inside a quote, so each piece between ellipses is looked up on its own (pieces under 20 characters are too short to place); the quote is found when every piece is, and is "near" when any piece needed the fuzzy match."""
     pieces = [squash(p) for p in re.split(r"\.{3}|…", quote)]
     pieces = [p for p in pieces if len(p) >= 20]
     if not pieces:
@@ -144,7 +118,6 @@ def pdf_text_with_links(path: Path) -> str:
     return "".join(parts)
 
 
-# A candidate title can wrap over up to three lines before its "URL: View paper" link.
 _CAND = re.compile(r"(?m)^(\d+)\.\s+((?:(?!URL:)[^\n]*\n){1,3}?)\s*URL:\s*View paper\s*<<([^>]+)>>")
 _EVID = re.compile(r"Evidence\s+(\d+)\s*-\s*Rationale:(.*?)-\s*Original:(.*?)-\s*Candidate:(.*?)"
                    r"(?=Evidence\s+\d+\s*-\s*Rationale:|\n\s*\d+\.\s+\S|\Z)", re.S)
@@ -159,7 +132,6 @@ def evidence_items(text: str) -> list:
         title = " ".join(h.group(2).split())
         for e in _EVID.finditer(block):
             orig = " ".join(e.group(3).split())
-            # the last item of a report runs into the appendix that follows it
             cand = re.split(r"\s+Appendix:", " ".join(e.group(4).split()))[0]
             items.append({"candidate_no": int(h.group(1)), "title": title, "uri": h.group(3),
                           "original": orig, "candidate": cand})
@@ -212,7 +184,7 @@ def resolve(uri: str, title: str, meta_cache: dict) -> dict:
         time.sleep(3)
         mm = re.search(r"<published>(\d{4}-\d{2}-\d{2})", feed or "")
         if mm:
-            out["date"] = mm.group(1)            # arXiv v1 = first public version
+            out["date"] = mm.group(1)
         t = re.search(r"<entry>.*?<title>(.*?)</title>", feed or "", re.S)
         out["arxiv_title"] = " ".join(t.group(1).split()) if t else None
         out["pdf_url"], out["how"] = f"https://arxiv.org/pdf/{out['arxiv']}", "arxiv"
