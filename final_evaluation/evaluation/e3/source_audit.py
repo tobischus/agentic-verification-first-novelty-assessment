@@ -53,6 +53,20 @@ from .. import agent_linear as al
 
 NEAR = 90.0
 EXAMPLES = 10
+MIN_GAP_DAYS = 90
+
+
+def _gap_days(version_date: str, sub_date: str):
+    """Days from the pinned version to the submission, or None unless both are full dates."""
+    from datetime import date
+    try:
+        v = date.fromisoformat((version_date or "")[:10])
+        s = date.fromisoformat((sub_date or "")[:10])
+    except ValueError:
+        return None
+    if len((version_date or "").strip()) < 10 or len((sub_date or "").strip()) < 10:
+        return None
+    return (s - v).days
 
 
 def norm(text: str) -> str:
@@ -127,9 +141,13 @@ def audit_variant(artifact_a: dict, sub_dir: Path, paper: str, sub_date: str, vd
                 txt = paper_text(sub_dir, pw)
                 cache[key] = norm(txt) if txt is not None else None
             dated = pw.get("pinned_version_date") or ""
+            gap = _gap_days(dated, sub_date)
             for pr in pairs:
                 c["pairs_source_dated"] += bool(dated)
                 c["pairs_source_before_submission"] += bool(dated) and dated < sub_date
+                # Equation 3.1: the pinned version at least 90 days before the submission.
+                c["pairs_source_gap_known"] += gap is not None
+                c["pairs_source_gap_90"] += gap is not None and gap >= MIN_GAP_DAYS
                 for side, quote, src in (("submission", pr.get("claim_quote", ""), sub_norm),
                                          ("prior_work", pr.get("paper_quote", ""), cache[key])):
                     kind, score = classify(quote, src)
@@ -170,6 +188,11 @@ def rates(c: Counter) -> dict:
         "sources_dated_before_submission": _rate(c["pairs_source_before_submission"],
                                                  c["pairs_source_dated"]),
         "pairs_source_undated": c["pairs_shown"] - c["pairs_source_dated"],
+        # Of the shown pairs whose source and submission both carry a full date: the share
+        # pinned to a version at least MIN_GAP_DAYS before the submission (Equation 3.1).
+        "sources_dated_90_days_before_submission": _rate(c["pairs_source_gap_90"],
+                                                          c["pairs_source_gap_known"]),
+        "pairs_source_gap_known": c["pairs_source_gap_known"],
     }
 
 
