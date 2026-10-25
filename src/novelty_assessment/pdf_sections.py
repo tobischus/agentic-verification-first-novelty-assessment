@@ -1,60 +1,38 @@
-#!/usr/bin/env python3
+"""Sectioned full text of a prior paper, parsed with PyMuPDF.
+
+Sections are cut at the PDF outline when it is reliable, otherwise at headings detected
+from font size, weight and numbering. The output has the form "## Section\ntext" and is
+both what the agent reads and the text every quote is verified against.
 """
-In-process PDF -> sectioned full text via PyMuPDF (no external service).
-
-Replaces GROBID for RELATED-WORK full text (the submission keeps GROBID: its
-structured metadata / citation contexts are needed there). The claim agent only
-needs section titles + verbatim body text from candidate papers, and GROBID --
-a Docker service that is slow and unstable on low-RAM machines -- is overkill
-for that. PyMuPDF parses a paper in ~1s fully in-process.
-
-Output format is EXACTLY the grobid_fulltext dump format ("## Section\\ntext"),
-so everything downstream (passages.chunks_from_grobid_text, the agent's
-section_menu / read_sections, quote verification) works unchanged. Verification
-integrity is preserved by construction: quotes are verified against the parsed
-text itself, not the original PDF, so parser noise cannot produce false ✓.
-
-Heading detection is heuristic (font size / boldness / numbering patterns).
-It works well on LaTeX-born papers (arXiv etc.); for PDFs where no headings
-are detected, the text is split into page-range pseudo-sections so the agent's
-section-selection mechanism still functions.
-"""
-import os
 import re
 from collections import Counter
-from pathlib import Path
 
-# Cut at the PDF's own outline where it has one. Set to 0 to force the font heuristic,
-# which is what a run before this change used.
-_USE_OUTLINE = os.getenv("NOVELTY_PDF_OUTLINE", "1").strip().lower() not in ("0", "false", "no")
-
-# section titles whose CONTENT we drop (the agent must never quote from the
-# bibliography, and acknowledgments are noise)
 _DROP_SECTIONS = re.compile(r"^(references?|bibliography|acknowledg\w*)\b", re.I)
-# lines that look like captions, not section headings
 _CAPTION = re.compile(r"^(figure|fig\.?|table|tab\.?|listing|algorithm)\s*\d", re.I)
-# numbered heading like "1 Introduction", "2.3 Method", "A.1 Details", "IV. Results"
 _NUMBERED = re.compile(r"^([A-Z]?\d+(\.\d+)*|[IVX]+)[.)]?\s+\S")
-# IEEE/ACM style: "I. INTRODUCTION", "A. Method" -- small-caps headings at BODY size,
-# not bold, so font signals alone miss them entirely
 _IEEE_NUM = re.compile(r"^([IVX]+|\d+(\.\d+)*|[A-Z])[.)]\s+(\S.*)$")
+
+_OUTLINE_MAX_LEVEL = 2
+_ANCHOR_TOL = 3.0
+_ANCHOR_MIN_OK = 0.5
+_HEAD_NUM = re.compile(r"^\s*(?:\d+(?:\.\d+)*[.)]?|[A-Z]\.?\d+(?:\.\d+)*[.)]?"
+                       r"|[IVXLC]+[.)]|[A-Z][.)]?(?=\s+[A-Z]))\s+")
 
 
 def _clean(text: str) -> str:
-    """Join hyphenated line breaks and collapse whitespace inside a paragraph."""
-    text = re.sub(r"(\w)-\s*\n\s*(\w)", r"\1\2", text)   # hyphenation across lines
-    text = re.sub(r"\s*\n\s*", " ", text)                 # soft line breaks -> spaces
+    """Join hyphenated line breaks and collapse whitespace."""
+    text = re.sub(r"(\w)-\s*\n\s*(\w)", r"\1\2", text)
+    text = re.sub(r"\s*\n\s*", " ", text)
     return re.sub(r"[ \t]+", " ", text).strip()
 
 
 def _page_lines_geom(page):
-    """Yield (bbox, text, max_font_size, bold_fraction) per visual line of a page."""
+    """Yield (bbox, text, max_font_size, bold_fraction) for each horizontal text line."""
     d = page.get_text("dict")
     for block in d.get("blocks", []):
-        if block.get("type") != 0:  # text blocks only
+        if block.get("type") != 0:
             continue
         for line in block.get("lines", []):
-            # skip rotated text (arXiv sidebar watermark is vertical)
             dx, dy = line.get("dir", (1, 0))
             if abs(dx) < 0.5:
                 continue
@@ -72,14 +50,8 @@ def _page_lines_geom(page):
             yield line["bbox"], text, (max(sizes) if sizes else 0.0), bold_chars / n
 
 
-def _page_lines(page):
-    """Yield (text, max_font_size, bold_fraction) per visual line of a page."""
-    for _bbox, text, size, bold in _page_lines_geom(page):
-        yield text, size, bold
-
-
 def _body_size(lines) -> float:
-    """The dominant (body) font size, char-weighted, rounded to 0.5pt."""
+    """Dominant font size, weighted by characters and rounded to 0.5 pt."""
     counter = Counter()
     for text, size, _ in lines:
         counter[round(size * 2) / 2] += len(text)
@@ -99,8 +71,7 @@ def _is_heading(text: str, size: float, bold: float, body: float) -> bool:
         return True
     if boldish and (_NUMBERED.match(text) or text.isupper() or len(text) < 60):
         return True
-    # IEEE/ACM small-caps headings ("I. INTRODUCTION", "A. Method"): body size,
-    # not bold -- accept on the strength of the numbering + heading-like shape alone
+    # Headings set in body size without bold, e.g. "I. INTRODUCTION".
     m = _IEEE_NUM.match(text)
     if m:
         rest = m.group(3)
@@ -111,41 +82,8 @@ def _is_heading(text: str, size: float, bold: float, body: float) -> bool:
     return False
 
 
-# --------------------------------------------------------------------------- #
-# Sections from the PDF's own outline
-#
-# A LaTeX paper carries its structure with it: hyperref writes the real \section
-# commands into the PDF as bookmarks, each with a destination -- the point the
-# viewer jumps to when you click it. That is not heading DETECTION, it is what the
-# author declared, so where it exists it beats reading font sizes off the page.
-#
-# Measured over the 170 unique related-work PDFs in the repo: 107 (63%) carry a
-# usable outline, and 88% of this evaluation's own pool does. Cutting at the
-# destination lands within one line of the declared heading for 942 of 1008
-# top-level entries (93,5%); 88 of the 107 papers are flawless.
-#
-# The remaining failures cluster by typesetting class rather than scattering --
-# some IEEE templates place every destination a heading too early -- so the gate
-# below is per paper, not per entry: if the text at the anchors does not
-# corroborate the declared titles, the whole paper falls back to the heuristic.
-# --------------------------------------------------------------------------- #
-
-_OUTLINE_MAX_LEVEL = 2      # deeper entries merge into their parent section
-_ANCHOR_TOL = 3.0           # pt: the destination sits just above its heading
-_ANCHOR_MIN_OK = 0.5        # share of anchors that must corroborate their title
-# Section numbering in any of the shapes papers use: "3", "3.1", "IV.", "A.", "B.2",
-# and the bare appendix letter that precedes a capitalised title ("B More Results").
-_HEAD_NUM = re.compile(r"^\s*(?:\d+(?:\.\d+)*[.)]?|[A-Z]\.?\d+(?:\.\d+)*[.)]?"
-                       r"|[IVXLC]+[.)]|[A-Z][.)]?(?=\s+[A-Z]))\s+")
-
-
 def _norm_head(t: str) -> str:
-    """Compare headings on their words alone; numbering and case are convention.
-
-    The numbering has to go because the two sides carry different ones: the bookmark
-    says "Introduction" where the page is set "I. INTRODUCTION", and an appendix
-    letter often lives only in the bookmark. Stripped repeatedly, since the forms
-    stack ("2 A Holistic Framework" against "A Holistic Framework")."""
+    """Heading reduced to lowercase alphanumerics, without leading section numbers."""
     s = (t or "").strip()
     for _ in range(3):
         nxt = _HEAD_NUM.sub("", s, count=1)
@@ -156,10 +94,7 @@ def _norm_head(t: str) -> str:
 
 
 def _undouble(t: str) -> str:
-    """'Knowledge Graph Knowledge Graph' -> 'Knowledge Graph'.
-
-    hyperref writes the title twice when a \\section carries a separate running
-    head; left alone, the doubled form matches nothing on the page."""
+    """Collapse a title that the outline repeats, e.g. 'Graph Graph' -> 'Graph'."""
     s = (t or "").strip()
     h = len(s) // 2
     if len(s) > 6 and s[:h].strip().lower() == s[h:].strip().lower():
@@ -168,26 +103,17 @@ def _undouble(t: str) -> str:
 
 
 def _reading_key(pno: int, x0: float, y0: float, width: float):
-    """Sort key putting lines in reading order: page, then column, then height.
-
-    The column split is the page midpoint. Two-column papers set their right
-    column near x=318 of 612, single-column text starts far left and never
-    crosses it, so the same rule serves both without detecting the layout."""
+    """Sort key for reading order: page, column (split at the page midpoint), height."""
     return (pno, 0 if x0 < width / 2 else 1, y0)
 
 
 def _outline_marks(doc, max_level: int = _OUTLINE_MAX_LEVEL):
-    """[(key, path_title, leaf_title)] for the outline entries worth cutting at.
-
-    `path_title` carries the ancestors ('Knowledge Graph > Retriever'). Without it
-    a survey that gives every chapter the same sub-structure ends up with seven
-    sections called 'Retriever', and get_sections -- which joins chunks by NAME --
-    hands back all seven as one block."""
+    """Outline entries as (reading_key, path_title, leaf_title), plus the top-level count."""
     try:
         toc = doc.get_toc(False) or []
     except Exception:
         return [], 0
-    marks, path, n_top, n_dest = [], {}, 0, 0
+    marks, path, n_top = [], {}, 0
     for entry in toc:
         try:
             lvl, title, _pg, dest = entry[0], entry[1], entry[2], entry[3]
@@ -206,10 +132,8 @@ def _outline_marks(doc, max_level: int = _OUTLINE_MAX_LEVEL):
         pno = dest.get("page")
         if pno is None or not (0 <= pno < doc.page_count):
             continue
-        n_dest += 1
         page = doc[pno]
         pt = dest["to"]
-        # PDF coordinates start at the bottom of the page; the text does not.
         ytop = page.rect.height - pt.y
         marks.append((_reading_key(pno, pt.x, ytop, page.rect.width),
                       " > ".join(path[k] for k in sorted(path)), leaf))
@@ -218,19 +142,16 @@ def _outline_marks(doc, max_level: int = _OUTLINE_MAX_LEVEL):
 
 
 def _sections_from_outline(doc, seq):
-    """[(title, [line, ...])] cut at the outline's anchors, or None to fall back.
+    """Sections cut at the outline destinations, or None if the outline is unreliable.
 
-    `seq` is [(reading_key, text)] for the whole document. Every line lands in a
-    section -- what precedes the first anchor becomes front matter -- because this
-    text is also the corpus every quote is verified against, and a splitter that
-    drops lines makes previously verified quotes fail."""
+    The outline is accepted if it has at least three top-level entries and the text at
+    the destinations matches at least half of the titles. Every line is assigned to a
+    section, since the result is also the text that quotes are verified against.
+    """
     marks, n_top = _outline_marks(doc)
     if n_top < 3 or len(marks) < 3:
         return None
 
-    # Does the text at each anchor corroborate the title the outline declares?
-    # Checked in a window, because the anchor sits above its heading and the
-    # heading itself is often set as two lines ('3' and 'METHOD').
     ok = 0
     for key, _path, leaf in marks:
         i = next((j for j, (k, _t) in enumerate(seq)
@@ -242,7 +163,7 @@ def _sections_from_outline(doc, seq):
         if n and (n in window or (len(n) > 8 and n[: len(n) * 2 // 3] in window)):
             ok += 1
     if ok < _ANCHOR_MIN_OK * len(marks):
-        return None                      # destinations systematically off
+        return None
 
     bounds = []
     for key, path_title, leaf in marks:
@@ -259,8 +180,6 @@ def _sections_from_outline(doc, seq):
     for n, (i, path_title, leaf) in enumerate(bounds):
         j = bounds[n + 1][0] if n + 1 < len(bounds) else len(seq)
         body = [t for _k, t in seq[i:j]]
-        # Drop the heading's own line(s) from the body: the title is the section's
-        # name already, and leaving it in front of the text reads as a duplicate.
         while body and len(body[0]) < 90 and _norm_head(body[0]) \
                 and _norm_head(body[0]) in _norm_head(leaf):
             body.pop(0)
@@ -269,16 +188,12 @@ def _sections_from_outline(doc, seq):
 
 
 def _render(sections) -> str:
-    """[(heading, [line, ...])] -> the '## Section\\ntext' dump both paths return.
-
-    The bibliography and acknowledgments are dropped here rather than in either
-    splitter, so the two agree on it: a quote must never be verifiable against a
-    reference list, and that has to hold however the sections were found."""
+    """Render sections as '## Section\\ntext', without references and acknowledgements."""
     out = []
     for head, lines in sections:
         leaf = (head or "").split(" > ")[-1].strip()
         if leaf and _DROP_SECTIONS.match(leaf):
-            continue  # never feed the bibliography/acknowledgments to the agent
+            continue
         txt = _clean("\n".join(lines))
         if not txt:
             continue
@@ -290,15 +205,13 @@ def _render(sections) -> str:
 
 
 def pdf_to_sectioned_text(pdf_path) -> str:
-    """Parse a PDF into '## Section\\ntext' full text (grobid-dump compatible).
-
-    Returns "" if the PDF has no extractable text (e.g. scanned images)."""
-    import fitz  # pymupdf
+    """Parse a PDF into sectioned full text. Returns "" if the PDF has no text layer."""
+    import fitz
 
     doc = fitz.open(str(pdf_path))
     try:
-        all_lines = []  # (page_no, text, size, bold)
-        seq = []        # (reading_key, text) -- for the outline splitter
+        all_lines = []
+        seq = []
         for pno, page in enumerate(doc):
             w = page.rect.width
             for bbox, text, size, bold in _page_lines_geom(page):
@@ -307,11 +220,7 @@ def pdf_to_sectioned_text(pdf_path) -> str:
         if not all_lines:
             return ""
         seq.sort(key=lambda e: e[0])
-        # The paper's own declared structure first; font heuristics only where the
-        # PDF does not carry one, or where its destinations do not hold up.
-        # NOVELTY_PDF_OUTLINE=0 forces the old path, so a run can be compared against
-        # the sectioning it used to have without checking out an older revision.
-        outline = _sections_from_outline(doc, seq) if _USE_OUTLINE else None
+        outline = _sections_from_outline(doc, seq)
     finally:
         doc.close()
 
@@ -319,10 +228,8 @@ def pdf_to_sectioned_text(pdf_path) -> str:
         return _render([[head, lines] for head, lines in outline])
 
     body = _body_size([(t, s, b) for _, t, s, b in all_lines])
-
-    # assemble (heading, [lines...]) sections in document order
-    sections = []           # [ [head, [line, ...]] ]
-    current = ["", []]      # preamble (title/authors/abstract) has no heading
+    sections = []
+    current = ["", []]
     for pno, text, size, bold in all_lines:
         if _is_heading(text, size, bold, body):
             if current[1] or current[0]:
@@ -335,8 +242,7 @@ def pdf_to_sectioned_text(pdf_path) -> str:
 
     named = [s for s in sections if s[0]]
     if len(named) < 3:
-        # heading detection failed for this PDF -> page-range pseudo-sections so the
-        # agent's section-selection mechanism still has something to choose from
+        # No usable headings: split into sections of two pages each.
         per_page = {}
         for pno, text, _, _ in all_lines:
             per_page.setdefault(pno, []).append(text)
@@ -352,16 +258,3 @@ def pdf_to_sectioned_text(pdf_path) -> str:
         return "\n\n".join(out)
 
     return _render(sections)
-
-
-if __name__ == "__main__":
-    import sys
-    import time
-
-    for p in sys.argv[1:]:
-        t0 = time.time()
-        text = pdf_to_sectioned_text(p)
-        heads = re.findall(r"^## (.+)$", text, re.M)
-        print(f"{Path(p).name}: {len(text)} chars, {len(heads)} sections, {time.time()-t0:.2f}s")
-        for h in heads[:12]:
-            print(f"   - {h}")

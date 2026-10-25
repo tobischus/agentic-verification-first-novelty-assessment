@@ -508,10 +508,8 @@ def _source_label(content_source):
 def _agent_budgets() -> dict:
     """Agent budgets/thresholds (ablation hyperparameters), overridable via env."""
     return {
-        "max_steps": int(os.getenv("NOVELTY_AGENT_MAX_STEPS", "24")),
         "max_retrievals": int(os.getenv("NOVELTY_AGENT_MAX_RETRIEVALS", "3")),
         "closest_n": int(os.getenv("NOVELTY_AGENT_CLOSEST_N", "5")),
-        "stalled_k": int(os.getenv("NOVELTY_AGENT_STALLED_K", "4")),
         "min_quote_tokens": int(os.getenv("NOVELTY_AGENT_MIN_QUOTE_TOKENS", "10")),
     }
 
@@ -840,7 +838,7 @@ def _claim_worker(sid: str, cid: str):
             return
         budgets = _agent_budgets()
         _write_live(sid, cid, {"status": "running", "claim_id": cid, "step": 0,
-                               "max_steps": budgets["max_steps"], "trajectory": [],
+                               "max_steps": 0, "trajectory": [],
                                "cost": {"prompt_tokens": 0, "completion_tokens": 0, "usd": 0.0}})
 
         from agent.claim_agent import ClaimNoveltyAgent
@@ -928,7 +926,7 @@ def _claim_worker(sid: str, cid: str):
         #    Not fatal: without it the export falls back to the recorded rationale.
         _write_live(sid, cid, {"status": "running", "claim_id": cid,
                                "step": len(entry.get("trajectory", []) or []),
-                               "max_steps": budgets["max_steps"],
+                               "max_steps": 0,
                                "trajectory": entry.get("trajectory", []),
                                "cost": entry.get("cost", {}),
                                "last_action": "writing the claim-level assessment"})
@@ -943,7 +941,7 @@ def _claim_worker(sid: str, cid: str):
         _snapshot_cache(sid)
         _write_live(sid, cid, {
             "status": "done", "claim_id": cid,
-            "step": len(entry.get("trajectory", []) or []), "max_steps": budgets["max_steps"],
+            "step": len(entry.get("trajectory", []) or []), "max_steps": 0,
             "trajectory": entry.get("trajectory", []), "cost": entry.get("cost", {}),
             "verdict": entry.get("agent_verdict"), "evidence_sufficient": entry.get("evidence_sufficient"),
             "stop_reason": entry.get("stop_reason"), "retrieval_rounds": entry.get("retrieval_rounds", 0),

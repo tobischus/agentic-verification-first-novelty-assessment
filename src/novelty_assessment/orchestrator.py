@@ -682,7 +682,7 @@ class NoveltyPipeline:
         claims = [c for c in claims_doc["claims"] if c.get("status") != "rejected"]
         agent = ClaimNoveltyAgent(
             self.data_dir, self.submission_id, model_name=self.model,
-            grobid_server=self.grobid_server, max_steps=self.agent_max_steps,
+            grobid_server=self.grobid_server,
             max_retrievals=self.agent_max_retrievals, closest_n=self.agent_closest_n,
         )
         entries = []
