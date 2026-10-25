@@ -1,36 +1,8 @@
-#!/usr/bin/env python3
-"""
-A claim-evidence map: which sentence of the submission does this prior paper already say?
+"""Evidence map and evidence check (Section 4.6).
 
-The comparison this replaces ends in one word per (claim, paper) -- `substantial`,
-`partial` -- and a pile of one-sided quotes from the prior work. Those quotes say what the
-OTHER paper does. The reviewer is left to work out which part of their own contribution is
-affected, once per paper, eleven times on one claim of the GraphRAG submission.
-
-So the unit here is a PAIR: a verbatim span of the submission beside a verbatim span of the
-prior paper, with one sentence saying why they are the same thing. Section 2.3 of the thesis
-asks for exactly this, quoting You, Cao and Gurevych: "checkable verification artifacts,
-such as claim-evidence maps". Two separate one-sided lists are the raw material for a map,
-not the map.
-
-Three decisions, each made against something that went wrong when it was made differently.
-
-**Both sides are quoted from their own document.** Not from the claim. The claim text used
-to sit in the corpus a claim quote was verified against, so a model could quote the claim
-back and the check confirmed it against itself -- 94 of 141 "verified" claim quotes on
-disk. The submission side is now drawn from the submission's own sections and verified
-there, which is the only way the pair means anything.
-
-**No score.** An earlier version split the claim into elements and scored coverage. It
-produced numbers that looked precise and were not: bundle several requirements into one
-element and any paper matches it; split them finely and every claim is novel. The map
-reports what was found and lets the reader see how much of the claim it touches.
-
-**The conclusion comes last, from the verified map only.** The old comparison asserted a
-degree in the same call that produced the quotes -- before anything was checked -- and the
-schema then permitted evidence pairs only when that assertion happened to be `can_refute`.
-Grounding tracked the label rather than the overlap: 100% of refutations carried a pair,
-0% of the substantial-but-not-refuting ones did.
+The map proposes passage pairs between the submission and a prior paper. Both spans are
+verified against the full documents, the prior-paper span is checked for ownership, and
+the evidence check decides whether the remaining pairs support the proposed overlap.
 """
 import re
 from typing import Callable, List, Optional
@@ -39,16 +11,13 @@ from pydantic import BaseModel, Field
 
 from . import evidence as ev
 
-
-# ------------------------------- trimming ---------------------------------- #
-
 _ABBR = re.compile(r"(?:et al|e\.g|i\.e|cf|vs|Fig|Sec|Tab|Eq|approx|resp|Dr|No|al|[A-Z])\.$")
 _STOP = frozenset("a an the of to in for and or is are was were be been with on at by that this "
                   "it its as from we our their they can may not but which".split())
 
 
 def _sentences(span: str) -> List[str]:
-    """Split a span into sentences, leaving abbreviations and initials intact."""
+    """Split a span into sentences, keeping abbreviations and initials intact."""
     out, start = [], 0
     for m in re.finditer(r"[.!?]\s+(?=[A-Z(])", span):
         head = span[start:m.start() + 1]
@@ -62,51 +31,27 @@ def _sentences(span: str) -> List[str]:
     return out or [span]
 
 
-# A section heading swallowed by a quote: "... to respond to user queries. 2.1 ## Medical
-# Graph Construction 2.1.1 ## Step1 ..." -- the numbering and the "##" come from the parsed
-# document structure, not from the paper's prose.
+# Section headings and page numbers that the parser left inside a span.
 _TAIL_NOISE = re.compile(r"(?:\s*(?:\d+\s*)?##[^.]*|\s+\d{1,4}(?:\s*##.*)?)\s*\.?\s*$")
 _HEADING = re.compile(r"\s(?:\d+(?:\.\d+)*\s*)?##\s")
 
 
 def _strip_structure(span: str) -> str:
-    """Drop parser structure a quote ran into: a section heading, a page number, a year.
-
-    Both ends. A heading in the MIDDLE ("... transducer. 1 ## Introduction Many modern ...")
-    is the worse case: it starts with a digit, so the sentence splitter does not see a
-    boundary there and the entire following section rides along inside what is shown as one
-    sentence of evidence.
-    """
+    """Remove a section heading inside a span and parser debris at its end."""
     t = " ".join((span or "").split())
     if not t:
         return t
     head = _HEADING.search(t)
-    if head and head.start() > 80:      # only when prose precedes it
+    if head and head.start() > 80:
         t = t[:head.start()].strip()
     return _TAIL_NOISE.sub("", t).strip()
 
 
 def trim_display_span(span: str, max_sentences: int = 3, max_chars: int = 700) -> str:
-    """Cut a verified quote down to what a reviewer can actually read.
-
-    The model is asked for one contiguous verbatim span and is given no ceiling, so it
-    returns paragraphs: across the artifacts on disk the median realization quote grew to
-    535 characters and the longest reached 2109, running through section headings picked up
-    from the parsed structure. A quote that long is not evidence a reader checks, it is a
-    page of the paper reproduced.
-
-    Cutting happens at boundaries the text already has -- the heading that should never
-    have been inside a quote, then whole sentences -- so what remains is still verbatim and
-    still verifiable. Never returns empty: a single very long sentence is left alone rather
-    than cut mid-clause.
-    """
+    """Shorten a verified quote for display, cutting only at sentence boundaries."""
     t = _strip_structure(span)
     if not t:
         return span
-    # The same structure debris at the END of a span: a page number, a running head, a year
-    # picked up where the parser ran one block into the next -- "...facilitate future
-    # studies. 11 ## 2025." A quote is not wrong because of it, but it reads as though the
-    # system does not know where the sentence stopped.
     t = _TAIL_NOISE.sub("", t).strip()
     sents = _sentences(t)
     if len(sents) > max_sentences:
@@ -117,21 +62,7 @@ def trim_display_span(span: str, max_sentences: int = 3, max_chars: int = 700) -
 
 
 def _clauses(sentence: str, min_words: int = 8) -> List[str]:
-    """Split a sentence at the conjunctions that join separate claims, and nowhere else.
-
-    A contribution is often stated once, as a sentence carrying every part of it: "features
-    a comprehensive dataset with tasks of increasing difficulty, covering fact retrieval,
-    complex reasoning, contextual summarize, and creative generation, and a systematic
-    evaluation across the entire pipeline". Quoting all of it against a paper that matches
-    one part shows the reviewer an overlap several times the real size, and it makes every
-    entry carry the SAME anchor -- four of seven pairs in the last run -- so the map stops
-    saying which part of the contribution each paper actually touches.
-
-    The split is only taken where what FOLLOWS is a clause in its own right. The ", and "
-    before a list's final item ("..., contextual summarize, and creative generation") joins
-    an item, not a claim, and cutting there would end the quote mid-list: verbatim, and
-    misleading about where the task list stops.
-    """
+    """Split a sentence at ', and' where both sides are clauses of at least `min_words` words."""
     out, last = [], 0
     for mt in re.finditer(r",\s+and\s+", sentence):
         nxt = re.split(r",\s+and\s+", sentence[mt.end():])[0]
@@ -145,35 +76,16 @@ def _clauses(sentence: str, min_words: int = 8) -> List[str]:
 
 def trim_to_sentence(span: str, rationale: str, claim: str, min_tokens: int,
                      counterpart: str = "") -> str:
-    """Cut a multi-sentence span down to the sentence that carries the correspondence.
+    """Reduce a verified span to the sentence, or clause, that carries the correspondence.
 
-    The model was asked for the shortest span that states the matched point and returned
-    two- and three-sentence blocks anyway: 19 of 23 spans in the run before this function
-    existed. A span that wide costs twice. It shows the reviewer more of their paper as
-    matched than the pair actually matches, and it destroys granularity -- a block covering
-    every component of a contribution is the same anchor for every correspondence, so the
-    map stops localising anything.
-
-    Which sentence to keep is not guessed: the model already wrote one sentence saying what
-    the two spans share, so the sentence that overlaps that rationale most is the one the
-    pair is about. The CLAIM is scored alongside it, because the rationale alone once picked
-    the neighbouring sentence -- which belonged to a different claim of the same paper, and
-    anchored claim 1's map on claim 2's contribution. Ties and short results fall back to the
-    full span, because cutting below what can be verified would be worse than leaving it wide.
+    The sentence is chosen by word overlap with the pair's rationale and the claim. The
+    full span is kept when no sentence is long enough to stand as evidence.
     """
-    # Structure debris first. A heading the parser ran into the text ("... transducer.
-    # 1 ## Introduction Many modern NLP systems ...") is not a sentence boundary to the
-    # splitter -- it starts with a digit -- so the whole block survived as ONE sentence and
-    # the pair carried a paragraph of the next section with it. The cleanup existed, but
-    # only on the display path; pair spans never saw it.
     sents = _sentences(_strip_structure(span))
     key = {w for w in re.findall(r"[a-z]{3,}", (rationale or "").lower()) if w not in _STOP}
     anchor = {w for w in re.findall(r"[a-z]{3,}", (claim or "").lower()) if w not in _STOP}
     if not key and not anchor:
         return span
-    # A span of one sentence still goes through clause selection below: the sentence that
-    # states a whole contribution in one breath is exactly the case this exists for, and it
-    # never has a second sentence to choose between.
     if len(sents) < 2:
         best = sents[0] if sents else span
         return _pick_clause(best, key, min_tokens, counterpart)
@@ -187,62 +99,36 @@ def trim_to_sentence(span: str, rationale: str, claim: str, min_tokens: int,
             best, best_score = s, score
     if not best:
         return span
-    # One sentence can still carry several parts of a contribution. Where it does, keep the
-    # part this correspondence is actually about -- scored against the RATIONALE alone. The
-    # claim is what picked the sentence; inside it every clause is on-claim by construction,
-    # and scoring the claim again drowns out the only signal that separates the clauses,
-    # sending every correspondence back to the same anchor.
     return _pick_clause(best, key, min_tokens)
 
 
 def _drop_lead(clause: str) -> str:
-    """Drop a dangling conjunction a clause was cut after.
-
-    Splitting at ", and " leaves the next clause starting on "and", which reads as a
-    fragment and makes two quotes of the SAME clause look like two different anchors. The
-    result is still verbatim -- a shorter substring of the same span.
-    """
+    """Remove a leading conjunction left by the clause split."""
     return re.sub(r"^(?:and|or|but|as well as)\s+", "", clause.strip(), flags=re.I)
 
 
 def _pick_clause(sentence: str, key: set, min_tokens: int, counterpart: str = "") -> str:
-    """Of a sentence's separable clauses, the one this correspondence is about.
+    """The clause of a sentence that best matches the rationale and the counterpart span.
 
-    Scored against the RATIONALE alone. The claim is what picked the sentence; inside it
-    every clause is on-claim by construction, and scoring the claim again drowns out the
-    only signal that separates the clauses -- sending every correspondence back to the same
-    anchor, which is the failure this is here to fix.
+    Clauses sharing fewer than two content words with the counterpart are skipped, and the
+    whole sentence is kept if no clause qualifies.
     """
     cl = [_drop_lead(c) for c in _clauses(sentence)]
     if len(cl) < 2 or not key:
         return sentence
-    # The clause has to keep the PAIR intact. Scored on the rationale alone, narrowing the
-    # submission side to one component produced spans that no longer answered to the prior
-    # paper's sentence -- and the audit then rejected the pair, correctly, for a mismatch the
-    # trim had introduced: it cost the strongest competitor on one claim. The counterpart is
-    # scored alongside, and a clause that shares nothing with it is not used at all.
     other = {x for x in re.findall(r"[a-z]{3,}", (counterpart or "").lower()) if x not in _STOP}
     pick, ps = None, 0.0
     for c in cl:
         if len(c.split()) < min_tokens:
-            continue          # too short to stand as evidence on its own
+            continue
         w = {x for x in re.findall(r"[a-z]{3,}", c.lower()) if x not in _STOP}
         if other and len(w & other) < 2:
-            # One shared word is coincidence -- "graph" appears in every clause of a GraphRAG
-            # paper. Below two, narrowing to this clause would break the correspondence, and
-            # keeping the whole sentence is the honest answer: the pair is about the
-            # contribution as a whole, not about one of its parts.
             continue
         sc = (len(w & key) + len(w & other)) / (len(w) ** 0.5 or 1)
         if sc > ps:
             pick, ps = c, sc
-    # A clause is only worth cutting to when it actually answers to the rationale. With the
-    # short clauses skipped, the longest one would otherwise win by default and the quote
-    # would narrow to a part the correspondence is not about -- worse than not cutting.
     return pick if pick else sentence
 
-
-# ------------------------------- schemas ----------------------------------- #
 
 class Correspondence(BaseModel):
     submission_quote: str = Field(
@@ -353,94 +239,6 @@ Do not assign an overall overlap degree in this step.
 {paper}"""
 
 
-
-CONCLUDE_PROMPT = """Determine what ONE prior paper does to the novelty of ONE claimed contribution.
-
-You may use:
-1. the claimed contribution;
-2. the prior semantic comparison proposal; and
-3. the verified component-level correspondences.
-
-The comparison proposal is a semantic assessment based on the paper text.
-It is not verified evidence and may be wrong.
-
-The correspondences are verified evidence:
-- both quoted spans have been verified against the source documents;
-- the prior-paper span has passed ownership checking.
-
-Use the comparison proposal to understand the role and context of the matched components.
-Use the verified correspondences to determine what overlap is actually supported.
-
-Do not simply copy the comparison degree.
-Do not infer substantive overlap from a correspondence merely because it is verified.
-
-If the verified evidence supports a different degree from the comparison proposal,
-state explicitly why the semantic assessment should be revised.
-
-Determine the overall degree:
-
-same
-    The prior paper by itself delivers essentially the claimed contribution.
-
-substantial
-    The prior paper delivers most of the substantive contribution; what remains is mainly
-    a refinement or narrower distinction.
-
-partial
-    The prior paper delivers a substantive part of the contribution, while important
-    claimed components remain.
-
-superficial
-    Verified relationships exist, but they do not amount to substantive contribution overlap.
-
-none
-    No substantive component of the claimed contribution is supported as overlap.
-
-Judge the role and importance of the matched components, not the number of correspondences.
-
-## Claimed contribution
-{claim}
-
-## Prior semantic comparison
-{comparison}
-
-## Verified correspondences
-{pairs}
-"""
-
-
-class Conclusion(BaseModel):
-    reasoning: str = Field(description="2-3 sentences: what is taken, what is left")
-    degree: str = Field(description="same | substantial | partial | superficial | none")
-
-
-# ------------------------------ operations --------------------------------- #
-
-# --------------------------------------------------------------------------- #
-# Ownership: does the paper's span say what THAT paper contributes?
-#
-# Verification proves that a span stands in a document. It cannot prove who it
-# belongs to, and those are different questions. A survey that cites the
-# submission carries the submission's own sentence verbatim; both sides then
-# verify, and the pair reads as the strongest kind of evidence while showing
-# nothing but a citation. That is what happened to "A Survey of Graph
-# Retrieval-Augmented Generation": the agent's own narrative said the paper
-# "lists GraphRAG-Bench among many benchmarks as a referenced item rather than
-# presenting [it] as the paper's original contribution", and the pair was kept
-# and the degree set to `substantial` regardless.
-#
-# Two checks, because neither covers the other:
-#
-#   identity   free and exact. Two independent papers do not write the same ten
-#              words. Where the paper's span IS the submission's span, the paper
-#              is quoting it, and no reading of the sentence changes that.
-#   attribution one batched model call for the pairs that survive. A reference
-#              is usually paraphrased, not copied: "X et al. propose a benchmark
-#              of multi-hop queries" verifies, differs from the submission's
-#              wording, and still belongs to X.
-# --------------------------------------------------------------------------- #
-
-
 class _OwnItem(BaseModel):
     index: int = Field(description="the pair's number, as given")
     own_contribution: bool = Field(
@@ -475,7 +273,7 @@ def _norm_span(t: str) -> str:
 
 
 def _context_of(span: str, document: str, window: int = 320) -> str:
-    """The span with the text around it, so attribution can be read off the page."""
+    """The span with about `window` characters of surrounding text on each side."""
     doc = document or ""
     n = _norm_span(span)[:60]
     if not n:
@@ -484,7 +282,6 @@ def _context_of(span: str, document: str, window: int = 320) -> str:
     i = flat.find(n)
     if i < 0:
         return span
-    # map back approximately: the normalised text is close enough in length to index by ratio
     j = int(i / max(len(flat), 1) * len(doc))
     lo, hi = max(0, j - window), min(len(doc), j + len(span) + window)
     return "..." + " ".join(doc[lo:hi].split()) + "..."
@@ -492,53 +289,35 @@ def _context_of(span: str, document: str, window: int = 320) -> str:
 
 def check_ownership(struct_call: Callable, pairs: List[dict], title: str,
                     verify_paper: str) -> List[dict]:
-    """Mark each pair with why it was kept or dropped. Returns the surviving pairs.
+    """Ownership check of the prior-paper spans in one batched call.
 
-    Dropping happens here rather than in `conclude`, because a pair that shows a
-    citation is not weaker evidence to be weighed -- it is not evidence of an
-    overlap at all, and leaving it in the map would put it in front of a reviewer
-    as though it were.
+    Pairs whose span describes cited work are dropped. If the call fails or a verdict
+    is missing, the pair is kept and marked as unchecked.
     """
     if not pairs:
         return pairs
     kept, need = [], list(pairs)
-
     spans = "\n\n".join(
         f"[{i + 1}] SPAN: {p.get('paper_quote', '')}\n"
         f"    CONTEXT: {_context_of(p.get('paper_quote', ''), verify_paper)}"
         for i, p in enumerate(need))
-
-    parsed = struct_call(
-        _Ownership,
-        OWNERSHIP_PROMPT.format(title=title, spans=spans)
-    )
+    parsed = struct_call(_Ownership, OWNERSHIP_PROMPT.format(title=title, spans=spans))
     if parsed is None:
-        # The call did not come back. Keeping the pairs is the honest failure: this gate
-        # removes evidence, and a gate that removes on silence would turn an API error
-        # into a finding of no overlap.
         for p in need:
             p["ownership"] = "unchecked"
         return need
     verdict = {v.index: v for v in (parsed.verdicts or [])}
-
     for i, p in enumerate(need, start=1):
         v = verdict.get(i)
-
-        # Missing verdict = not verified, not positive ownership.
         if v is None:
             p["ownership"] = "unchecked"
             kept.append(p)
             continue
-
         if not v.own_contribution:
-            p["ownership"] = (
-                f"describes_cited_work: {(v.why or '').strip()[:160]}"
-            )
+            p["ownership"] = f"describes_cited_work: {(v.why or '').strip()[:160]}"
             continue
-
         p["ownership"] = "own_contribution"
         kept.append(p)
-
     return kept
 
 
@@ -546,12 +325,10 @@ def build_map(struct_call: Callable, claim_str: str, submission_text: str,
               title: str, paper_text: str, verify_submission: str, verify_paper: str,
               min_quote_tokens: int = 10, fuzzy_threshold: float = 90.0,
               comparison: Optional[dict] = None) -> dict:
-    """The verified map for one (claim, paper), or an empty one.
+    """Evidence map for one claim-paper pair, with verified and owned pairs only.
 
-    `submission_text` and `paper_text` are what the model may quote FROM; `verify_submission`
-    and `verify_paper` are the full documents each side is checked AGAINST. They differ
-    because the model sees a section selection while verification must run against the whole
-    document -- a span trimmed at a section boundary is still in the paper.
+    The model quotes from `submission_text` and `paper_text`. Both spans are verified
+    against the full documents `verify_submission` and `verify_paper`.
     """
     parsed = struct_call(
         EvidenceMap,
@@ -564,18 +341,8 @@ def build_map(struct_call: Callable, claim_str: str, submission_text: str,
         ),
     )
     if parsed is None:
-        # `failed` separates "the call did not come back" from "the model found nothing".
-        # Both used to leave an empty map, and an empty map reads as `none` -- so an API
-        # error was indistinguishable from a paper that genuinely shares nothing, which is
-        # exactly the confusion a verification-first artifact must not contain.
-        return {
-            "pairs": [],
-            "dropped": 0,
-            "returned": 0,
-            "not_owned": 0,
-            "ownership_unchecked": 0,
-            "failed": True,
-        }
+        return {"pairs": [], "dropped": 0, "returned": 0, "not_owned": 0,
+                "ownership_unchecked": 0, "failed": True}
 
     pairs, dropped = [], 0
     for c in parsed.correspondences:
@@ -584,9 +351,6 @@ def build_map(struct_call: Callable, claim_str: str, submission_text: str,
         p_chk, p_span = ev.verify_contiguous(
             c.paper_quote, verify_paper, min_quote_tokens, fuzzy_threshold)
         if not (s_chk.verified and p_chk.verified):
-            # Both sides or nothing. A pair with one confirmed half is not a claim-evidence
-            # map entry, it is an assertion with a citation attached -- which is the thing
-            # this module exists to replace.
             dropped += 1
             continue
         rel = (c.relation or "").strip()
@@ -596,40 +360,17 @@ def build_map(struct_call: Callable, claim_str: str, submission_text: str,
             "rationale": rel,
             "strength": (c.strength or "").strip().lower(),
             "claim_quote_verified": True, "paper_quote_verified": True,
-            "exact": True,               # already trimmed to one sentence; do not re-expand
+            "exact": True,
         })
-    # Verified, but not yet shown to belong to this paper. Counted separately from
-    # `dropped`: a span that cannot be found and a span that belongs to someone else
-    # fail for different reasons, and a diagnosis that merges them hides which.
     verified = len(pairs)
-
-    ownership_result = check_ownership(
-        struct_call,
-        pairs,
-        title,
-        verify_paper,
-    )
-
-    unchecked = [
-        p for p in ownership_result
-        if p.get("ownership") == "unchecked"
-    ]
-
-    owned = [
-        p for p in ownership_result
-        if p.get("ownership") == "own_contribution"
-    ]
-
-    # Pairs that disappeared from check_ownership were either cited work,
-    # quotes of the submission, or otherwise rejected as not this paper's contribution.
-    not_owned = verified - len(ownership_result)
-
+    ownership_result = check_ownership(struct_call, pairs, title, verify_paper)
+    unchecked = [p for p in ownership_result if p.get("ownership") == "unchecked"]
+    owned = [p for p in ownership_result if p.get("ownership") == "own_contribution"]
     return {
-        # IMPORTANT: only ownership-verified pairs enter the evidence map.
         "pairs": owned,
         "dropped": dropped,
         "returned": len(parsed.correspondences),
-        "not_owned": not_owned,
+        "not_owned": verified - len(ownership_result),
         "ownership_unchecked": len(unchecked),
         "failed": False,
     }
@@ -638,8 +379,8 @@ def build_map(struct_call: Callable, claim_str: str, submission_text: str,
 def _list_pairs(pairs: List[dict], start: int = 1) -> str:
     return "\n\n".join(
         "[{}] ({}) {}\n"
-        "    SUBMISSION: \u201c{}\u201d\n"
-        "    THIS PAPER: \u201c{}\u201d".format(
+        "    SUBMISSION: “{}”\n"
+        "    THIS PAPER: “{}”".format(
             i, p.get("strength", "?"), p.get("rationale", ""),
             " ".join(p["claim_quote"].split()),
             " ".join(p["paper_quote"].split()))
@@ -647,11 +388,7 @@ def _list_pairs(pairs: List[dict], start: int = 1) -> str:
 
 
 def _fmt_comparison(comparison: dict) -> str:
-    """Render the raw compare's own narrative for CONCLUDE_PROMPT's `{comparison}` slot.
-
-    Added when the prompt grew a section asking the model to weigh the map's verified
-    pairs against what the FIRST, unverified pass already said the paper was about --
-    context conclude() did not have before, since it only ever saw `mapping`."""
+    """The proposed comparison as text for the prompts."""
     if not comparison:
         return "(not available)"
     lines = [f"Proposed degree: {comparison.get('overlap_degree', '')}"]
@@ -662,8 +399,6 @@ def _fmt_comparison(comparison: dict) -> str:
     if comparison.get("assessment"):
         lines.append(f"Assessment: {comparison['assessment']}")
     return chr(10).join(lines)
-
-
 
 
 class EvidenceCheck(BaseModel):
@@ -881,12 +616,8 @@ reasoning:
 {pairs}
 """
 
-#: Bumped whenever EVIDENCE_CHECK_PROMPT changes what the check is asked to do, and
-#: recorded on every comparison it judges. v2 adds the submission context: until then the
-#: check validated the comparison's own rendering of the claim partly against that same
-#: shortened rendering, so a description that had drifted from the submission had nothing
-#: to be caught against.
 EVIDENCE_CHECK_PROMPT_VERSION = "evidence_check_v2_submission_context"
+
 
 def check_evidence(
     struct_call: Callable,
@@ -895,35 +626,23 @@ def check_evidence(
     comparison: Optional[dict] = None,
     submission_context: str = "",
 ) -> dict:
-    """Rule on whether the grounded pairs carry the overlap the comparison asserts.
+    """Evidence check: do the grounded pairs support the proposed overlap and degree?
 
-    `submission_context` is the claim-local submission selection the comparison was
-    built from -- the caller already holds it, and without it the check reads the
-    comparison's account of the claim with no way to tell a faithful summary from one
-    that drifted. It is passed for interpretation only; the prompt states that overlap
-    is still established solely by the pairs, and the verification corpora are untouched.
+    The claim-local submission context is given for interpretation only. Code enforces
+    the result: `material` needs supporting pairs, and the proposed degree counts as
+    supported only for material evidence.
     """
     comparison = comparison or {}
     pairs = mapping.get("pairs") or []
-
-    proposed_degree = (
-        comparison.get("overlap_degree") or ""
-    ).lower()
-
-    material_proposal = proposed_degree in {
-        "partial",
-        "substantial",
-        "same",
-    }
+    proposed_degree = (comparison.get("overlap_degree") or "").lower()
+    material_proposal = proposed_degree in {"partial", "substantial", "same"}
 
     def unresolved(reason):
         return {
             "status": "insufficient",
             "supporting_pair_indices": [],
             "reasoning": reason,
-            "proposed_degree_supported": (
-                False if material_proposal else None
-            ),
+            "proposed_degree_supported": False if material_proposal else None,
             "unresolved_question": reason,
         }
 
@@ -944,47 +663,34 @@ def check_evidence(
             pairs=_list_pairs(pairs),
         ),
     )
-
     if parsed is None:
         return unresolved("The evidence check did not complete.")
 
     status = (parsed.status or "").strip().lower()
-
     if status not in {"material", "nonmaterial", "insufficient"}:
         status = "insufficient"
-
     indices = sorted({
-        i
-        for i in (parsed.supporting_pair_indices or [])
+        i for i in (parsed.supporting_pair_indices or [])
         if type(i) is int and 1 <= i <= len(pairs)
     })
-
     if status == "material" and not indices:
         status = "insufficient"
-
     if status != "material":
         indices = []
 
     degree_supported = parsed.proposed_degree_supported
-
     if material_proposal:
-        degree_supported = (
-            degree_supported is True
-            and status == "material"
-            and bool(indices)
-        )
+        degree_supported = degree_supported is True and status == "material" and bool(indices)
     else:
         degree_supported = None
 
     question = (parsed.unresolved_question or "").strip()
-
     if material_proposal and not degree_supported and not question:
         question = (
             "Which grounded correspondence supports the specific shared "
             "contribution and the proposed overlap degree? Reassess the "
             "comparison if the existing evidence supports only a narrower claim."
         )
-
     return {
         "status": status,
         "supporting_pair_indices": indices,

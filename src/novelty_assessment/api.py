@@ -509,7 +509,6 @@ def _agent_budgets() -> dict:
     """Agent budgets/thresholds (ablation hyperparameters), overridable via env."""
     return {
         "max_retrievals": int(os.getenv("NOVELTY_AGENT_MAX_RETRIEVALS", "3")),
-        "closest_n": int(os.getenv("NOVELTY_AGENT_CLOSEST_N", "5")),
         "min_quote_tokens": int(os.getenv("NOVELTY_AGENT_MIN_QUOTE_TOKENS", "10")),
     }
 

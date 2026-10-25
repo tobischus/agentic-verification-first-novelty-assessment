@@ -1,16 +1,7 @@
-#!/usr/bin/env python3
-"""
-On-demand Semantic Scholar retrieval for the agent (the R7 re-entry mechanism).
+"""Additional Semantic Scholar search for a claim when its prior-work pool is empty.
 
-When the finish-gate escalates ("frontier unprobed / insufficient evidence"), the
-agent calls retrieve_more(query). This runs a fresh S2 search, applies the same
-submission-date cutoff as the pipeline (prior work only), dedups against the
-current pool, and ranks the new candidates by SPECTER2 similarity to the CLAIM.
-
-Kept deliberately light: it does the S2 fetch + ranking with a shared embedder
-(no second SPECTER2 load, no PaperRankingSystem init). Persistence into
-agent_retrieved_papers.json and optional full-text fetch are handled by the
-toolbox, so provenance stays separate from the initial ranked_papers.json.
+New candidates pass the same admissibility rule as the main retrieval and are ranked by
+embedding similarity to the claim.
 """
 import logging
 import os
@@ -24,8 +15,6 @@ import numpy as np
 import requests
 from rapidfuzz import fuzz
 
-# One prior-work cutoff for the whole system: this module used to carry its own copy of
-# the rule, and the copy drifted (see is_valid_prior_work).
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "retrieval"))
 import paper_versions as pv
 
@@ -37,10 +26,7 @@ _FIELDS = "title,abstract,paperId,publicationDate,year,venue,authors,citationCou
 
 def _same_paper(candidate_abstract: str, submission_abstract: str,
                 n: int = 10, min_shared: int = 2, token_ratio: float = 95.0) -> bool:
-    """Mirror of retrieval.is_same_paper: detect the submission's own (possibly renamed)
-    version by shared long verbatim abstract n-grams -- different papers on the same topic
-    essentially never share a 10-word span, two versions of one paper share several even
-    after heavy editing. Kept local to avoid importing the heavy retrieval module."""
+    """Same rule as retrieval.is_same_paper: shared ten-word sequences in the abstracts."""
     ca = (candidate_abstract or "").strip()
     sa = (submission_abstract or "").strip()
     if len(ca) < 80 or len(sa) < 80 or "no abstract available" in ca.lower():
@@ -56,7 +42,7 @@ def _same_paper(candidate_abstract: str, submission_abstract: str,
 
 
 def _s2_get(url: str, params: dict, headers: dict, max_attempts: int = 5):
-    """GET with adaptive backoff on 429/5xx (honours Retry-After)."""
+    """GET with backoff on 429 and 5xx responses."""
     delay = 2.0
     for _ in range(max_attempts):
         try:
@@ -73,7 +59,7 @@ def _s2_get(url: str, params: dict, headers: dict, max_attempts: int = 5):
             time.sleep(min(wait, 30))
             delay = min(delay * 2, 30)
             continue
-        return r  # genuine 4xx -> no point retrying
+        return r
     return None
 
 
@@ -102,18 +88,8 @@ def is_valid_prior_work(
     source_year: Optional[int],
     source_abstract: Optional[str] = None,
 ) -> bool:
-    """Same admissibility rule as retrieval.merge_paper_collections.is_valid_paper:
-    exclude the submission itself (near-duplicate title OR near-duplicate abstract, which
-    catches a renamed earlier version) and any paper not clearly published BEFORE the
-    submission.
-
-    "Clearly before" is one rule over whole date intervals, shared with the pipeline
-    (paper_versions.gap_verdict), rather than the two it used to be. The year branch here
-    said "strictly earlier year" -- December against the following January passed it, at a
-    gap of one day, while the date branch beside it demanded ninety. A granularity that
-    cannot establish the gap now rejects and says why, instead of guessing generously."""
+    """Not the submission itself and dated at least 90 days before it (Equation 3.1)."""
     title = (paper.get("title") or "").lower()
-    # self / near-duplicate exclusion (title, then abstract for renamed versions)
     if source_title and fuzz.ratio(title, source_title.lower()) >= 90:
         return False
     if source_abstract and _same_paper(paper.get("abstract", ""), source_abstract):
@@ -141,19 +117,11 @@ def retrieve(
     k: int = 10,
     max_from_s2: int = 25,
 ) -> List[dict]:
-    """Fetch + rank new prior-work candidates for a claim. Returns top-k paper dicts.
-
-    Applies the SAME cutoff/self-exclusion rule as the main retrieval, so the agent
-    can only bring in prior work published before the submission (never the submission
-    itself or papers newer than it).
-
-    embedder: a loaded SentenceTransformer (SPECTER2), shared with the toolbox.
-    exclude_ids: paper_ids already in the pool (initial + agent + reviewer).
-    """
+    """New admissible candidates for a claim, ranked by similarity to the claim."""
     key = os.getenv("SEMANTIC_SCHOLAR_API_KEY")
     headers = {"X-API-KEY": key} if key and key != "---" else {}
     params = {"query": query, "fields": _FIELDS, "limit": max_from_s2}
-    if source_year:  # coarse pre-filter; is_valid_prior_work does the precise cut
+    if source_year:
         params["year"] = f"-{source_year}"
 
     r = _s2_get(_S2_SEARCH, params, headers)
@@ -175,8 +143,6 @@ def retrieve(
     if not fresh:
         return []
 
-    # Rank the fresh candidates by SPECTER2 similarity to the claim (same signal as
-    # ArtifactABuilder.select_candidates), so the best new prior work surfaces first.
     claim_doc = f"{claim.get('name','')}. {claim.get('description','')} {claim.get('claim_text','')}".strip()
     cand_docs = [f"{p['title']}. {p['abstract']}" for p in fresh]
     embs = embedder.encode([claim_doc] + cand_docs, convert_to_numpy=True)

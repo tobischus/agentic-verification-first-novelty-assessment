@@ -1,25 +1,11 @@
-#!/usr/bin/env python3
-"""
-ClaimToolbox: the resources + tool implementations + the evidence ledger for one
-claim's agent run.
+"""Resources and ledger of one claim run.
 
-The toolbox owns everything that keeps the agent's context small and its evidence
-honest:
-  * loads the submission and the related-work pool once (initial / reviewer / agent
-    provenance), builds passage indices lazily per paper;
-  * exposes the read tools that return only top-k passages (never whole PDFs);
-  * runs retrieve_more (R7) into a SEPARATE agent_retrieved_papers.json;
-  * verifies every quote in record_comparison against the real source text
-    (evidence-grounding invariant) and downgrades unverifiable can_refute;
-  * tracks the ledger signals the finish-gate reads (examined depth, comparisons,
-    retrievals, closest_set), so the STOP decision is deterministic and
-    ledger-checkable rather than model-asserted.
-
-The gate policy itself (accept/reject + escalation messages) lives in
-claim_agent.py; the toolbox only supplies the signals.
+Loads the submission and the version-pinned prior-work pool, serves section menus and
+section text, parses prior papers on demand, verifies quotes and records comparisons.
 """
 import hashlib
 import json
+import sys
 import threading
 from datetime import datetime
 from pathlib import Path
@@ -38,25 +24,22 @@ from .passages import (
     chunks_from_sections,
 )
 
-# depth ladder (relative to availability); higher = deeper. abstract_only is the
-# only level that does NOT count as "sufficiently examined".
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "retrieval"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import paper_versions as pv  # noqa: E402
+
+# How deeply a paper was examined, recorded per comparison.
 _DEPTH_RANK = {
     "abstract_only": 0,
     "abstract_intro": 1,
     "fulltext_unavailable": 1,
     "targeted_sections": 2,
     "fulltext_available_targeted_read": 2,
-    # the whole paper went into the prompt -- no section selection stood between the
-    # model and the text (see claim_agent._prior_fulltext)
     "fulltext_complete": 3,
 }
-_SUFFICIENT_DEPTHS = {
-    "abstract_intro",
-    "fulltext_unavailable",
-    "targeted_sections",
-    "fulltext_available_targeted_read",
-    "fulltext_complete",
-}
+
+# Version statuses that may be used as evidence (see FullTextFetcher.USABLE_STATUSES).
+_USABLE_VERSION_STATUSES = ("pinned", "single")
 
 
 class ClaimToolbox:
@@ -67,8 +50,6 @@ class ClaimToolbox:
         claim: dict,
         embedder,
         *,
-        closest_n: int = 5,
-        list_top: int = 15,
         min_quote_tokens: int = evidence.DEFAULT_MIN_QUOTE_TOKENS,
         fuzzy_threshold: float = evidence.DEFAULT_FUZZY_THRESHOLD,
         retrieve_k: int = 10,
@@ -79,8 +60,6 @@ class ClaimToolbox:
         self.submission_id = submission_id
         self.claim = claim
         self.embedder = embedder
-        self.closest_n = closest_n
-        self.list_top = list_top
         self.min_quote_tokens = min_quote_tokens
         self.fuzzy_threshold = fuzzy_threshold
         self.retrieve_k = retrieve_k
@@ -90,75 +69,41 @@ class ClaimToolbox:
         self.sub_dir = Path(data_dir) / submission_id
         self._meta = self._load_json(self.sub_dir / f"{submission_id}.json") or {}
         self.cutoff_year = self._cutoff_year()
-        # Submission identity + date for the SAME prior-work admissibility rule the main
-        # retrieval uses (exclude the submission itself; only papers published before it).
         self.sub_title = (self._meta.get("title") or "").strip()
         self.sub_pub_date = self._meta.get("publication_date") or datetime.now().strftime("%Y-%m-%d")
 
-        # --- submission text + index + verification corpus ---
         ft = self._load_json(self.sub_dir / f"{submission_id}_fulltext.json") or {}
         sub_sections = ft.get("sections", [])
         self._submission_index = PassageIndex(chunks_from_sections(sub_sections, "submission"), embedder)
-        # What a claim_quote is verified against: the submission's own body and abstract
-        # -- and nothing else. The claim text used to be appended here, which made the
-        # check circular: a model could quote the claim back and the verifier confirmed it
-        # against itself. Across the artifacts on disk that accounts for 94 of 141
-        # "verified" claim quotes, two in three, and none of them proves anything about
-        # the paper. A claim side that cannot be found in the submission is not evidence
-        # and has to fail.
+        # D(S): submission quotes are verified against the body and the abstract only.
         self._submission_text = "\n\n".join(
             [s.get("text", "") for s in sub_sections] + [self._meta.get("abstract", "")]
         )
 
-        # --- related-work pool (with provenance) + claim similarity ---
         self.pool = {}
         self._load_pool()
-        self._score_pool()  # fills pool[pid]['sim']
+        self._score_pool()
 
-        self._paper_index = {}   # pid -> PassageIndex (lazy)
-        self._paper_text = {}    # pid -> full source text for verification (lazy)
-        self._citation_ctx = self._load_citation_contexts()
-
-        # Deep dives run in PARALLEL (independent per-paper LLM comparisons), so every
-        # mutation of the shared ledger/progress state is serialized by this lock. The
-        # slow work (PDF parse, LLM call, embedding index build) stays outside the lock,
-        # so only the fast bookkeeping is serialized -- no loss of parallelism.
+        self._paper_index = {}
+        self._paper_text = {}
+        # Papers are processed in parallel: ledger updates and index builds are serialized.
         self._lock = threading.RLock()
-        # Separate lock for the SPECTER2 embedder: PassageIndex encodes eagerly on build,
-        # and one PyTorch model shared across deep-dive threads is not guaranteed
-        # thread-safe for concurrent forward passes. Serializing the (~200ms) index build
-        # is negligible next to the ~60s LLM comparison it precedes.
         self._embed_lock = threading.Lock()
 
-        # --- ledger ---
         self.ledger = {
-            "examined": {},      # pid -> {depth, source, similarity, has_comparison}
-            "comparisons": [],   # artifact_a-shaped comparison dicts (+ extras)
-            "retrievals": [],    # [{query, n_new, added_ids}]
-            "trajectory": [],    # compact action log (no raw reasoning)
+            "examined": {},
+            "comparisons": [],
+            "retrievals": [],
+            "trajectory": [],
         }
-        # section-based understanding of what the SUBMISSION does for this claim
-        # (verified-quote segments), built once and reused across every comparison
         self.claim_realization = []
-        # which sections were actually read in full per paper_id (incl. "submission"),
-        # so the review can show "sections used for the comparison" instead of "full text"
         self._sections_read = {}
-        # pid -> what ensure_fulltext concluded ("ok", "no_pdf", "no_version",
-        # "parse_error", ...). Kept so the run log can say WHY a comparison fell back to
-        # the abstract instead of leaving the reader to infer it from a small context.
         self._fulltext_status = {}
-        self._steps_since_progress = 0
 
-        # Papers the version gate kept out, recorded now that there is a ledger to record
-        # into: the pool is built before this point, so the gate buffers its reasons
-        # rather than logging into a structure that does not exist yet. Flushed LAST --
-        # _log touches _steps_since_progress, so anything logged before that line exists
-        # dies in the constructor.
+        # Version-gate decisions taken while the pool was built, before the ledger existed.
         for note in getattr(self, "_version_gate_notes", []):
             self._log("version_gate", note)
         self._version_gate_notes = []
-
-    # ------------------------------ loading ------------------------------ #
 
     @staticmethod
     def _load_json(p: Path):
@@ -173,27 +118,14 @@ class ClaimToolbox:
                 return int(v)
             except (TypeError, ValueError):
                 continue
-        # No date in metadata (e.g. anonymised submission) -> fall back to the current
-        # year, same "under review now" logic as retrieval.process_for_pipeline, so
-        # retrieve_more never pulls papers newer than the submission.
         return datetime.now().year
 
     def _load_intro(self, pid: str) -> str:
-        """The stored introduction, but only where it can be tied to the pinned document.
-
-        An intro file is a parsed extract like any other, written by an earlier step from
-        whatever PDF was on disk then -- and it is used as the stand-in whenever full text
-        is missing, which is exactly when it carries the most weight. Serving one of
-        unknown origin beside a version-pinned full text would reopen the hole at the
-        fallback: the review would quote an older or newer document than the one it
-        claims to be reading. With the check in force it is used only while the manifest
-        vouches for its source PDF, and re-extraction is preferred over a guess.
-        """
+        """Stored introduction, only if it was extracted from the pinned PDF."""
         entry = self._versions_manifest().get(pid) or {}
-        if self._version_enforcement():
-            recorded = entry.get("intro_from_sha256")
-            if not recorded or recorded != entry.get("doc_sha256"):
-                return ""
+        recorded = entry.get("intro_from_sha256")
+        if not recorded or recorded != entry.get("doc_sha256"):
+            return ""
         for rel in (f"introductions/{pid}_intro.txt", f"ours/related_papers/{pid}_intro.txt"):
             p = self.sub_dir / rel
             if p.exists():
@@ -201,15 +133,9 @@ class ClaimToolbox:
         return ""
 
     def paper_provenance(self, pid: str) -> dict:
-        """Where this paper's text came from, as it stands NOW.
-
-        The pool record is a snapshot taken while the pool was built; a paper parsed
-        later in the run has its manifest updated but that snapshot does not move, so
-        reading the snapshot alone reported no parsed text for exactly the papers that
-        were deep-dived. The manifest is the authority and wins where the two overlap.
-        """
+        """Pool record updated with the current entry of the version manifest."""
         p = dict(self.pool.get(pid) or {})
-        self._versions_cache = None          # re-read: parse_one may have just written
+        self._versions_cache = None
         e = self._versions_manifest().get(pid) or {}
         if e:
             p.update({
@@ -226,65 +152,26 @@ class ClaimToolbox:
         return p
 
     def _versions_manifest(self) -> dict:
-        """related_work_data/versions.json -- which version each paper is pinned to.
-
-        Read once and cached: every pool paper consults it, and it changes only where
-        this class itself resolves a pin (which drops the cache).
-        """
+        """related_work_data/versions.json, cached until a pin changes."""
         if getattr(self, "_versions_cache", None) is None:
             self._versions_cache = self._load_json(
                 self.sub_dir / "related_work_data" / "versions.json") or {}
         return self._versions_cache
 
-    @staticmethod
-    def _version_enforcement() -> bool:
-        """Is the temporal check in force here? (NOVELTY_VERSION_PINNING, default on.)"""
-        try:
-            import sys
-            sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "retrieval"))
-            import paper_versions as pv
-            return pv.enforcement_enabled()
-        except Exception:
-            # The check cannot be performed, so it cannot be claimed. Enforcing is the
-            # safe direction: a paper stays out rather than entering unverified.
-            return True
-
     def _cutoff_date(self) -> str:
-        """The date pins are measured against -- read exactly as the fetcher reads it.
-
-        Deriving it differently on the two sides (publication_date, else year; not
-        publication_date, else today) would make every recorded pin look stale to the
-        other, and resolution would repeat on every pool build forever.
-        """
+        """The submission date t(S), read as the fetcher reads it."""
         return str(self._meta.get("publication_date") or self._meta.get("year") or "")
 
     def _pin_is_stale(self, entry: dict) -> bool:
-        """Was this verdict reached against a different cutoff than the one in force?"""
+        """True if a pin was computed for a different submission date or gap."""
         if not entry:
             return True
-        try:
-            import sys
-            sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "retrieval"))
-            import paper_versions as pv
-            gap = pv.DEFAULT_MIN_GAP_DAYS
-        except Exception:
-            return False       # cannot tell -> do not churn; the fetcher checks too
         return (entry.get("submission_date") != self._cutoff_date()
-                or int(entry.get("min_gap_days") or -1) != gap)
+                or int(entry.get("min_gap_days") or -1) != pv.DEFAULT_MIN_GAP_DAYS)
 
     @staticmethod
     def _version_abstract(entry: dict, record: dict) -> tuple:
-        """(abstract, source) for the PINNED document.
-
-        Three cases, and only the first two may show an abstract:
-          the pin carries the version's own text  -> use it;
-          the source has one document ("single")  -> the record's abstract IS that
-                                                     document's;
-          pinned to a version with no abstract of
-          its own                                 -> the record's abstract belongs to a
-                                                     different version, so it is withheld
-                                                     rather than presented as this one's.
-        """
+        """(abstract, source) of the pinned version; withheld if only another version's is known."""
         if entry.get("abstract_source") == "version" and entry.get("abstract"):
             return entry["abstract"], "version"
         status = entry.get("status") or ""
@@ -293,15 +180,8 @@ class ClaimToolbox:
         return "", "unavailable_for_pinned_version"
 
     def _resolve_missing_pin(self, pid: str, record: dict) -> dict:
-        """Pin a paper that reaches the pool without a verdict, and remember the answer.
-
-        Costs one or two arXiv calls the first time a submission is opened and nothing
-        afterwards, since the manifest persists. Failing to reach the source returns an
-        empty verdict, which the caller treats as "not established" -- not as consent.
-        """
+        """Pin a paper without a valid pin and store the result in the manifest."""
         try:
-            import sys
-            sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
             from fetch_fulltext import FullTextFetcher
 
             fetcher = FullTextFetcher(self.grobid_server)
@@ -314,7 +194,7 @@ class ClaimToolbox:
                 "year": record.get("year", ""),
                 "abstract": record.get("abstract", ""),
             }) or {}
-            self._versions_cache = None      # manifest changed underneath us
+            self._versions_cache = None
             return entry
         except Exception as e:
             self._note_version_gate(f"{pid}: could not resolve a version "
@@ -322,12 +202,6 @@ class ClaimToolbox:
             return {}
 
     def _note_version_gate(self, message: str) -> None:
-        """Record a gate decision, whether or not the ledger exists yet.
-
-        The pool is built inside __init__, before the ledger; writing straight to it
-        there raises, and swallowing that would lose exactly the decisions the gate is
-        supposed to make visible.
-        """
         if getattr(self, "ledger", None) is not None:
             self._log("version_gate", message)
             return
@@ -336,113 +210,48 @@ class ClaimToolbox:
         self._version_gate_notes.append(message)
 
     def _load_fulltext_file(self, pid: str) -> str:
-        """The parsed text of the PINNED version, identified by name and hash, or nothing.
+        """Parsed text of the pinned version, or "" if its provenance does not check out.
 
-        Three things have to line up, and each closes a different way of reading the
-        wrong document:
-          - the manifest NAMES the file (parsed_text_path), so the "try nougat, then
-            grobid, then mineru" search cannot serve a stale dump sitting beside the
-            fresh one -- a per-paper flag could not tell those apart, since it was true
-            of the paper while being false of that file;
-          - the file still hashes to what was recorded, so an edit or a half-written
-            file is not read as evidence;
-          - it was parsed from the PDF the manifest currently pins.
-        Anything missing means the provenance is not established, and the honest answer
-        is no text: the caller re-parses the verified PDF (ensure_fulltext), which
-        rebuilds all three. Only when no pinning has ever run does the old free search
-        apply, and that mode is explicit -- see paper_versions.enforcement_enabled.
+        The manifest must name the file, the file must match its recorded hash, and it
+        must have been parsed from the PDF that is currently pinned.
         """
         entry = self._versions_manifest().get(pid) or {}
-        if not entry and not self._version_enforcement():
-            return self._load_fulltext_unchecked(pid)
-
         named = entry.get("parsed_text_path")
         want_pdf = entry.get("doc_sha256")
         parsed_from = entry.get("parsed_from_sha256")
         want_text = entry.get("parsed_text_sha256")
         if not (named and want_pdf and parsed_from and want_text):
-            return ""                      # provenance incomplete -> re-parse, don't guess
+            return ""
         if parsed_from != want_pdf:
-            return ""                      # text predates the PDF now pinned
+            return ""
         p = self.sub_dir / "related_work_data" / named
         if not p.exists():
             return ""
-        # Hash the BYTES, as the writer did. Hashing the decoded text instead never
-        # matches on Windows: write_text turns "\n" into "\r\n" on the way out and
-        # read_text turns it back on the way in, so re-encoding what was read yields a
-        # different digest than the file it was read from -- and every parsed text was
-        # silently rejected, leaving the deep dive with the abstract alone.
+        # Hash the bytes as written; decoded text differs in line endings on Windows.
         if hashlib.sha256(p.read_bytes()).hexdigest() != want_text:
-            return ""                      # the named file is not the file that was recorded
+            return ""
         return p.read_text(encoding="utf-8")
 
-    def _load_fulltext_unchecked(self, pid: str) -> str:
-        """The pre-pinning search: first parsed text found, whoever wrote it.
-
-        Only reachable with version enforcement switched off, which is a deliberate
-        operating mode (an offline rerun, a pool that predates any of this) rather than
-        something to fall into by accident.
-        """
-        for rel in (
-            f"related_work_data/nougat_output/{pid}.mmd",
-            f"related_work_data/grobid_fulltext/{pid}.txt",
-            f"related_work_data/mineru_output/{pid}.md",
-            f"related_work_data/mineru_output/{pid}/{pid}.md",
-        ):
-            p = self.sub_dir / rel
-            if p.exists():
-                return p.read_text(encoding="utf-8")
-        return ""
-
-    # Statuses a paper may be compared against: a specific admissible version, or the one
-    # document a source without version history has. Mirrors FullTextFetcher.USABLE_STATUSES.
-    _USABLE_VERSION_STATUSES = ("pinned", "single")
-
     def _add_pool_paper(self, p: dict, source: str):
+        """Add a candidate if it is not the submission and has an admissible version."""
         pid = p.get("paper_id")
         if not pid or pid in self.pool:
             return
-        # never let the submission itself into the pool (near-duplicate title)
         title = p.get("title", "") or ""
         if self.sub_title and fuzz.ratio(title.lower(), self.sub_title.lower()) >= 90:
             return
 
-        # Temporal admissibility, enforced where the paper becomes evidence rather than
-        # only where its PDF is fetched. Skipping the download was not enough: a paper
-        # ruled out as prior work still entered the pool here with its abstract -- the
-        # CURRENT abstract, which for a post-cutoff paper is post-cutoff text.
-        #
-        # A MISSING verdict is not a pass. Letting an unpinned paper through was the
-        # same mistake one level up: the guarantee then covered only the papers whose
-        # resolution happened to succeed, which is the subset that needed it least.
-        # Unpinned papers are resolved here, once, and excluded if that still cannot
-        # establish them as prior work. Running without the check is a separate, stated
-        # mode (NOVELTY_VERSION_PINNING=0), not the default that silence falls back to.
         entry = self._versions_manifest().get(pid) or {}
         status = entry.get("status") or p.get("version_status") or ""
-        if self._version_enforcement():
-            # A recorded verdict counts only while it answers the cutoff in force. It is
-            # a statement about (paper, submission date, required gap), and the fetcher's
-            # staleness check -- which knows this -- only runs when the fetcher runs. The
-            # pool is built without it, so a pin computed for a different submission date
-            # was accepted here unexamined.
-            if not status or self._pin_is_stale(entry):
-                entry = self._resolve_missing_pin(pid, p)
-                status = entry.get("status") or ""
-            if status not in self._USABLE_VERSION_STATUSES:
-                self._note_version_gate(f"{pid}: not usable as evidence "
-                                        f"({status or 'unresolved'}) | {title[:50]}")
-                return
-        elif status and status not in self._USABLE_VERSION_STATUSES:
+        if not status or self._pin_is_stale(entry):
+            entry = self._resolve_missing_pin(pid, p)
+            status = entry.get("status") or ""
+        if status not in _USABLE_VERSION_STATUSES:
+            self._note_version_gate(f"{pid}: not usable as evidence "
+                                    f"({status or 'unresolved'}) | {title[:50]}")
             return
 
-        # The abstract of the document that was PINNED, not of whatever the source holds
-        # today. Where resolution happened during this pool build, ranked_papers.json was
-        # never rewritten, so the record still carries the current abstract while the pin
-        # points at an older version -- the exact mismatch the pinning exists to prevent,
-        # reintroduced one layer up.
         abstract, abstract_source = self._version_abstract(entry, p)
-
         self.pool[pid] = {
             "paper_id": pid,
             "title": p.get("title", "") or "",
@@ -454,19 +263,12 @@ class ClaimToolbox:
             "intro": self._load_intro(pid),
             "fulltext": self._load_fulltext_file(pid),
             "source": source,
-            # Provenance, carried so the comparison and the reviewer can both see WHICH
-            # document was read -- not only that one was.
             "version_status": status,
             "pinned_version": entry.get("version") or p.get("pinned_version", ""),
             "pinned_version_date": entry.get("version_date") or p.get("pinned_version_date", ""),
             "pinned_url": entry.get("url", ""),
             "doc_sha256": entry.get("doc_sha256", ""),
             "abstract_source": abstract_source,
-            # Which text file the comparison will actually read, and whether the version
-            # history behind the pin was complete. Both live in the manifest; without
-            # carrying them here the run log reported empty paths and an unconditional
-            # history_complete=True -- so a pin made from a partial history looked exactly
-            # like one made from a full one.
             "parsed_text_path": entry.get("parsed_text_path", ""),
             "parsed_text_sha256": entry.get("parsed_text_sha256", ""),
             "history_complete": entry.get("history_complete", None),
@@ -484,6 +286,7 @@ class ClaimToolbox:
             self._add_pool_paper(p, "agent")
 
     def _score_pool(self):
+        """Embedding similarity of each pool paper to the claim."""
         if not self.pool:
             return
         claim_doc = (
@@ -500,63 +303,32 @@ class ClaimToolbox:
         for pid, s in zip(pids, sims):
             self.pool[pid]["sim"] = float(s)
 
-    def _load_citation_contexts(self) -> dict:
-        """cited-paper title -> citation context sentences (best-effort, from {id}.json)."""
-        id_to_title = {c.get("id"): (c.get("title") or "") for c in self._meta.get("cited_papers", [])}
-        out = {}
-        for ctx in self._meta.get("citation_contexts", []):
-            title = id_to_title.get(ctx.get("cited_paper_id"))
-            if title:
-                out.setdefault(title, []).append(ctx.get("context_sentence", ""))
-        return out
-
-    # ------------------------------ helpers ------------------------------ #
-
     def _has_fulltext(self, pid: str) -> bool:
         return bool(self.pool.get(pid, {}).get("fulltext"))
 
     def ensure_fulltext(self, pid: str) -> str:
-        """GROBID-parse this paper's full text ON DEMAND, the first time it is
-        actually deep-dived (most pool papers never reach this point, so most PDFs
-        are never GROBID-parsed at all -- see fetch_fulltext.py's phase split).
+        """Fetch and parse the pinned PDF of a paper when it is first examined.
 
-        Returns a short status: "already_had" | "ok" | "no_pdf" | "parse_empty" |
-        "parse_error". The caller records this on the comparison so the reviewer
-        sees WHY a deep dive used only the abstract (no PDF ever obtained vs. the
-        available PDF could not be parsed). Parsing is IN PROCESS (PyMuPDF, ~1s)
-        -- no GROBID service involved for related work."""
+        Returns "already_had", "ok", "no_version", "no_pdf", "parse_empty",
+        "parse_error" or "parse_unverified".
+        """
         if pid == "submission" or self._has_fulltext(pid):
-            # Recorded too: an empty status in the log reads as "never asked", which is a
-            # different thing from "was already there".
             self._fulltext_status.setdefault(pid, "already_had")
             return "already_had"
         try:
-            import sys
-            sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
             from fetch_fulltext import FullTextFetcher
 
             fetcher = FullTextFetcher(self.grobid_server)
             pdf_path = self.sub_dir / "related_work_data" / "pdfs" / f"{pid}.pdf"
-
-            # The guarded loader only guards texts that already exist. This path creates
-            # one, and parse_one asks only whether the PDF is readable -- not whether it
-            # is the pinned document. An old file left on disk would be parsed here and
-            # its text handed straight to the pool, with the hash check that would have
-            # caught it running only on the next load. So the check happens BEFORE the
-            # parse, where it can still prevent the text rather than merely disown it.
             status = self._prepare_pinned_pdf(fetcher, pid, pdf_path)
             if status:
                 self._fulltext_status[pid] = status
                 self._log("ensure_fulltext", f"{pid} -> {status}")
                 return status
-
             status = fetcher.parse_one(self.data_dir, self.submission_id, pid)
         except Exception:
             status = "parse_error"
         if status == "ok":
-            # parse_one wrote the provenance; re-read the manifest and take the text back
-            # through the same check every other reader goes through, rather than trusting
-            # the file because we just made it.
             self._versions_cache = None
             text = self._load_fulltext_file(pid)
             if not text:
@@ -565,33 +337,23 @@ class ClaimToolbox:
                           f"{pid} -> parsed text failed its own provenance check")
                 return "parse_unverified"
             self.pool[pid]["fulltext"] = text
-            self._paper_index.pop(pid, None)  # rebuild the section/passage index from full text
+            self._paper_index.pop(pid, None)
             self._paper_text.pop(pid, None)
         self._fulltext_status[pid] = status
         self._log("ensure_fulltext", f"{pid} -> {status}")
         return status
 
     def _prepare_pinned_pdf(self, fetcher, pid: str, pdf_path: Path) -> str:
-        """Make sure the PDF about to be parsed is the pinned one. "" when it is.
-
-        Returns a status string to abort with otherwise, so the caller reports why no
-        full text appeared instead of quietly producing one from the wrong document.
-        """
-        if not self._version_enforcement():
-            return ""
+        """Make sure the PDF on disk is the pinned version; returns "" or an abort status."""
         pin = self._versions_manifest().get(pid) or {}
         if not pin.get("status"):
             pin = self._resolve_missing_pin(pid, self.pool.get(pid, {})) or {}
-        if pin.get("status") not in self._USABLE_VERSION_STATUSES:
+        if pin.get("status") not in _USABLE_VERSION_STATUSES:
             return "no_version"
 
         recorded = pin.get("doc_sha256")
         if pdf_path.exists() and recorded and fetcher._sha256(pdf_path) == recorded:
             return ""
-
-        # Either nothing is on disk, or what is there is not the pinned document. Both
-        # are the same fix: fetch the pinned version (ensure_pdf discards a mismatching
-        # cache itself) and record what landed.
         p = self.pool.get(pid, {})
         ok = fetcher.ensure_pdf(
             {"paper_id": pid, "title": p.get("title", ""), "doi": p.get("doi"),
@@ -604,7 +366,7 @@ class ClaimToolbox:
         return ""
 
     def _paper_source_text(self, pid: str) -> str:
-        """Full source text of a paper for quote verification (fulltext or abstract+intro)."""
+        """D(p): the parsed full text, or abstract and introduction if there is none."""
         if pid not in self._paper_text:
             p = self.pool.get(pid, {})
             if p.get("fulltext"):
@@ -618,9 +380,6 @@ class ClaimToolbox:
         if pid == "submission":
             return self._submission_index
         if pid not in self._paper_index:
-            # double-checked under the embed lock: serialize the eager SPECTER2 encode
-            # across parallel deep-dive threads (and avoid two threads building the same
-            # index -- though each pid is normally handled by exactly one worker).
             with self._embed_lock:
                 if pid not in self._paper_index:
                     p = self.pool.get(pid, {})
@@ -639,12 +398,11 @@ class ClaimToolbox:
                     self._paper_index[pid] = PassageIndex(chunks, self.embedder)
         return self._paper_index[pid]
 
-    def _log(self, action: str, summary: str, progress: bool = False):
+    def _log(self, action: str, summary: str):
         with self._lock:
             self.ledger["trajectory"].append(
                 {"step": len(self.ledger["trajectory"]) + 1, "action": action, "detail": summary}
             )
-            self._steps_since_progress = 0 if progress else self._steps_since_progress + 1
 
     def _bump_depth(self, pid: str, depth: str):
         with self._lock:
@@ -657,68 +415,25 @@ class ClaimToolbox:
                 e["depth"] = depth
 
     def _ranked(self) -> List[dict]:
-        """Pool papers ordered by claim similarity.
-
-        There used to be an LLM reranker in front of this. It was removed: triage reads
-        the ENTIRE pool regardless of order, so the ordering only affected which papers
-        land in the top-20 `frontier` shown in the review UI -- one LLM call per claim for
-        display order. Ordering still matters if a pool ever exceeds the 30-paper triage
-        chunk size (it would change which abstracts are judged together); pools are
-        currently ~20."""
+        """Pool papers ordered by similarity to the claim."""
         return sorted(self.pool.values(), key=lambda p: p.get("sim", 0.0), reverse=True)
-
-    # ------------------------------- tools ------------------------------- #
 
     def search_submission(self, query: str, k: int = 5) -> dict:
         hits = self._submission_index.search(query, k=k)
         self._log("search_submission", f'q="{query[:60]}" -> {len(hits)} passages')
         return {"query": query, "passages": hits}
 
-    def list_related_work(self, top: Optional[int] = None) -> dict:
-        top = top or self.list_top
-        ordered = self._ranked()[:top]
-        items = []
-        for p in ordered:
-            pid = p["paper_id"]
-            items.append({
-                "paper_id": pid,
-                "title": p["title"],
-                "year": p["year"],
-                "venue": p["venue"],
-                "similarity": round(p.get("sim", 0.0), 4),
-                "source": p["source"],
-                "cited_by_submission": p["cited_paper"],
-                "has_fulltext": self._has_fulltext(pid),
-                "abstract_snippet": (p["abstract"][:240] + "…") if len(p["abstract"]) > 240 else p["abstract"],
-                "examined_depth": self.ledger["examined"].get(pid, {}).get("depth"),
-            })
-        self._log("list_related_work", f"returned {len(items)} of {len(self.pool)} pool papers")
-        return {"pool_size": len(self.pool), "closest_n": self.closest_n, "papers": items}
-
-    def list_sections(self, paper_id: str) -> dict:
-        idx = self._index_for(paper_id)
-        secs = idx.section_names()
-        self._log("list_sections", f"{paper_id}: {len(secs)} sections")
-        return {"paper_id": paper_id, "sections": secs, "has_fulltext": self._has_fulltext(paper_id)}
-
     def section_menu(self, paper_id: str) -> List[dict]:
-        """Section titles + short previews + sizes, so the agent can choose which to read."""
+        """Section names with previews and sizes."""
         return self._index_for(paper_id).section_previews()
 
     def read_sections(self, paper_id: str, names: List[str], max_total: int = 40000,
-                      depth: str = "targeted_sections", exact: bool = False) -> dict:
-        """Load the FULL text of the chosen sections (no small cap) into context.
-
-        `depth` is what this read is worth on the ladder. It defaults to the section-based
-        deep read; the deep dive passes "fulltext_complete" when it asked for every section
-        because it is putting the whole paper in the prompt, which is a different claim
-        about how well the paper was examined."""
+                      exact: bool = False) -> dict:
+        """Complete text of the named sections; records which sections were read."""
         idx = self._index_for(paper_id)
         got = idx.get_sections(names, max_total=max_total, exact=exact)
         if paper_id != "submission":
-            self._bump_depth(paper_id, depth if got else "abstract_intro")
-        # remember the actual section titles loaded (document order, de-duped) so the
-        # review can report exactly which sections backed each comparison
+            self._bump_depth(paper_id, "targeted_sections" if got else "abstract_intro")
         lst = self._sections_read.setdefault(paper_id, [])
         for s in got:
             nm = s.get("name")
@@ -727,31 +442,12 @@ class ClaimToolbox:
         self._log("read_sections", f"{paper_id}: {len(got)} sections ({sum(len(s['text']) for s in got)} chars)")
         return {"paper_id": paper_id, "sections": got}
 
-    def note_full_read(self, paper_id: str, names: List[str]) -> None:
-        """Record that a paper's WHOLE text backed a comparison, without re-reading it.
-
-        The deep dive hands the model `_paper_source_text` directly -- the parsed document
-        as one string, which is also the verification corpus -- so it never goes through
-        read_sections, and the two things read_sections keeps on the side would otherwise
-        never be written: the depth this paper was examined at, and which sections backed
-        the comparison. Both are read by the review and by eval/evidence_gate.
-        """
-        if paper_id == "submission":
-            return
-        self._bump_depth(paper_id, "fulltext_complete")
-        with self._lock:
-            lst = self._sections_read.setdefault(paper_id, [])
-            for nm in names or []:
-                if nm and nm not in lst:
-                    lst.append(nm)
-
     def verify_segments(self, segments: List[dict], source: str) -> List[dict]:
-        """Verify a realization's quote segments against the true source text.
+        """Verify the quote segments of an explanation against the source text.
 
-        source = 'submission' or a paper_id. A quote that is found verbatim (>= min
-        length, whitespace/OCR-tolerant) is kept as a verified quote and completed to
-        its full sentence; a quote that cannot be located is DEMOTED to plain prose, so
-        the narrative never presents an unverified span as a verbatim quote."""
+        A verified quote is shortened for display; a quote that cannot be verified is
+        shown as plain text.
+        """
         src = self._submission_text if source == "submission" else self._paper_source_text(source)
         out = []
         for seg in segments or []:
@@ -760,18 +456,9 @@ class ClaimToolbox:
             if not content:
                 continue
             if kind == "quote":
-                # A quote stitched from two places with an ellipsis fails as a whole while
-                # each of its parts is genuine; keeping the longest part that verifies shows
-                # the reviewer a span they can find, instead of a warning about text that is
-                # accurate. Nothing is invented -- a fragment survives only if it is located
-                # in the source on its own.
                 chk, span = evidence.verify_contiguous(
                     content, src, self.min_quote_tokens, self.fuzzy_threshold)
                 if chk.verified:
-                    # Verified, then cut to what a reviewer will actually read: the model is
-                    # given no length ceiling and returns paragraphs that run through section
-                    # headings. Trimming happens at boundaries the text already has, so the
-                    # result is still verbatim and still locatable in the PDF.
                     out.append({"kind": "quote", "verified": True,
                                 "content": evidence_map.trim_display_span(span)})
                 else:
@@ -780,32 +467,19 @@ class ClaimToolbox:
                 out.append({"kind": "text", "content": content})
         return out
 
-    def read_paper(self, paper_id: str, query: Optional[str] = None,
-                   section: Optional[str] = None, k: int = 5) -> dict:
-        if paper_id != "submission" and paper_id not in self.pool:
+    def read_paper(self, paper_id: str, query: str, k: int = 5) -> dict:
+        """Top-k passages of a paper for a query."""
+        if paper_id not in self.pool:
             return {"error": f"unknown paper_id '{paper_id}'"}
-        has_ft = self._has_fulltext(paper_id) if paper_id != "submission" else True
-        idx = self._index_for(paper_id)
-
-        if section:
-            text = idx.get_section(section)
-            mode, payload = "section", {"section": section, "text": text or "(section not found)"}
-            depth = "fulltext_available_targeted_read" if has_ft else "abstract_intro"
-        elif query:
-            payload = {"query": query, "passages": idx.search(query, k=k)}
-            mode = "query"
-            depth = "fulltext_available_targeted_read" if has_ft else "fulltext_unavailable"
-        else:
-            ab_txt = self.pool.get(paper_id, {}).get("abstract", "") if paper_id != "submission" else ""
-            payload = {"abstract": ab_txt or self._meta.get("abstract", "")}
-            mode, depth = "abstract", "abstract_only"
-
-        if paper_id != "submission":
-            self._bump_depth(paper_id, depth)
-        self._log("read_paper", f"{paper_id} [{mode}] -> depth={depth}")
+        has_ft = self._has_fulltext(paper_id)
+        payload = {"query": query, "passages": self._index_for(paper_id).search(query, k=k)}
+        depth = "fulltext_available_targeted_read" if has_ft else "fulltext_unavailable"
+        self._bump_depth(paper_id, depth)
+        self._log("read_paper", f"{paper_id} [query] -> depth={depth}")
         return {"paper_id": paper_id, "has_fulltext": has_ft, **payload}
 
     def retrieve_more(self, query: str, k: Optional[int] = None) -> dict:
+        """Search for new admissible candidates and add them to the pool."""
         k = k or self.retrieve_k
         new = rm.retrieve(
             query, self.claim, self.embedder,
@@ -817,14 +491,15 @@ class ClaimToolbox:
         for p in new:
             self._add_pool_paper(p, "agent")
             pid = p["paper_id"]
-            self.pool[pid]["sim"] = float(p.get("similarity", 0.0))
-            added.append(pid)
+            if pid in self.pool:
+                self.pool[pid]["sim"] = float(p.get("similarity", 0.0))
+                added.append(pid)
         if added:
             self._persist_agent_papers(new, query)
             if self.fetch_fulltext_for_new:
                 self._best_effort_fulltext(added[: self.fetch_fulltext_for_new])
         self.ledger["retrievals"].append({"query": query, "n_new": len(added), "added_ids": added})
-        self._log("retrieve_more", f'q="{query[:60]}" -> {len(added)} new papers', progress=True)
+        self._log("retrieve_more", f'q="{query[:60]}" -> {len(added)} new papers')
         return {
             "query": query,
             "n_new": len(added),
@@ -840,9 +515,7 @@ class ClaimToolbox:
         self,
         paper_id: str,
         refutation_status: str,
-        relevance_reason: str = "",
         brief_note: str = "",
-        overlap_dimensions: Optional[List[str]] = None,
         overlap_degree: str = "none",
         what_is_shared: str = "",
         submission_delta: str = "",
@@ -851,52 +524,29 @@ class ClaimToolbox:
         assessment: str = "",
         fulltext_fetch_status: Optional[str] = None,
         extra: Optional[dict] = None,
-        log: bool = True,
-    ) -> dict:
+    ) -> None:
+        """Verify the evidence pairs again and store the comparison in the ledger.
+
+        `can_refute` without a pair verified on both sides is downgraded.
+        """
         if paper_id not in self.pool:
-            return {"error": f"unknown paper_id '{paper_id}'"}
+            return
         paper_text = self._paper_source_text(paper_id)
         verified_pairs = []
         for ep in (evidence_pairs or []):
-            # Salvage a stitched span on either side before judging the pair, on the same
-            # rule as the realization segments above.
-            # Salvaging replaces the quote with the region verify_contiguous located in the
-            # source, which is WIDER than a deliberately trimmed span -- so for `exact`
-            # pairs it silently undid the evidence map's trim and put the neighbouring
-            # sentence back. Salvage what was guessed at; leave alone what was chosen.
-            if not ep.get("exact"):
-                _, cq_span = evidence.verify_contiguous(
-                    ep.get("claim_quote", ""), self._submission_text,
-                    self.min_quote_tokens, self.fuzzy_threshold)
-                _, pq_span = evidence.verify_contiguous(
-                    ep.get("paper_quote", ""), paper_text,
-                    self.min_quote_tokens, self.fuzzy_threshold)
-                ep = {**ep, "claim_quote": cq_span, "paper_quote": pq_span}
             v = evidence.verify_pair(
                 ep.get("claim_quote", ""), ep.get("paper_quote", ""),
                 self._submission_text, paper_text,
                 self.min_quote_tokens, self.fuzzy_threshold,
             )
-            # passages are cut to a char budget, so copied quotes can end mid-sentence;
-            # once verified, restore the complete sentence from the true source text
-            claim_q, paper_q = ep.get("claim_quote", ""), ep.get("paper_quote", "")
-            # `exact` means the span was chosen deliberately and is already a whole sentence
-            # -- the evidence map trims each side down to the one sentence that carries the
-            # correspondence, and expanding it again pulls the neighbouring sentence back in,
-            # undoing the trim and overstating the overlap. Everything else still gets the
-            # expansion, which is there because passages are cut to a char budget.
-            if v["claim_quote_verified"] and not ep.get("exact"):
-                claim_q = evidence.expand_to_sentence(claim_q, self._submission_text)
-            if v["paper_quote_verified"] and not ep.get("exact"):
-                paper_q = evidence.expand_to_sentence(paper_q, paper_text)
             carried = {k: val for k, val in ep.items()
                        if k not in ("claim_quote", "paper_quote", "rationale",
                                     "claim_quote_verified", "paper_quote_verified",
                                     "fully_verified")}
             verified_pairs.append({
                 **carried,
-                "claim_quote": claim_q,
-                "paper_quote": paper_q,
+                "claim_quote": ep.get("claim_quote", ""),
+                "paper_quote": ep.get("paper_quote", ""),
                 "rationale": ep.get("rationale", ""),
                 "claim_quote_verified": v["claim_quote_verified"],
                 "paper_quote_verified": v["paper_quote_verified"],
@@ -905,11 +555,9 @@ class ClaimToolbox:
 
         status = refutation_status
         note = brief_note
-        downgraded = False
         if status == "can_refute" and not any(p["fully_verified"] for p in verified_pairs):
             status = "cannot_refute"
             note = "[downgraded: no beidseitig-verified evidence quote pair] " + note
-            downgraded = True
 
         p = self.pool[paper_id]
         depth = self.ledger["examined"].get(paper_id, {}).get("depth", "abstract_only")
@@ -923,63 +571,28 @@ class ClaimToolbox:
             "source": p["source"],
             "content_source": "full text" if self._has_fulltext(paper_id) else "abstract + introduction",
             "depth": depth,
-            # the section titles that backed this comparison (empty for abstract-only
-            # triage). Since the deep dive feeds whole papers this is normally EVERY
-            # section of the paper, not a selection -- so its length no longer says how
-            # much of the paper was read; `context_policy` does. Feeding it back to
-            # read_sections stays correct under either meaning, which is all its readers do.
             "sections_used": list(self._sections_read.get(paper_id, [])),
-            "relevance_reason": relevance_reason,
+            "relevance_reason": "",
             "refutation_status": status,
-            "overlap_dimensions": overlap_dimensions or [],
+            "overlap_dimensions": [],
             "overlap_degree": overlap_degree,
             "what_is_shared": what_is_shared,
             "submission_delta": submission_delta,
             "evidence_pairs": verified_pairs,
-            # narrative of how THIS paper realizes the claimed contribution, with inline
-            # verified quotes (segments: {kind:text|quote, verified?}); + the overlap assessment
             "paper_realization": self.verify_segments(paper_realization, paper_id) if paper_realization else [],
             "assessment": assessment,
-            # outcome of the on-demand GROBID fetch for THIS deep dive (None = never
-            # attempted, e.g. an abstract-only triage comparison that never went deep)
             "fulltext_fetch_status": fulltext_fetch_status,
             "brief_note": note,
-            # Whatever the caller needs to survive into the artifact. Everything else on the
-            # dict a caller passes is dropped here, which silently lost the evidence map's
-            # per-paper diagnosis and its rejected candidates -- and made "the map found
-            # nothing" indistinguishable from "the field was never stored".
             **(extra or {}),
         }
-        # Serialize the shared-ledger read-modify-write: parallel deep dives call this
-        # concurrently, and the rebuild-then-append below would otherwise lose a comparison.
         with self._lock:
-            already = any(c["paper_id"] == paper_id for c in self.ledger["comparisons"])
-            # last write wins per paper
             self.ledger["comparisons"] = [c for c in self.ledger["comparisons"] if c["paper_id"] != paper_id]
             self.ledger["comparisons"].append(comp)
             self.ledger["examined"].setdefault(
                 paper_id,
                 {"depth": depth, "source": p["source"], "similarity": round(p.get("sim", 0.0), 4)},
             )["has_comparison"] = True
-            if log:
-                self._log("record_comparison", f"{paper_id} -> {status} ({overlap_degree})", progress=not already)
-        if already:
-            note = "This paper was ALREADY compared -- do not compare it again. Move on to a NEW candidate or call finish."
-        elif downgraded:
-            note = "Evidence must be beidseitig verified (claim + paper side, >= min length) to count."
-        else:
-            note = "recorded"
-        return {
-            "paper_id": paper_id,
-            "recorded_status": status,
-            "already_compared": already,
-            "downgraded": downgraded,
-            "verified_pairs": sum(1 for p_ in verified_pairs if p_["fully_verified"]),
-            "unverified_pairs": sum(1 for p_ in verified_pairs if not p_["fully_verified"]),
-            "note": note,
-        }
-
-    # ------------------- retrieve_more persistence / fulltext ------------- #
+            self._log("record_comparison", f"{paper_id} -> {status} ({overlap_degree})")
 
     def _persist_agent_papers(self, papers: List[dict], query: str):
         path = self.sub_dir / "related_work_data" / "agent_retrieved_papers.json"
@@ -1004,11 +617,8 @@ class ClaimToolbox:
         path.write_text(json.dumps(existing, ensure_ascii=False, indent=2), encoding="utf-8")
 
     def _best_effort_fulltext(self, paper_ids: List[str]):
-        """Download + parse full text for a few new papers (best-effort, in-process
-        PyMuPDF parsing -- no GROBID dependency)."""
+        """Fetch and parse the pinned versions of newly retrieved papers."""
         try:
-            import sys
-            sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
             from fetch_fulltext import FullTextFetcher
 
             fetcher = FullTextFetcher(self.grobid_server)
@@ -1026,20 +636,13 @@ class ClaimToolbox:
                               "publication_date": p.get("publication_date", ""),
                               "year": p.get("year", ""),
                               "abstract": p.get("abstract", "")}
-                    # Same version pinning as the batch download: a paper the agent
-                    # retrieved mid-run must not be read at whatever version the
-                    # unversioned URL serves today, any more than a pool paper must.
                     pin = fetcher.pin_for_record(self.data_dir, self.submission_id, record)
-                    # Admissible by STATUS, not by having a URL: a "single" paper is
-                    # admissible and has no version-bound URL to offer.
-                    if pin and pin.get("status") not in self._USABLE_VERSION_STATUSES:
-                        continue          # no admissible version -- recorded, not fetched
+                    if pin and pin.get("status") not in _USABLE_VERSION_STATUSES:
+                        continue
                     if fetcher.ensure_pdf(record, pdfs_dir, pin=pin or None):
-                        # Record which file is now on disk before parsing it, so the text
-                        # written next can be bound to that hash rather than to nothing.
                         fetcher.record_pdf_hash(self.data_dir, self.submission_id, pid,
                                                 pdfs_dir / f"{pid}.pdf")
-                        self._versions_cache = None      # manifest changed underneath us
+                        self._versions_cache = None
                         if fetcher.parse_one(self.data_dir, self.submission_id, pid) == "ok":
                             p["fulltext"] = (ft_dir / f"{pid}.txt").read_text(encoding="utf-8")
                             self._paper_index.pop(pid, None)
@@ -1049,53 +652,11 @@ class ClaimToolbox:
         except Exception:
             return
 
-    # ------------------------- gate signals ------------------------------ #
-
-    def closest_set(self) -> List[str]:
-        return [p["paper_id"] for p in self._ranked()[: self.closest_n]]
-
-    def _sufficiently_examined(self, pid: str) -> bool:
-        e = self.ledger["examined"].get(pid)
-        if not (e and e.get("has_comparison")):
-            return False
-        comp = next((c for c in self.ledger["comparisons"] if c["paper_id"] == pid), None)
-        deg = (comp or {}).get("overlap_degree")
-        # Papers that PLAUSIBLY overlap (partial/substantial/same) must be read at depth
-        # (full-text passages). Papers judged clearly distinct (none/superficial) are fine
-        # from the abstract -- no need to spend full-text budget on obviously-unrelated work.
-        if deg in ("same", "substantial", "partial"):
-            return e.get("depth") in _SUFFICIENT_DEPTHS
-        return True
-
-    def closest_covered(self) -> bool:
-        cs = self.closest_set()
-        return bool(cs) and all(self._sufficiently_examined(pid) for pid in cs)
-
-    def uncovered_closest(self) -> List[str]:
-        """Titles of closest-set papers that still lack a sufficient comparison."""
-        return [self.pool[pid]["title"] for pid in self.closest_set()
-                if not self._sufficiently_examined(pid)]
-
     def retrievals_done(self) -> int:
         return len(self.ledger["retrievals"])
 
-    def has_substantial_overlap(self) -> bool:
-        for c in self.ledger["comparisons"]:
-            if (
-                c["refutation_status"] == "can_refute"
-                and c.get("overlap_degree") in ("same", "substantial")
-                and any(p.get("fully_verified") for p in c.get("evidence_pairs", []))
-                and c.get("depth") in _SUFFICIENT_DEPTHS
-            ):
-                return True
-        return False
-
-    def stalled(self, stalled_k: int) -> bool:
-        return self._steps_since_progress >= stalled_k
-
-    # ------------------------- final artifact ---------------------------- #
-
-    def artifact_entry(self, verdict_note: str = "") -> dict:
+    def artifact_entry(self) -> dict:
+        """The claim's entry in the artifact: comparisons, examined papers and trajectory."""
         comps = self.ledger["comparisons"]
         examined = self.ledger["examined"]
         examined_papers = [
@@ -1109,8 +670,6 @@ class ClaimToolbox:
             }
             for pid, info in examined.items()
         ]
-        # The full ranked frontier (claim-similarity order) so the reviewer sees ALL
-        # relevant prior work -- which the agent examined/compared, and which it did not.
         frontier = self._ranked()[:20]
         frontier_out = [
             {

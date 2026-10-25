@@ -82,7 +82,7 @@ def _usd(model: str, prompt_tokens: int, completion_tokens: int) -> float:
 
 
 class _SectionPick(BaseModel):
-    """The sections whose full text should be loaded."""
+    """The sections whose FULL text should be loaded (chosen by what each is about)."""
     sections: List[str] = Field(description="exact section titles to read in full, most relevant first")
     why: str = Field(default="", description="what these sections are expected to show, in one sentence")
 
@@ -447,7 +447,6 @@ class ClaimNoveltyAgent:
         model_name: str = "gpt-4.1",
         embedder=None,
         max_retrievals: int = 1,
-        closest_n: int = 10,
         min_quote_tokens: int = 10,
         fuzzy_threshold: float = 90.0,
         grobid_server: str = "http://localhost:8070",
@@ -461,7 +460,6 @@ class ClaimNoveltyAgent:
         self.model_name = model_name
         self.embedder = embedder or _get_embedder()
         self.max_retrievals = max_retrievals
-        self.closest_n = closest_n
         self.min_quote_tokens = min_quote_tokens
         self.fuzzy_threshold = fuzzy_threshold
         self.grobid_server = grobid_server
@@ -726,8 +724,7 @@ class ClaimNoveltyAgent:
             "submission_basis",
             f"{len(sources)} source blocks, {len(text):,}/{cap:,} chars "
             f"[{basis.get('context_id', 'ctx?')}], kinds={','.join(kinds) or '-'}; "
-            f"{len(omitted)} sections omitted; " + "; ".join(notes),
-            progress=True,
+            f"{len(omitted)} sections omitted; " + "; ".join(notes)
         )
         return basis, pt, ct
 
@@ -743,8 +740,7 @@ class ClaimNoveltyAgent:
         raw = [s.model_dump() for s in (getattr(parsed, "segments", None) or [])] if parsed else []
         realization = tb.verify_segments(raw, "submission")
         tb.claim_realization = realization
-        tb._log("understand_submission", "explanation from shared original-source context",
-                progress=True)
+        tb._log("understand_submission", "explanation from shared original-source context")
         return realization, basis["text"], pt, ct
 
     def _examine_paper(self, tb: ClaimToolbox, claim: dict, pid: str, claim_ctx: str,
@@ -1262,7 +1258,7 @@ class ClaimNoveltyAgent:
             "evidence_pairs": [],
         }
 
-    def _record(self, tb: ClaimToolbox, pid: str, comp: dict, log: bool = True):
+    def _record(self, tb: ClaimToolbox, pid: str, comp: dict):
         """Record the comparison in the ledger, where its quotes are verified."""
         rlog = getattr(tb, "run_log", None)
         if rlog is not None:
@@ -1275,12 +1271,10 @@ class ClaimNoveltyAgent:
             except Exception:
                 pass
 
-        return tb.record_comparison(
+        tb.record_comparison(
             paper_id=pid,
             refutation_status=comp["refutation_status"],
-            relevance_reason="",
             brief_note=comp["brief_note"],
-            overlap_dimensions=[],
             overlap_degree=comp["overlap_degree"],
             what_is_shared=comp["what_is_shared"],
             submission_delta=comp["submission_delta"],
@@ -1294,7 +1288,6 @@ class ClaimNoveltyAgent:
             paper_realization=comp.get("paper_realization"),
             assessment=comp.get("assessment", ""),
             fulltext_fetch_status=comp.get("fulltext_fetch_status"),
-            log=log,
         )
 
     def _map_evidence(self, tb: "ClaimToolbox", claim: dict, pid: str, comp: dict,
@@ -1417,7 +1410,7 @@ class ClaimNoveltyAgent:
 
     def _deep_dive(self, tb: ClaimToolbox, claim: dict, pid: str, claim_ctx: str):
         """Parse one paper, run its loop and record the result."""
-        tb._log("deep_dive", pid, progress=True)
+        tb._log("deep_dive", pid)
         _p0 = time.perf_counter()
         fts = tb.ensure_fulltext(pid)
         parse_s = time.perf_counter() - _p0
@@ -1438,7 +1431,7 @@ class ClaimNoveltyAgent:
         """Assess one claim against the whole pool; returns the artifact entry."""
         tb = ClaimToolbox(
             self.data_dir, self.submission_id, claim, self.embedder,
-            closest_n=self.closest_n, min_quote_tokens=self.min_quote_tokens,
+            min_quote_tokens=self.min_quote_tokens,
             fuzzy_threshold=self.fuzzy_threshold, grobid_server=self.grobid_server,
         )
         self.run_log = tb.run_log = self._new_run_log(claim)
@@ -1520,7 +1513,7 @@ class ClaimNoveltyAgent:
         emit()
 
         pool = [p["paper_id"] for p in tb._ranked()]
-        tb._log("no_triage", f"{len(pool)} papers, none screened from abstracts", progress=True)
+        tb._log("no_triage", f"{len(pool)} papers, none screened from abstracts")
         est_total["v"] = len(tb.ledger["trajectory"]) + 3 * len(pool)
         emit()
 

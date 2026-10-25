@@ -72,7 +72,7 @@ def _agent_class(variant: str):
 
 
 def run_variant(data_dir: str, sid: str, variant: str, claims: list, model: str,
-                closest_n: int, max_retrievals: int, workers) -> dict:
+                max_retrievals: int, workers) -> dict:
     """One variant over all claims; returns the artifact_a-shaped dict it wrote."""
     from agent.claim_agent import _usd
 
@@ -83,7 +83,7 @@ def run_variant(data_dir: str, sid: str, variant: str, claims: list, model: str,
     for claim in claims:
         # A fresh instance per claim, exactly as the backend runs it -- the toolbox, the
         # pool snapshot and the run log are per-claim objects in both systems.
-        ag = cls(data_dir, sid, model_name=model, closest_n=closest_n,
+        ag = cls(data_dir, sid, model_name=model,
                  max_retrievals=max_retrievals, deep_dive_workers=workers)
         t0 = time.perf_counter()
         res = ag.run(claim)
@@ -150,7 +150,6 @@ def run_variant(data_dir: str, sid: str, variant: str, claims: list, model: str,
         "variant": variant,
         "control_flow": getattr(cls, "control_flow", "agentic_loop"),
         "agentic": variant == "agent",
-        "closest_n": closest_n,
         "model": model,
         # The retrieval snapshot both variants were handed, read from the file rather than
         # from either run -- so an unequal pool would show up here instead of hiding.
@@ -212,7 +211,6 @@ def main():
     ap.add_argument("--variant", default="both", choices=(*VARIANTS, "both"))
     ap.add_argument("--claims", default="", help="comma-separated claim ids (default: all)")
     ap.add_argument("--model", default="gpt-5.6-luna")
-    ap.add_argument("--closest-n", type=int, default=10)
     ap.add_argument("--max-retrievals", type=int, default=1)
     ap.add_argument("--workers", type=int, default=None,
                     help="concurrent papers; decision flow is unaffected either way")
@@ -245,7 +243,7 @@ def main():
     for v in variants:
         print(f"\n=== {v} ===", flush=True)
         results[v] = run_variant(args.data_dir, args.submission, v, claims, args.model,
-                                 args.closest_n, args.max_retrievals, args.workers)
+                                 args.max_retrievals, args.workers)
 
     print("\n=== summary ===")
     for v, art in results.items():

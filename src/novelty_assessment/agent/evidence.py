@@ -1,33 +1,20 @@
-#!/usr/bin/env python3
-"""
-Deterministic two-sided quote verification (the evidence-grounding invariant).
+"""Verbatim predicate V(q, D) of Equation 3.2.
 
-A quote counts as VERIFIED only if it is (a) long enough (>= min_quote_tokens
-words -- short spans verify trivially and could game the gate) and (b) present in
-the source text, either as a normalized substring (exact) or as a fuzzy window
-above a threshold (tolerates whitespace/OCR noise).
-
-This runs OUTSIDE the judging LLM (OpenNovelty-style token-level matcher), so the
-agent cannot fabricate evidence: every claim_quote is checked against the
-submission text, every paper_quote against that prior paper's source text. A
-`can_refute` comparison keeps that status only if it has at least one evidence
-pair whose BOTH sides verify.
-
-Reused by the read tools (integrity of passages) and by record_comparison
-(gating of committed evidence). Pure/deterministic, no model calls.
+A quote is verified if it has at least `min_quote_tokens` words and occurs in the source
+text after normalization, exactly or with a RapidFuzz partial ratio of at least
+`fuzzy_threshold`.
 """
 import re
 from dataclasses import dataclass
 
 from rapidfuzz import fuzz
 
-# Defaults; overridable from the agent budgets / .env (see claim_agent).
 DEFAULT_MIN_QUOTE_TOKENS = 10
-DEFAULT_FUZZY_THRESHOLD = 90.0  # 0-100; near-verbatim (passages come from the source)
+DEFAULT_FUZZY_THRESHOLD = 90.0
 
 
 def normalize(text: str) -> str:
-    """Lowercase + collapse all whitespace (same convention as artifact_a._normalize)."""
+    """Lowercase and collapse whitespace."""
     return " ".join((text or "").lower().split())
 
 
@@ -39,8 +26,8 @@ def token_count(text: str) -> int:
 class QuoteCheck:
     verified: bool
     method: str        # exact | fuzzy | too_short | not_found | empty
-    score: float       # 100 for exact, else fuzzy partial ratio (0-100)
-    matched_span: str  # best-matching normalized window in the source (audit trail), or ""
+    score: float
+    matched_span: str
 
     def to_dict(self) -> dict:
         return {
@@ -52,7 +39,7 @@ class QuoteCheck:
 
 
 def _best_window(needle_norm: str, hay_norm: str) -> str:
-    """Return the normalized substring of `hay_norm` that best aligns to `needle_norm`."""
+    """The window of `hay_norm` that best aligns with `needle_norm`."""
     try:
         al = fuzz.partial_ratio_alignment(needle_norm, hay_norm)
         if al is not None:
@@ -68,7 +55,6 @@ def verify_quote(
     min_quote_tokens: int = DEFAULT_MIN_QUOTE_TOKENS,
     fuzzy_threshold: float = DEFAULT_FUZZY_THRESHOLD,
 ) -> QuoteCheck:
-    """Check whether `quote` occurs in `source_text` (verbatim or near-verbatim)."""
     q = normalize(quote)
     src = normalize(source_text)
     if not q or not src:
@@ -89,26 +75,10 @@ def verify_contiguous(
     min_quote_tokens: int = DEFAULT_MIN_QUOTE_TOKENS,
     fuzzy_threshold: float = DEFAULT_FUZZY_THRESHOLD,
 ):
-    """Verify a quote, salvaging the longest real fragment when the model stitched one.
+    """Verify a quote; if it joins distant parts, keep the longest part that verifies.
 
-    Models join distant parts of a paper with an ellipsis to show more in a single quote.
-    Every fragment is genuine; the concatenation appears in no document, so verification
-    fails and the span is demoted to "not confirmed verbatim" -- a warning that tells the
-    reviewer to distrust text that is in fact accurate. Across the artifacts on disk this
-    accounts for 56 of the 79 demoted segments, seven in ten.
-
-    So a failed quote containing an ellipsis is split, its fragments are checked
-    separately, and the longest one that holds is kept: an unbroken span the reviewer can
-    actually find. Returns (QuoteCheck, span) -- the span is the salvaged fragment when one
-    was found, otherwise the quote as given.
-
-    The same thing happens WITHOUT an ellipsis -- sentences from different places run
-    together so the result reads as continuous -- and that case is salvaged too, by keeping
-    the longest unbroken run of sentences that verifies.
-
-    The prompts ask for a contiguous span in the first place; this is what happens when
-    that is not obeyed, and it never invents text -- a fragment is kept only if it verifies
-    against the source on its own.
+    Parts are split at ellipses, otherwise runs of consecutive sentences are tried.
+    Returns (QuoteCheck, span).
     """
     q = (quote or "").strip()
     chk = verify_quote(q, source_text, min_quote_tokens, fuzzy_threshold)
@@ -120,13 +90,6 @@ def verify_contiguous(
             c2 = verify_quote(frag, source_text, min_quote_tokens, fuzzy_threshold)
             if c2.verified:
                 return c2, expand_to_sentence(frag, source_text)
-
-    # The same stitch without the ellipsis: sentences copied from different places and run
-    # together, so the passage reads as continuous and appears nowhere. Each sentence is
-    # genuine on its own -- on the artifacts here every one of the demoted segments broke at
-    # a sentence boundary whose sentence verified alone -- so the longest UNBROKEN RUN of
-    # sentences that verifies is kept. Runs are tried longest first, which prefers the most
-    # context that is actually true over a short fragment.
     run = _longest_verified_run(q, source_text, min_quote_tokens, fuzzy_threshold)
     if run is not None:
         return run
@@ -134,16 +97,11 @@ def verify_contiguous(
 
 
 _SENT_SPLIT = re.compile(r"(?<=[.!?])\s+(?=[A-Z(•])")
-_MAX_SENTENCES = 12          # bounds the O(n^2) scan; longer quotes are pathological anyway
+_MAX_SENTENCES = 12
 
 
 def _longest_verified_run(quote, source_text, min_quote_tokens, fuzzy_threshold):
-    """The longest run of consecutive sentences of `quote` that verifies, or None.
-
-    Nothing is invented: a run is kept only when it is located in the source on its own,
-    exactly like the ellipsis fragments above. Returning None leaves the caller to demote
-    the span, which stays the right outcome for a quote with no true run in it.
-    """
+    """The longest run of consecutive sentences of `quote` that verifies, or None."""
     sents = [x.strip() for x in _SENT_SPLIT.split(" ".join((quote or "").split())) if x.strip()]
     if len(sents) < 2 or len(sents) > _MAX_SENTENCES:
         return None
@@ -157,16 +115,8 @@ def _longest_verified_run(quote, source_text, min_quote_tokens, fuzzy_threshold)
 
 
 def expand_to_sentence(quote: str, source_text: str, max_extra: int = 400) -> str:
-    """Repair a truncated verbatim quote using the true source text.
-
-    The read tools cut passages to a hard character budget, so a quote the model
-    copied character-for-character can end mid-word/mid-sentence. After the quote
-    verified, locate it in the source and extend it to the end of its sentence
-    (bounded by max_extra), completing partial words on both ends. Returns the
-    original quote whenever the span cannot be located.
-    """
+    """Extend a verified quote to complete words and the end of its sentence in the source."""
     q = (quote or "").strip()
-    # drop a leading "[Section] " tag the model may have copied from the passage header
     q = re.sub(r"^\[[^\]]{1,80}\]\s*", "", q)
     toks = q.split()
     if not toks or not source_text:
@@ -179,13 +129,13 @@ def expand_to_sentence(quote: str, source_text: str, max_extra: int = 400) -> st
     if not m:
         return quote
     s, e = m.start(), m.end()
-    while s > 0 and not source_text[s - 1].isspace():  # complete a partial leading word
+    while s > 0 and not source_text[s - 1].isspace():
         s -= 1
     tail = source_text[e:min(len(source_text), e + max_extra)]
     sent_end = re.search(r"[.!?](?=\s|$)", tail)
     if sent_end:
         e += sent_end.end()
-    else:  # no sentence end nearby: at least finish the current word
+    else:
         while e < len(source_text) and not source_text[e].isspace():
             e += 1
     return " ".join(source_text[s:e].split())
@@ -199,11 +149,7 @@ def verify_pair(
     min_quote_tokens: int = DEFAULT_MIN_QUOTE_TOKENS,
     fuzzy_threshold: float = DEFAULT_FUZZY_THRESHOLD,
 ) -> dict:
-    """Verify BOTH sides of an evidence pair; returns the enriched pair dict.
-
-    A pair is fully verified only when the claim_quote is found in the submission
-    AND the paper_quote is found in the prior paper's source text.
-    """
+    """Verify both sides of an evidence pair."""
     cq = verify_quote(claim_quote, submission_text, min_quote_tokens, fuzzy_threshold)
     pq = verify_quote(paper_quote, paper_text, min_quote_tokens, fuzzy_threshold)
     return {
