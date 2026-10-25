@@ -1,124 +1,66 @@
-# final_evaluation — human rating dashboard + evaluation harness
+# final_evaluation
 
-A small, self-contained study application: participants compare two novelty reports
-about the same submission and rate them on five criteria. It shares **nothing** at
-runtime with the assessment pipeline in `src/` — no model calls, no retrieval, no PDF
-parsing — it only serves files that were frozen once by `import-pilot` and stores
-ratings.
+Rating dashboard for the human study (E2) and the evaluation scripts (E1 to E3). The
+dashboard makes no model calls. It serves report files frozen by `import-inputs` and
+stores the ratings. All commands run from the repository root.
 
-Everything runs from the **repository root**.
+## Dashboard
 
 ```
 python -m pip install -r final_evaluation/requirements.txt
-cp final_evaluation/.env.example final_evaluation/.env     # then fill in two secrets
-python -m final_evaluation.cli inventory        --config final_evaluation/config/pilot.yaml
-python -m final_evaluation.cli import-pilot     --sources final_evaluation/config/sources.pilot.yaml
-python -m final_evaluation.cli validate-inputs  --study dashboard_pilot_v1
+cp final_evaluation/.env.example final_evaluation/.env    # set the two secrets
+python -m final_evaluation.cli import-inputs
+python -m final_evaluation.cli validate-inputs --study main_study_v2
 python -m final_evaluation.cli init-db
-python -m final_evaluation.cli seed-pilot
-python -m final_evaluation.cli create-participants --study dashboard_pilot_v1 --count 2
-python -m final_evaluation.cli create-admin        --study dashboard_pilot_v1
+python -m final_evaluation.cli seed-study
+python -m final_evaluation.cli create-participants --study main_study_v2 --count 3 --prefix M --not-test
+python -m final_evaluation.cli create-admin --study main_study_v2
 python -m final_evaluation.cli build-frontend
-python -m final_evaluation.cli serve --host 127.0.0.1 --port 8010
+python -m final_evaluation.cli serve
 ```
 
-Then open <http://127.0.0.1:8010>. Requires Python 3.11+ and Node 18+ (tested on
-Python 3.11.2 / Node 18.15.0 on Windows).
+The app runs at <http://127.0.0.1:8010>. Without further settings it uses SQLite and
+local file storage under `final_evaluation/private/`. Access codes are stored as
+HMAC-SHA256 only. `create-participants` and `create-admin` write them to files under
+`private/` and print the paths.
 
-`.env` needs only two values locally:
-
-```
-SESSION_SECRET=<python -c "import secrets; print(secrets.token_hex(32))">
-ACCESS_CODE_PEPPER=<a second, different one>
-```
-
-Everything else defaults to local SQLite (`private/local_study.sqlite`) and local file
-storage (`private/assets/`). Missing cloud credentials block only deployment, never
-local use.
-
-## Where the credentials go
-
-`create-participants` and `create-admin` print the **file path**, not the secrets:
-
-```
-private/participant_codes__dashboard_pilot_v1__local_study.csv
-private/admin_code__dashboard_pilot_v1__local_study.txt
-```
-
-The filename carries the study id *and* the database, because a code only works against
-the database it was created in — seeding a throwaway test database with the same study
-id must not overwrite the real pilot's credentials. Codes are stored only as
-HMAC-SHA256; these files are the one and only copy. Distribute them by hand — the
-application sends no email and has no invite flow. An optional name↔code key belongs in
-`private/participant_key.csv` (gitignored, never exported).
-
-## Day-to-day commands
-
-| Command | What it does |
+| Command | Purpose |
 |---|---|
-| `inventory` | Read-only scan for existing pilot materials; flags ambiguous multi-candidate files |
-| `import-pilot` | Freezes reports/submissions into `inputs/pilot/` + `manifests/pilot/reports.json` |
-| `validate-inputs --study ID` | Hashes, all five systems per paper, anchors, E1/E2 pairing |
-| `init-db` | Applies migrations (idempotent) |
-| `seed-pilot` | Study, papers, reports, assets, the six tasks (idempotent) |
-| `create-participants --study ID --count N` | Participants **and** their frozen assignments |
-| `create-admin --study ID` | A separate admin credential |
-| `build-frontend` | Syncs instructions/rubric into `public/`, `npm ci`, `npm run build` |
-| `serve --host --port` | Runs API + built frontend on one origin |
-| `export --study ID --out X.zip` | The research export (same bytes the admin UI downloads) |
-| `analyze-human --input X.zip [--include-test]` | E2 tallies, agreement, Krippendorff's α |
-| `plan-e1 [--config config/e1_main.yaml]` | Lists the E1 judge calls (all papers × 10 pairs × both orders), readiness and a cost estimate; `--execute` (only) runs them, resumably; `--papers`/`--pairs`/`--limit` narrow a run |
-| `compare-e1 --input X.zip --e1 judge_calls.jsonl` | Human ratings vs. the judge on the same task, same orientation, same rubric and report content |
-| `upload-assets --study ID` | Pushes local assets to Supabase and repoints the DB rows |
-| `backup --study ID --out X.zip` | Operational backup (includes auth tables) |
-| `restore --input X.zip --target-local Y.sqlite` | Restores into a **new** local file |
+| `import-inputs` | Freeze reports and submission texts into `inputs/` with a hash manifest |
+| `validate-inputs` | Check hashes, systems per paper, quote anchors and task pairs |
+| `init-db`, `seed-study` | Create the database and the study, papers, reports and tasks |
+| `create-participants`, `create-admin` | Participants with their assignments, admin access |
+| `build-frontend`, `serve` | Build the frontend and serve it with the API |
+| `export` | Pseudonymized research export (ZIP) |
+| `upload-assets`, `backup`, `restore` | Cloud storage upload and operational backups |
 
-`export` vs `backup`: the export is the pseudonymised **research** data (no code
-hashes, no sessions) and is what goes into analysis; the backup is the **operational**
-copy of every table, including auth material, and never belongs in a research dataset.
+## Analyses
 
-## Running the tests
+| Command | Thesis |
+|---|---|
+| `plan-e1` | E1 judge calls and cost estimate. `--execute` runs them (paid) |
+| `analyze-e1` | E1 pairwise results and Bradley-Terry ranking |
+| `sensitivity-e1` | E1 length-adjusted rankings |
+| `agent-linear` | Agent vs linear run metrics with sign tests |
+| `source-audit` | E3 quote and source checks for agent and linear |
+| `analyze-human --input export.zip` | E2 tallies and agreement |
+| `compare-e1 --input export.zip --e1 judge_calls.jsonl` | Human ratings vs the judge |
 
-The live suite drives a running server over real HTTP, so it must point at a
-**throwaway database** — never the study's own:
-
-```
-# one-time: build a test database with the same shape
-DATABASE_URL=sqlite:///final_evaluation/private/test_study.sqlite python -m final_evaluation.cli init-db
-DATABASE_URL=sqlite:///final_evaluation/private/test_study.sqlite python -m final_evaluation.cli seed-pilot
-DATABASE_URL=sqlite:///final_evaluation/private/test_study.sqlite python -m final_evaluation.cli create-participants --study dashboard_pilot_v1 --count 2
-DATABASE_URL=sqlite:///final_evaluation/private/test_study.sqlite python -m final_evaluation.cli create-admin --study dashboard_pilot_v1
-
-# serve it on a second port, then run the suites
-DATABASE_URL=sqlite:///final_evaluation/private/test_study.sqlite python -m final_evaluation.cli serve --port 8011
-FE_TEST_BASE=http://127.0.0.1:8011 python -m pytest final_evaluation/tests/ -v
-```
-
-`test_e2_stats.py` needs no server. `test_flow_live.py` skips itself when no server is
-listening, and skips when the test database's credential files are absent.
+The commands in this table run offline on the result files and artifacts of the data
+archive (see `DATA.md` in the repository root), except `plan-e1 --execute`.
+`python -m final_evaluation.evaluation.e3.opennovelty_audit` checks the quotes of the
+OpenNovelty reports and needs network access to Semantic Scholar and arXiv.
+`python final_evaluation/scripts/thesis_figures.py` draws the thesis figures.
 
 ## Layout
 
 ```
-config/       pilot.yaml, main.template.yaml, sources.pilot.yaml (explicit source binding)
-prompts/      novelty_report_judge_v2.txt, criteria.json, human_instructions.md
-inputs/       frozen report/submission files            (gitignored)
-manifests/    hashes, provenance, content versions      (gitignored)
-dashboard/    backend (FastAPI + SQLAlchemy), frontend (Vite/React), migrations
-evaluation/   e1 (judge adapter), e2 (analysis), e3/e4 (schema + plan only)
-results/      exports and analyses                       (gitignored)
-private/      codes, name key, local DB, assets, secrets (gitignored)
-backups/      operational backups                        (gitignored)
-tests/        live HTTP suite + statistics unit tests
+config/      study and E1 configuration, source bindings
+prompts/     judge rubric, rating criteria, participant instructions
+dashboard/   FastAPI backend, Vite/React frontend, migrations
+evaluation/  E1, E2 and E3 analyses
+scripts/     input import and validation, seeding, figures
 ```
 
-`inputs/`, `manifests/`, `results/`, `private/` and `backups/` are excluded from git,
-from the Docker image, and from every static mount — the only route to an asset's bytes
-is the authenticated `/api/assets/{id}` endpoint.
-
-## Going online
-
-See `SETUP_HOSTING.md` (Render Free + Supabase Free, step by step, with the current free
-tier limits and what to check before sharing the URL). `PROTOCOL.md` is the frozen study
-protocol; `ACCEPTANCE.md` records what was actually executed and verified, and what is
-explicitly not done yet.
+`inputs/`, `manifests/`, `results/` and `private/` are not in git. They are part of the
+data archive, except `private/`.

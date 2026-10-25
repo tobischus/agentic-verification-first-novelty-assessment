@@ -13,9 +13,6 @@ from dotenv import load_dotenv                                          # noqa: 
 
 load_dotenv()
 
-for _k, _v in (("NOVELTY_PAPER_LOOP", "1"), ("NOVELTY_NO_TRIAGE", "1")):
-    os.environ.setdefault(_k, _v)
-
 VARIANTS = ("agent", "linear")
 
 ROLE_EFFORT = {"NOVELTY_READING_EFFORT": "low", "NOVELTY_COMPARE_EFFORT": "low",
@@ -175,8 +172,7 @@ def main():
           + ", ".join(f"{v.split('_')[1].lower()}={os.environ[v]}" for v in ROLE_MODEL_VARS)
           + f", effort={os.environ['NOVELTY_READING_EFFORT']}/"
             f"{os.environ['NOVELTY_COMPARE_EFFORT']}/{os.environ['NOVELTY_EVIDENCE_EFFORT']}"
-          + f", no_triage={os.environ['NOVELTY_NO_TRIAGE']}, "
-            f"paper_loop={os.environ['NOVELTY_PAPER_LOOP']}, pool={_pool_size(sub)}")
+          + f", pool={_pool_size(sub)}")
 
     variants = VARIANTS if args.variant == "both" else (args.variant,)
     results = {}

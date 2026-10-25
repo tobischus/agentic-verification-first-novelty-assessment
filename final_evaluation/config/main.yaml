@@ -1,18 +1,6 @@
-# Main study -- the TEN human-rated papers. `import-pilot --config .../main.yaml`,
-# `validate-inputs`, `seed-pilot` and `create-participants` all read this file.
-#
-# main_study_v2 (2026-09-23) replaces main_study_v1 before any rating was collected (no
-# participant code had been handed out; v1 held 0 responses). The only design change: the
-# human study compares the full system (`agent`) with the three external systems; the
-# agent-vs-linear comparison and all other pairings are evaluated by E1 (LLM judge) and by
-# run metrics instead. Reason, recorded in PROTOCOL.md section 5: agent and linear share
-# claims, prior-work pool, renderer and summary model, reach the same verdict on 41 of 43
-# claims, and differ mainly inside folded comparison detail -- a full-report A/B judgement
-# of them costs a rater the most time for the least decidable difference. v1 stays in the
-# database, closed, with its history (manifests/main/CONTENT_VERSIONS.md).
+# Main study: the ten human-rated papers. Read by import-inputs, validate-inputs,
+# seed-study and create-participants.
 
-# Writes to final_evaluation/{inputs,manifests}/main/ instead of the pilot's, whose frozen
-# files are cited by ratings already collected and must not move.
 inputs_dir: main
 
 study:
@@ -54,14 +42,8 @@ papers:
   train_before_test_harmonizes_language_model:
     title: "Train-before-Test Harmonizes Language Model Rankings"
 
-# The 20 tasks, fixed here BEFORE any main-study judge (E1) result is seen --
-# PROTOCOL.md section 5. `pair` lists the two system ids in CANONICAL (alphabetical) order;
-# which one a rater sees as "A" is decided per participant by security.orientation_for.
-#
-# Construction (deterministic, not hand-picked): papers in the order above, numbered
-# i = 0..9; each paper gets two tasks, agent vs each external system EXCEPT
-# [afzal, deepreviewer, opennovelty][i % 3]. Result: agent-afzal 6, agent-deepreviewer 7,
-# agent-opennovelty 7; no paper repeats a pairing.
+# Each paper i = 0..9 (in the order above) pairs agent with each external system except
+# [afzal, deepreviewer, opennovelty][i % 3]. `pair` is in alphabetical order.
 tasks:
   - paper: agentgym_rl
     pair: [agent, deepreviewer]
@@ -105,8 +87,6 @@ tasks:
     pair: [agent, opennovelty]
 
 participants:
-  count: 3          # three raters, each assigned all 20 tasks -> 60 ratings. M03 added
-                    # 2026-10-01 (PROTOCOL section 5): create-participants --count 3
-                    # created M03 only (ordinal 6, see there); M01/M02 untouched.
+  count: 3
   prefix: "M"
   test: false
