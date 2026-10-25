@@ -1,4 +1,4 @@
-"""Give Afzal et al.'s assessment stage the inputs it expects, produced by this pipeline."""
+"""Inputs for Afzal et al.'s assessment stage, built from this pipeline's outputs."""
 import argparse
 import json
 import re
@@ -8,7 +8,7 @@ _INTRO_TITLE = re.compile(r"^\s*(?:[IVX0-9]+[.\s)]*)?(introduction|background)\b
 
 
 def _from_sections(sections, max_chars: int) -> str:
-    """Text of the first introduction-like section (falls back to the first section)."""
+    """Text of the first introduction-like section, else of the first section."""
     for sec in sections or []:
         if _INTRO_TITLE.match((sec.get("section") or "").strip()):
             text = (sec.get("text") or "").strip()
@@ -22,7 +22,7 @@ def _from_sections(sections, max_chars: int) -> str:
 
 
 def _from_markdown(text: str, max_chars: int) -> str:
-    """Introduction out of a '## Heading'-delimited GROBID dump."""
+    """Introduction from a GROBID text with '## Heading' sections."""
     blocks = re.split(r"^##\s*(.+)$", text, flags=re.M)
     for i in range(1, len(blocks) - 1, 2):
         if _INTRO_TITLE.match(blocks[i].strip()):

@@ -40,7 +40,7 @@ def _applied(conn) -> set:
 
 
 def _discover_migrations():
-    """(migration_id, module) pairs, sorted by id -- filename order is the apply order."""
+    """(migration_id, module) pairs in filename order."""
     pkg = importlib.import_module(MIGRATIONS_PACKAGE)
     out = []
     for info in sorted(pkgutil.iter_modules(pkg.__path__), key=lambda m: m.name):

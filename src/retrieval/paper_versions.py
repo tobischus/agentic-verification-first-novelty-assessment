@@ -1,4 +1,4 @@
-"""Which VERSION of a prior paper the review is allowed to read, and where to get it."""
+"""Which version of a prior paper the review may read, and where to get it."""
 from __future__ import annotations
 
 import logging
@@ -252,7 +252,7 @@ def resolve_version(record: dict, submission_date,
     arxiv_id = ext.get("ArXiv") or ext.get("arXiv") or ext.get("arxiv")
 
     def stamped(pin: PinnedVersion) -> PinnedVersion:
-        """Record WHICH cutoff this verdict answers to. A pin is a statement about a (paper, submission date, required gap) triple; without the last two on the record, a manifest cannot tell a still-valid verdict from one whose question has since changed."""
+        """Record the cutoff (submission date, required gap) this verdict answers."""
         pin.submission_date = str(submission_date or "")
         pin.min_gap_days = min_gap_days
         return pin

@@ -1,4 +1,4 @@
-"""E2: turn an admin export ZIP into win/tie/loss tallies, human-human agreement, and (optionally) human-vs-E1-judge agreement. Reads ONLY `ratings.jsonl` from the export (each line already carries system_a/system_b/orientation resolved server-side -- see routers/admin.py's `_build_export`); this module never touches the live database."""
+"""E2: tallies and agreement from the ratings.jsonl of an admin export."""
 from __future__ import annotations
 
 import hashlib
@@ -41,7 +41,7 @@ def _winner_system(criterion_val: dict, rec: dict) -> Optional[str]:
 
 
 def run(input_path: str, include_test: bool = False) -> dict:
-    """`include_test`: the pilot's two raters are deliberately TEST participants (`is_test=True`), so analysing the pilot at all requires passing True -- the CLI's `--include-test` flag. The default stays False so a main-study analysis can never quietly mix a leftover test account's answers into real results."""
+    """`include_test`: also count responses of test participants."""
     all_records = _load_ratings(input_path)
     records = [r for r in all_records
               if r.get("status") == "submitted" and not r.get("is_practice")
@@ -108,11 +108,8 @@ def run(input_path: str, include_test: bool = False) -> dict:
         "human_human_agreement": agreement,
         "papers_seen": sorted({r["paper_id"] for r in records}),
         "note_paper_weighting": (
-            "Per-pair tallies above are counted in raw response units, not paper-averaged. "
-            "Where a pair type occurs on multiple papers (only agent::linear does, in the "
-            "pilot), per_paper_tallies lets you weight papers equally by hand; with 2 pilot "
-            "papers an automatic equal-weight average would not add information beyond "
-            "looking at both entries directly."),
+            "Per-pair tallies are counted in responses. per_paper_tallies allows weighting "
+            "papers equally."),
     }
     return result
 
@@ -126,7 +123,7 @@ PROMPTS = Path(__file__).resolve().parents[2] / "prompts"
 
 
 def criteria_text(rubric_text: str) -> Optional[str]:
-    """A rubric's CRITERIA section -- from the line `CRITERIA` to the line `PROCEDURE`, the part criteria.json and the rating form copy for the raters. None if absent."""
+    """The CRITERIA section of a rubric, or None."""
     m = re.search(r"^CRITERIA\n(.*?)^PROCEDURE\n", rubric_text, re.S | re.M)
     return m.group(1) if m else None
 
@@ -153,7 +150,7 @@ def _judge_system(judge: dict, crit: str) -> Optional[str]:
 
 
 def compare_to_e1(export_path: str, e1_jsonl_path: str, include_test: bool = False) -> dict:
-    """Each human judgement against the E1 judge call of the SAME task in the SAME A/B orientation -- and only where the judge read the same criteria and the same report content: the CRITERIA section of the call's rubric must equal the one in the export's rubric.txt, and the call's `content_version_a/_b` must equal the export's manifest.json for exactly those reports. Anything else is `not_comparable` with its reason; nothing is matched by task id alone, since a task id is no proof the underlying text was the same. Human and judge votes are compared, never pooled."""
+    """Each human judgement against the E1 call of the same task and orientation, where the judge read the same criteria and report content."""
     manifest = _load_export_manifest(export_path)
     versions = {(r["paper_id"], r["system_id"]): r["content_version"]
                 for r in manifest.get("reports") or []}
@@ -250,8 +247,7 @@ def print_e1_comparison(result: dict) -> None:
 
 def print_report(result: dict) -> None:
     print(f"responses analyzed: {result['n_responses_analyzed']} "
-         f"({result['n_test_participant_responses_excluded']} test-participant responses excluded "
-         f"from any 'real study' framing -- included here because this IS the test pilot)")
+          f"({result['n_test_participant_responses_excluded']} test-participant responses excluded)")
     print(f"papers: {result['papers_seen']}")
 
     print("\n=== agent vs linear (highlighted) ===")

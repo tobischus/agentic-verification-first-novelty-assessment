@@ -1,4 +1,4 @@
-"""Nominal Krippendorff's alpha with missing data, and exact-agreement, as plain functions over (unit_id -> {coder_id: category | None}) -- no pandas, no stats library, so the formula is auditable line by line against Krippendorff's own definition instead of trusted from a package."""
+"""Nominal Krippendorff's alpha with missing data and exact agreement, without external libraries."""
 from __future__ import annotations
 
 from collections import Counter
@@ -61,7 +61,7 @@ def krippendorff_alpha_nominal(units: Dict[str, Dict[str, Optional[Hashable]]]) 
 
 
 def exact_agreement(units: Dict[str, Dict[str, Optional[Hashable]]]) -> dict:
-    """Among units with >=2 non-missing values, the fraction where ALL non-missing values are identical. Reports numerator/denominator, not just the ratio, per the brief ("mit Nennern")."""
+    """Share of units with at least two values in which all values agree, with numerator and denominator."""
     agree = 0
     total = 0
     for ratings in units.values():

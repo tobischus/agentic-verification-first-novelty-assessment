@@ -1,4 +1,4 @@
-"""Everything measurable about a finished run, read back out of the artifacts."""
+"""Metrics of a finished run, read from its artifacts."""
 from __future__ import annotations
 
 import argparse
@@ -27,13 +27,13 @@ def _load(p: Path):
 
 
 def _usd_for(model: str, pt: int, ct: int) -> float:
-    """Price a call with the run's own table. Imported lazily: claim_agent pulls the model stack in, and most of this script never needs it."""
+    """Price a call with the agent's price table."""
     from agent.claim_agent import _usd
     return _usd(model, pt or 0, ct or 0)
 
 
 def _counter(values) -> dict:
-    """Counts, ordered by frequency -- readable in a report, stable in JSON."""
+    """Counts ordered by frequency."""
     return dict(Counter(v for v in values).most_common())
 
 
@@ -53,13 +53,13 @@ def _pairs(cmp_: dict) -> dict:
 
 
 def _calls(entry: dict) -> int:
-    """Model calls the claim actually made, counted from the run log's own record of them. `run_cost` says what they cost; this says how many there were, which is the number that separates the two control flows."""
+    """Number of model calls of a claim, from its run log."""
     return sum(len(p.get("rounds") or []) for p in (entry.get("run_log") or {}).get("prior_work", []))
 
 
 
 def comparison_row(variant: str, claim_id: str, cmp_: dict) -> dict:
-    """One comparison, flattened. This is the unit the study is actually about."""
+    """One comparison, flattened."""
     ec = cmp_.get("evidence_check") or {}
     pr = _pairs(cmp_)
     deg = vd.degree(cmp_)
@@ -214,7 +214,7 @@ def variant_metrics(sub: Path, sid: str, variant: str) -> dict | None:
 
 
 def agreement(av: dict, lv: dict) -> dict:
-    """Where the two control flows landed differently."""
+    """Where the two control flows differ."""
     by = {v["variant"]: {(r["claim_id"], r["paper_id"]): r for r in v["_rows"]}
           for v in (av, lv)}
     a_keys, l_keys = set(by["agent"]), set(by["linear"])

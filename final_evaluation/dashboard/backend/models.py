@@ -23,7 +23,7 @@ class Base(DeclarativeBase):
 
 
 class Study(Base):
-    """One evaluation run: `dashboard_pilot_v1`, later a distinct main-study id."""
+    """One evaluation study."""
     __tablename__ = "studies"
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     title: Mapped[str] = mapped_column(String(200))
@@ -65,7 +65,7 @@ class Asset(Base):
 
 
 class Report(Base):
-    """One system's frozen output for one paper. `system_id` is never sent to a participant (see api schemas) -- only used server-side for canonical ordering, the admin export, and E1/E2 analysis."""
+    """One system's frozen output for one paper. `system_id` is never sent to participants."""
     __tablename__ = "reports"
     id: Mapped[str] = mapped_column(String(160), primary_key=True)
     study_id: Mapped[str] = mapped_column(ForeignKey("studies.id"), index=True)
@@ -81,7 +81,7 @@ class Report(Base):
 
 
 class Task(Base):
-    """A canonical (paper, unordered system pair) to be judged -- NOT rater-specific."""
+    """A paper and an unordered system pair to be judged."""
     __tablename__ = "tasks"
     id: Mapped[str] = mapped_column(String(160), primary_key=True)
     study_id: Mapped[str] = mapped_column(ForeignKey("studies.id"), index=True)
@@ -96,7 +96,7 @@ class Task(Base):
 
 
 class Participant(Base):
-    """A pseudonymous rater or an admin. `code_display` (e.g. "R01") is shown back to the person at code-creation time only; the login secret is never stored, only its HMAC (see security.py) -- the same property a password hash gives a login password, applied to an access code instead of a password."""
+    """A pseudonymous rater or an admin. Only an HMAC of the access code is stored."""
     __tablename__ = "participants"
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     study_id: Mapped[str] = mapped_column(ForeignKey("studies.id"), index=True)
@@ -117,7 +117,7 @@ class Participant(Base):
 
 
 class Assignment(Base):
-    """One task, handed to one participant, with THIS participant's A/B orientation."""
+    """One task assigned to one participant, with the participant's A/B orientation."""
     __tablename__ = "assignments"
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     study_id: Mapped[str] = mapped_column(ForeignKey("studies.id"), index=True)
@@ -137,7 +137,7 @@ class Assignment(Base):
 
 
 class FinalResponse(Base):
-    """The finalised (submitted) answer for one Assignment. Created exactly once, in the same transaction as Assignment.status -> "submitted" (see routers/participant.py's `submit_task`). Never mutated by a participant afterward; an admin correction (rare) writes a new row version and an AuditEvent, never edits this one in place."""
+    """The submitted answer of one assignment, written once and never edited."""
     __tablename__ = "final_responses"
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     assignment_id: Mapped[str] = mapped_column(ForeignKey("assignments.id"), index=True, unique=True)
@@ -150,7 +150,7 @@ class FinalResponse(Base):
 
 
 class PaperFamiliarity(Base):
-    """Asked once per (participant, paper) -- the first task opened for that paper."""
+    """Asked once per participant and paper, on the first task of the paper."""
     __tablename__ = "paper_familiarity"
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     study_id: Mapped[str] = mapped_column(ForeignKey("studies.id"), index=True)
@@ -163,7 +163,7 @@ class PaperFamiliarity(Base):
 
 
 class PaperReading(Base):
-    """The per-paper reading step of a non-pilot study: before any task of a paper opens, the participant reads (or skims) the plain submission and confirms it. One row per (participant, paper). `opened_at` is the first visit to the reading page, `confirmed_at` the confirmation that unlocks the paper's tasks, `active_ms` the time the page was visible and focused as measured in the browser -- recorded, never used to block anyone."""
+    """The reading step before a paper's tasks open, one row per participant and paper."""
     __tablename__ = "paper_readings"
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     study_id: Mapped[str] = mapped_column(ForeignKey("studies.id"), index=True)
@@ -176,7 +176,7 @@ class PaperReading(Base):
 
 
 class Session_(Base):
-    """A server-tracked login session. The cookie carries only an opaque token; this row (looked up by the token's hash) is the actual authority, so admin revocation and the 7-day cap are enforced here, not by trusting whatever the cookie says."""
+    """A server-side login session. The cookie carries only an opaque token."""
     __tablename__ = "sessions"
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     participant_id: Mapped[str] = mapped_column(ForeignKey("participants.id"), index=True)

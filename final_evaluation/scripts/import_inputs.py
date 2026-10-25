@@ -1,4 +1,4 @@
-"""Materialise a study's frozen inputs (reports and submission texts) from its sources config."""
+"""Materialize a study's frozen inputs (reports and submission texts) from its sources config."""
 from __future__ import annotations
 
 import hashlib
@@ -168,7 +168,7 @@ def _import_submission(paper: str, spec: dict) -> dict:
 
 
 def _import_opennovelty_e1_text(paper: str, pdf_spec: dict) -> dict:
-    """A TEXT rendering of the OpenNovelty PDF for E1, using the SAME extractor already used (and validated) for the transducing report earlier in this project -- eval/pdf_to_md.py, font-size heading inference, nothing summarised or reordered. Explicitly NOT claimed content-equivalent to the native PDF/graphic without a manual check -- see validate_inputs.py's e1_e2 check, which flags this pair for review rather than asserting equivalence."""
+    """Text of an OpenNovelty PDF for E1, extracted with eval/pdf_to_md.py."""
     pdf_path = REPO_ROOT / pdf_spec["path"]
     if not pdf_path.is_file():
         return {"blocker": f"missing file: {pdf_spec['path']}"}

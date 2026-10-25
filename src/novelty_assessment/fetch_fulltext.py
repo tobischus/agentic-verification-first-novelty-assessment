@@ -1,4 +1,4 @@
-"""Full-text acquisition for related-work candidate papers, split into two independent phases so GROBID work happens only where it is actually needed:"""
+"""Full text of prior papers: version pinning, PDF download and parsing."""
 import argparse
 import hashlib
 import json
@@ -68,7 +68,7 @@ class FullTextFetcher:
 
     @staticmethod
     def _try_download(url: str, dest: Path):
-        """Return (ok, detail) where detail explains the outcome for logging."""
+        """(ok, detail) of one download attempt."""
         try:
             r = requests.get(url, timeout=40, headers=_UA)
             if r.status_code == 200 and r.content[:4] == b"%PDF":
@@ -133,7 +133,7 @@ class FullTextFetcher:
         return None
 
     def ensure_pdf(self, paper: dict, pdfs_dir: Path, pin: dict = None) -> bool:
-        """Ensure a VALID {paper_id}.pdf exists; try S2 / Unpaywall(+PMC) / arXiv."""
+        """Ensure a valid {paper_id}.pdf exists, trying S2, Unpaywall/PMC and arXiv."""
         pid, title = paper["paper_id"], paper.get("title", "")
         dest = pdfs_dir / f"{pid}.pdf"
 
@@ -368,7 +368,7 @@ class FullTextFetcher:
         return manifest
 
     def pin_for_record(self, data_dir: str, submission_id: str, record: dict) -> dict:
-        """Pin ONE paper, for candidates that arrive after the batch pass (retrieve_more)."""
+        """Pin one paper that arrives after the batch pass."""
         sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "retrieval"))
         import paper_versions as pv
 
@@ -415,7 +415,7 @@ class FullTextFetcher:
         return digest
 
     def _apply_version_abstracts(self, rwd: Path, ranked: list, manifest: dict) -> None:
-        """Put the PINNED version's own abstract into ranked_papers.json."""
+        """Write the pinned version's abstract into ranked_papers.json."""
         changed = 0
         for p in ranked:
             entry = manifest.get(p.get("paper_id")) or {}
@@ -515,7 +515,7 @@ class FullTextFetcher:
 
 
     def parse_one(self, data_dir: str, submission_id: str, paper_id: str) -> str:
-        """Parse ONE paper's already-downloaded PDF into sectioned full text."""
+        """Parse one downloaded PDF into sectioned full text."""
         from pdf_sections import pdf_to_sectioned_text
 
         _, pdfs_dir, ft_dir = self._dirs(data_dir, submission_id)
@@ -553,7 +553,7 @@ class FullTextFetcher:
 
 
     def fetch(self, data_dir: str, submission_id: str, paper_ids=None) -> dict:
-        """Download + parse every target paper (used by the CLI / batch evaluation runs that want every paper's full text upfront). The live pipeline instead calls download_pdfs() at retrieval time and parse_one() on demand per deep dive -- see agent/tools.py ClaimToolbox.ensure_fulltext."""
+        """Download and parse every target paper."""
         rwd, pdfs_dir, ft_dir = self._dirs(data_dir, submission_id)
         by_id = {p["paper_id"]: p for p in
                  json.loads((rwd / "ranked_papers.json").read_text(encoding="utf-8"))}

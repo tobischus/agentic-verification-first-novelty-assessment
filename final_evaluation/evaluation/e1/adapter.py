@@ -1,4 +1,4 @@
-"""E1: the LLM judge over the study's FROZEN inputs -- plan first, run only on request."""
+"""E1: the LLM judge over the frozen study inputs. Plans first and runs only on request."""
 from __future__ import annotations
 
 import hashlib
@@ -25,7 +25,7 @@ CACHE_READ_X_BY_MODEL = {"gpt-6.1-sol": 0.05}
 
 
 def billed_usd(rec: dict, model: str = "gpt-5.6-terra") -> float | None:
-    """What one recorded call was billed, from its own usage counts. Needs the cache_write_tokens the judge records since 2026-09-24; None for older records."""
+    """Billed cost of one recorded call from its usage counts; None without cache-write counts."""
     if rec.get("failed") or rec.get("cache_write_tokens") is None or model not in PRICE_PER_1K:
         return None
     pin, pout = (p * 1000 for p in PRICE_PER_1K[model])
@@ -40,7 +40,7 @@ def billed_usd(rec: dict, model: str = "gpt-5.6-terra") -> float | None:
 
 
 def cache_order(calls: list) -> list:
-    """The execution order for prompt caching: all calls of a paper back to back, and within a paper the calls that share report A back to back (they share the cached prefix rubric + submission + report A). No new randomness: papers, A-groups and the calls inside a group keep the relative order of the seeded shuffle. A drift of the API can then align with a paper -- all ten pairs of which run within minutes under the same conditions -- but not with a system."""
+    """Execution order for prompt caching: calls of a paper together, calls sharing report A together, otherwise the seeded order."""
     papers, groups = {}, {}
     for c in calls:
         papers.setdefault(c["paper_id"], len(papers))
@@ -49,7 +49,7 @@ def cache_order(calls: list) -> list:
 
 
 def _judge():
-    """eval/pilot_judge.py -- the one judge implementation. Importing it makes no call."""
+    """The judge module eval/pilot_judge.py."""
     if str(REPO_ROOT / "eval") not in sys.path:
         sys.path.insert(0, str(REPO_ROOT / "eval"))
     import pilot_judge
@@ -72,7 +72,7 @@ def _report_file(input_dir: str, paper: str, system: str) -> Path:
     e1 = d / f"{system}.e1_text.md"
     if e1.is_file():
         return e1
-    raise FileNotFoundError(f"no text input for {input_dir}/{paper}/{system} -- run import-pilot first")
+    raise FileNotFoundError(f"no text input for {input_dir}/{paper}/{system} -- run import-inputs first")
 
 
 def _submission_file(input_dir: str, paper: str) -> Path:
@@ -80,7 +80,7 @@ def _submission_file(input_dir: str, paper: str) -> Path:
 
 
 def _content_versions(input_dir: str) -> dict:
-    """{(paper, system): content_version} from the import manifest -- the same string the dashboard stores on each report and the admin export writes to manifest.json."""
+    """{(paper, system): content_version} from the import manifest."""
     p = FE_ROOT / "manifests" / input_dir / "reports.json"
     if not p.is_file():
         return {}
@@ -91,7 +91,7 @@ def _content_versions(input_dir: str) -> dict:
 
 
 def _prompt_chars(input_dir: str, paper: str, a: str, b: str, rubric_chars: int) -> int:
-    """Characters the judge receives: rubric + the three documents with their line ids (`S0001 ` = 6 extra characters per line)."""
+    """Characters the judge receives: rubric and three documents with line ids."""
     n = rubric_chars
     for p in (_submission_file(input_dir, paper), _report_file(input_dir, paper, a),
               _report_file(input_dir, paper, b)):
@@ -119,26 +119,6 @@ def _call(input_dir, paper, a, b, role, human_task, versions, rubric_chars) -> d
     }
 
 
-def _plan_pilot(config_path: str, cfg: dict) -> dict:
-    input_dir = cfg.get("inputs_dir") or "pilot"
-    rubric_version = cfg["study"]["rubric_version"]
-    rubric_chars = len((FE_ROOT / "prompts" / f"{rubric_version}.txt").read_text(encoding="utf-8"))
-    versions = _content_versions(input_dir)
-    calls = []
-    for t in cfg["tasks"]:
-        paper, (x, y) = t["paper"], t["pair"]
-        for a, b in ((x, y), (y, x)):
-            calls.append(_call(input_dir, paper, a, b, input_dir, True, versions, rubric_chars))
-    for i, c in enumerate(calls, 1):
-        c["call_index"] = i
-    return {"mode": "pilot", "e1_id": "dashboard_pilot_v1_e1", "config_path": config_path,
-            "rubric_version": rubric_version, "seed": None, "problems": [],
-            "paper_sets": [{"config": config_path, "role": input_dir, "input_dir": input_dir,
-                            "papers": list(cfg["papers"])}],
-            "expected_papers": len(cfg["papers"]), "calls": calls,
-            "default_out_dir": "final_evaluation/results/pilot/e1"}
-
-
 def _plan_main(config_path: str, cfg: dict) -> dict:
     e1 = cfg["e1"]
     rubric_version = e1["rubric_version"]
@@ -148,7 +128,7 @@ def _plan_main(config_path: str, cfg: dict) -> dict:
 
     for ps in cfg["paper_sets"]:
         scfg = _yaml(ps["config"])
-        input_dir = scfg.get("inputs_dir") or "pilot"
+        input_dir = scfg.get("inputs_dir") or "main"
         role = ps.get("role") or input_dir
         study_rubric = (scfg.get("study") or {}).get("rubric_version")
         if study_rubric and study_rubric != rubric_version:
@@ -188,7 +168,7 @@ def _plan_main(config_path: str, cfg: dict) -> dict:
 def build_plan(config_path: str, papers: str = "", pairs: str = "") -> dict:
     """`papers` ("a,b") and `pairs` ("agent:linear,agent:afzal") narrow the plan, e.g. for a smoke run; call indices stay those of the full plan."""
     cfg = _yaml(config_path)
-    plan = _plan_main(config_path, cfg) if "e1" in cfg else _plan_pilot(config_path, cfg)
+    plan = _plan_main(config_path, cfg)
     plan["rubric_path"] = f"final_evaluation/prompts/{plan['rubric_version']}.txt"
     pj = _judge()
     plan["model"] = plan.get("model") or pj.JUDGE_MODEL
@@ -264,7 +244,7 @@ def print_plan(plan: dict, verbose: bool = False) -> None:
               + (f" = ~${est['usd']:.0f}" if est["usd"] is not None else "")
               + f"  (largest call: ~{big['prompt_chars'] / CHARS_PER_TOKEN / 1e3:.0f}k tokens, "
                 f"{big['paper_id']} {big['system_a']}/{big['system_b']})")
-        print("  (estimate from the pilot's measured characters-per-token and output length, at "
+        print("  (estimate from measured characters per token and output length, at "
               "the standard list price without cache effects; --execute runs on flex with cache "
               "breakpoints, which bills roughly a fifth of it. The run records the real counts "
               "and the billed USD per call.)")
@@ -294,7 +274,7 @@ def _load_done(out_path: Path, plan: dict) -> set:
 
 def execute_plan(plan: dict, out_dir: str | None = None, limit: int = 0,
                  service_tier: str = "flex", cache: bool = True) -> None:
-    """Runs the calls for real. Never called by the web app -- only by this CLI with --execute. Every call goes through eval/pilot_judge.run_call, so the same JSON-shape and locator checks and the same bounded retries apply as in the original pilot run."""
+    """Run the planned calls through eval/pilot_judge.run_call (CLI with --execute only)."""
     if not os.getenv("OPENAI_API_KEY"):
         raise SystemExit("OPENAI_API_KEY is not set -- refusing to execute E1 calls. "
                          "(Plan mode needs no key; this message only appears with --execute.)")

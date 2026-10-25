@@ -1,11 +1,11 @@
-"""Quality gates for the document-processing stage (Step 1)."""
+"""Quality gates of document processing."""
 from typing import Dict, List
 
 MIN_FULLTEXT_CHARS = 1000
 
 
 def compute_quality_gates(metadata: Dict, sections: List[Dict]) -> Dict:
-    """Compute Step-1 quality gates from parsed metadata + body sections."""
+    """Quality gates from parsed metadata and body sections."""
     cited_papers = metadata.get("cited_papers") or []
     citation_contexts = metadata.get("citation_contexts") or []
     full_text_chars = sum(len(s.get("text", "")) for s in sections)

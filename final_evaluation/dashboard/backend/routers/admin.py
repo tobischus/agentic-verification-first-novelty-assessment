@@ -1,4 +1,4 @@
-"""Admin-only endpoints: study/participant overview, code reset, session lock, closing the study, and the full research export. Every route depends on `current_admin` (deps.py), which is `current_participant` plus a `role == "admin"` check -- an admin session is a normal session for a Participant row with `role="admin"`, created only by `cli.py create-admin`, never by self-service."""
+"""Admin endpoints: study overview, code reset, session lock, closing the study and the research export."""
 from __future__ import annotations
 
 import csv
@@ -19,7 +19,7 @@ router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
 def _csv_safe(v) -> str:
-    """Neutralise formula injection: a cell starting with = + - @ is prefixed with a tab, which spreadsheet programs treat as inert text instead of a formula. Applied to every free-text field written into a CSV export (reasons, issue messages, notes)."""
+    """Prefix cells starting with = + - @ with a tab to neutralize formula injection."""
     s = "" if v is None else str(v)
     if s[:1] in ("=", "+", "-", "@"):
         return "\t" + s

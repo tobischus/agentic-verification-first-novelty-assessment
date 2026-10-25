@@ -1,4 +1,4 @@
-"""Push locally-materialised assets to Supabase Storage and repoint the Asset rows in whatever DATABASE_URL is currently configured -- normally the cloud Postgres database, set in the environment before running this (see SETUP_HOSTING.md)."""
+"""Upload local assets to Supabase Storage and repoint the Asset rows of DATABASE_URL."""
 from __future__ import annotations
 
 from pathlib import Path

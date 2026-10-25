@@ -39,7 +39,7 @@ def _agent_class(variant: str):
 
 def run_variant(data_dir: str, sid: str, variant: str, claims: list, model: str,
                 max_retrievals: int, workers) -> dict:
-    """One variant over all claims; returns the artifact_a-shaped dict it wrote."""
+    """One variant over all claims. Returns the artifact it wrote."""
     from agent.claim_agent import _usd
 
     cls = _agent_class(variant)

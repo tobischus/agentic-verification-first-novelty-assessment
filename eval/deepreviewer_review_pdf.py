@@ -1,4 +1,4 @@
-"""Render DeepReviewer's own report PDF for a finished job, WITHOUT the submission."""
+"""Render DeepReviewer's report PDF of a finished job without the submission."""
 from __future__ import annotations
 
 import argparse

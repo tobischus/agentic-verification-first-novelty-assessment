@@ -30,7 +30,7 @@ def _gap_days(version_date: str, sub_date: str):
 
 
 def norm(text: str) -> str:
-    """Lowercase, whitespace collapsed -- the pipeline's own convention for 'exact'."""
+    """Lowercase with collapsed whitespace, as the pipeline compares exact quotes."""
     return " ".join((text or "").lower().split())
 
 
@@ -46,7 +46,7 @@ def classify(quote: str, source_norm: str | None) -> tuple[str, float]:
 
 
 def submission_text(sub_dir: Path, paper: str) -> str:
-    """The verification corpus of the submission, joined as `tools.py` joins it."""
+    """The submission's verification text, joined as in tools.py."""
     meta = json.loads((sub_dir / f"{paper}.json").read_text(encoding="utf-8"))
     ft = json.loads((sub_dir / f"{paper}_fulltext.json").read_text(encoding="utf-8"))
     return "\n\n".join([s.get("text", "") for s in ft.get("sections", [])]
@@ -54,7 +54,7 @@ def submission_text(sub_dir: Path, paper: str) -> str:
 
 
 def paper_text(sub_dir: Path, pw: dict) -> str | None:
-    """The parsed prior-work text the run verified against, or None if it cannot be tied to the run by its recorded hash."""
+    """The parsed prior-work text the run verified against, or None if its hash does not match."""
     rel, want = pw.get("parsed_text_path"), pw.get("parsed_text_sha256")
     if not (rel and want):
         return None

@@ -1,4 +1,4 @@
-"""Everything a logged-in participant does: consent, task list, task detail, autosave, submit, familiarity, technical issues, and their own data export. Admin-only concerns live in admin.py; asset bytes are served from assets.py. See deps.py for the shared "who is this request" plumbing."""
+"""Participant endpoints: consent, tasks, autosave, submit, familiarity, technical issues and data export."""
 from __future__ import annotations
 
 import json
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/api", tags=["participant"])
 
 @router.get("/public/config")
 def public_config():
-    """The only unauthenticated endpoint besides /auth/login and /health -- just enough for the login page to show a real contact address before anyone has logged in."""
+    """Unauthenticated configuration for the login page."""
     return {"study_contact": get_settings().study_contact}
 
 CRITERIA_KEYS = ("submission_fidelity", "comparison_specificity", "presented_evidence",
@@ -185,7 +185,7 @@ def _paper_view(db: Session, paper: models.Paper) -> dict:
 
 
 def _report_view(db: Session, report: models.Report) -> dict:
-    """NEVER includes system_id. `id` here is the Report row id, opaque to a participant; it is only ever compared server-side against Task.report_a/b_id."""
+    """A report as participants see it, without system_id."""
     return {"report_ref": report.id, "view_type": report.view_type,
            "content_asset_id": report.content_asset_id,
            "quote_index_asset_id": report.quote_index_asset_id}
@@ -309,7 +309,7 @@ def get_reading(paper_id: str, db: Session = Depends(get_db),
 @router.post("/papers/{paper_id}/reading/open", dependencies=[Depends(require_csrf)])
 def open_reading(paper_id: str, db: Session = Depends(get_db),
                  participant: models.Participant = Depends(current_participant)):
-    """Records the FIRST visit to the reading page; later visits change nothing."""
+    """Record the first visit to the reading page."""
     paper = _owned_paper_or_404(db, participant, paper_id)
     if _reading(db, participant.id, paper.id) is None:
         db.add(models.PaperReading(id=models.new_id(), study_id=participant.study_id,
@@ -325,7 +325,7 @@ class ReadingConfirmBody(BaseModel):
 @router.post("/papers/{paper_id}/reading/confirm", dependencies=[Depends(require_csrf)])
 def confirm_reading(paper_id: str, body: ReadingConfirmBody, db: Session = Depends(get_db),
                     participant: models.Participant = Depends(current_participant)):
-    """Unlocks the paper's tasks. The background questions come first on the reading page, so they must be answered before the confirmation counts. Confirming again is a no-op that keeps the first timestamp."""
+    """Unlock the paper's tasks once the background questions are answered. Repeated confirmations keep the first timestamp."""
     paper = _owned_paper_or_404(db, participant, paper_id)
     fam = (db.query(models.PaperFamiliarity)
            .filter(models.PaperFamiliarity.participant_id == participant.id,

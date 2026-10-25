@@ -10,7 +10,7 @@ def variant_path(sub_dir: Path, submission_id: str, kind: str, variant: str = ""
 
 
 def paper_id(comparison: dict) -> str:
-    """The key a comparison is filed under. Mirrors battle_export._pid exactly."""
+    """The key a comparison is filed under, as in battle_export._pid."""
     return str(comparison.get("paper_id") or comparison.get("title") or "unidentified source")
 
 

@@ -1,4 +1,4 @@
-"""Pilot v1: pairwise LLM judging of novelty reports, both orders, fully logged."""
+"""Pairwise LLM judge of novelty reports (E1), both presentation orders, fully logged."""
 import hashlib
 import json
 import os
@@ -55,7 +55,7 @@ def sha(text: str) -> str:
 
 
 def with_line_ids(text: str, prefix: str) -> str:
-    """Prefix every line with a running id. Content is not otherwise touched."""
+    """Prefix every line with a running id."""
     return "\n".join(f"{prefix}{i:04d} {ln}" for i, ln in enumerate(text.splitlines(), 1))
 
 
@@ -91,7 +91,7 @@ def _inventory_problems(inv) -> list:
 
 
 def validate(parsed: dict, valid_ids: set, inventory: bool = False) -> list:
-    """Structural problems, as a list of strings. Empty list = usable result. `inventory` (rubric v5): the response must also carry a well-formed inventory."""
+    """Structural problems of a judge response; an empty list means usable. With `inventory`, the response must also carry a well-formed inventory."""
     problems = _inventory_problems(parsed.get("inventory")) if inventory else []
     crit = parsed.get("criteria")
     if not isinstance(crit, dict):
@@ -141,7 +141,7 @@ def _parse_json(text: str):
 
 def make_llm(service_tier: str | None = None, cache_breakpoints: bool = False,
              model: str | None = None, effort: str | None = None):
-    """The judge model. Without arguments: exactly the pilot's request. `service_tier` ("flex") and `cache_breakpoints` change billing only: same model, effort, and token sequence (see `user_parts`). `model`/`effort` override JUDGE_MODEL/JUDGE_EFFORT (an E1 config's judge_model/judge_effort)."""
+    """The judge model. `service_tier` and `cache_breakpoints` change billing only. `model` and `effort` override JUDGE_MODEL and JUDGE_EFFORT."""
     from langchain_openai import ChatOpenAI
     kw = {}
     if service_tier:
@@ -157,7 +157,7 @@ _BREAKPOINT = {"mode": "explicit"}
 
 
 def user_parts(sub_txt: str, a_txt: str, b_txt: str) -> list:
-    """USER_TEMPLATE as three text parts: [header + submission] [report A] [report B], with cache breakpoints after the first two. The parts concatenate to exactly the string USER_TEMPLATE.format(...) produces (asserted), and a message sent as text parts tokenizes identically to the single string -- measured 2026-09-24: same prompt token count, and the two forms hit each other's cache in full. So the judge reads the same tokens; only which prefix is cached (and billed as a cache read) changes."""
+    """USER_TEMPLATE as three text parts with cache breakpoints after the first two. The parts concatenate to USER_TEMPLATE.format(...) and tokenize identically."""
     pre, rest = USER_TEMPLATE.split("{submission}")
     mid_a, rest = rest.split("{report_a}")
     mid_b, end = rest.split("{report_b}")
@@ -169,7 +169,7 @@ def user_parts(sub_txt: str, a_txt: str, b_txt: str) -> list:
 
 
 def _is_capacity_429(e: Exception) -> bool:
-    """Flex 'Resource Unavailable' or a rate limit: no model output was produced and nothing was billed. Not a quota error, which waiting cannot fix."""
+    """Flex capacity error or rate limit: nothing was produced or billed, so waiting helps."""
     s = f"{type(e).__name__}: {e}"
     return ("429" in s or "RateLimit" in s) and "insufficient_quota" not in s
 
@@ -182,7 +182,7 @@ def _utc_now() -> str:
 
 
 def usage_counts(msg) -> dict:
-    """Token counts of one response. Cache reads and writes come from the RAW usage (response_metadata.token_usage.prompt_tokens_details): langchain's usage_metadata has no cache writes, and on flex/priority it files the reads under `flex_cache_read` / `priority_cache_read` instead of `cache_read` -- which recorded 0 for the first flex calls (dreamphase, 2026-09-24; see billing_corrections.jsonl)."""
+    """Token counts of one response, with cache reads and writes from the raw usage."""
     meta = getattr(msg, "usage_metadata", None) or {}
     det = meta.get("input_token_details") or {}
     rmeta = getattr(msg, "response_metadata", {}) or {}

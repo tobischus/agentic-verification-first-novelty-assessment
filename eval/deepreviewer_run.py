@@ -31,7 +31,7 @@ def papers(config: str, sources: str) -> dict:
 
 
 def agent_model() -> str:
-    """Whatever DeepReviewer is actually configured to use, read from its own settings -- never assumed, because the price depends on it."""
+    """The model DeepReviewer is configured to use, read from its settings."""
     cwd = Path.cwd()
     sys.path.insert(0, str(DR))
     import os

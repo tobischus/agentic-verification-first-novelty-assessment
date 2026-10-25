@@ -1,4 +1,4 @@
-"""Where an Asset's bytes actually live, and how the API hands them to an authorized browser -- the one place that knows the difference between "local" and "supabase"."""
+"""Storage backends for asset bytes: local files or Supabase."""
 from __future__ import annotations
 
 import hashlib
@@ -53,7 +53,7 @@ class LocalStorage(StorageBackend):
 
 
 class SupabaseStorage(StorageBackend):
-    """Private bucket via Supabase's Storage REST API, service-role key, server-side only."""
+    """Private Supabase Storage bucket, accessed server-side with the service-role key."""
     name = "supabase"
 
     def __init__(self, url: str, service_role_key: str, bucket: str):

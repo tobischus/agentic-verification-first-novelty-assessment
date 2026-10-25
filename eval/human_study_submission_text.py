@@ -1,4 +1,4 @@
-"""Freeze one submission text per human-study paper, with the pilot's parser and check."""
+"""Freeze one submission text per paper with the MinerU parser and check it."""
 from __future__ import annotations
 
 import argparse
@@ -39,7 +39,7 @@ MAIN_SOURCES = "final_evaluation/config/sources.main.yaml"
 
 
 def papers(config: str = MAIN_CONFIG, sources: str = MAIN_SOURCES) -> dict:
-    """{paper_key: submission pdf} straight from the study's source config, so this can never drift from what the import actually freezes as submission.pdf. The E1-only papers: `config/e1_extra.yaml` with `config/sources.e1_extra.yaml`."""
+    """{paper_key: submission pdf} from the sources config of the study or of the E1-only papers."""
     import yaml
     cfg = yaml.safe_load((REPO / config).read_text(encoding="utf-8"))
     src = yaml.safe_load((REPO / sources).read_text(encoding="utf-8"))
@@ -47,7 +47,7 @@ def papers(config: str = MAIN_CONFIG, sources: str = MAIN_SOURCES) -> dict:
 
 
 def _adapter():
-    """DeepReviewer's configured MinerU client. `get_settings()` reads the .env beside it, so the working directory has to be DeepReviewer-v2 while it is built."""
+    """DeepReviewer's MinerU client, built inside DeepReviewer-v2 so that its .env is read."""
     cwd = Path.cwd()
     sys.path.insert(0, str(DR))
     os.chdir(DR)
@@ -69,8 +69,7 @@ def _adapter():
         os.chdir(cwd)
     if not ad.configured:
         raise SystemExit("MinerU is not configured (MINERU_API_TOKEN / MINERU_BASE_URL "
-                         "in DeepReviewer-v2/.env). Refusing the local pypdf fallback: it "
-                         "would silently give this study a different parser than the pilot.")
+                         "in DeepReviewer-v2/.env). The local pypdf fallback is not used.")
     return ad
 
 

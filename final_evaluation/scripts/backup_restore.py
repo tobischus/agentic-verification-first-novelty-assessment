@@ -1,4 +1,4 @@
-"""Local CLI backup/restore, on top of (not instead of) the admin export."""
+"""Local backup and restore of the study database."""
 from __future__ import annotations
 
 import json

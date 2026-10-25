@@ -99,7 +99,7 @@ def _abstract_shingles(text: str, n: int = 10):
 
 def is_same_paper(candidate_abstract: str, submission_abstract: str,
                   n: int = 10, min_shared: int = 2, token_ratio: float = 95.0) -> bool:
-    """True when a retrieved paper is the SAME work as the submission (e.g. an earlier arXiv version that was renamed, so the title-similarity check misses it)."""
+    """True when a retrieved paper is the submission itself, e.g. a renamed earlier arXiv version."""
     ca = (candidate_abstract or "").strip()
     sa = (submission_abstract or "").strip()
     if len(ca) < 80 or len(sa) < 80 or "no abstract available" in ca.lower():
@@ -657,7 +657,7 @@ class PaperRankingSystem:
         return list(unique_papers.values())
 
     def cluster_papers(self, papers: List[Paper]) -> None:
-        """Group the FINAL related work into topical clusters (UI navigation aid only, never a judgment input). Uses the already-computed SPECTER2 embeddings (no extra model load) + KMeans; labels each cluster via the LLM (keyword fallback)."""
+        """Group the final related work into topical clusters for the UI, with the SPECTER2 embeddings and KMeans."""
         papers = [p for p in papers if p is not None]
         n = len(papers)
         if n == 0:

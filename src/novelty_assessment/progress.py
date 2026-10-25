@@ -1,4 +1,4 @@
-"""Tiny file-based sub-progress reporter for the two long pipeline stages (retrieval, artifact_a). A stage reports its phase + done/total so the frontend can show a real progress bar and extrapolate the remaining time from the rate so far (e.g. "reference 30/62", "claim 2/4")."""
+"""File-based progress of the long stages, read by the frontend."""
 import json
 import os
 import time
@@ -22,7 +22,7 @@ def _finalize_current():
 
 
 def start_phase(phase, total, indeterminate=False):
-    """Begin a phase; resets the per-phase clock the ETA is extrapolated from."""
+    """Begin a phase and reset its clock."""
     _finalize_current()
     _CTX["phase"] = phase
     _CTX["started"] = time.time()

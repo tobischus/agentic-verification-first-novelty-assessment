@@ -33,7 +33,7 @@ def _content_type_for(kind: str, path: Path) -> str:
 
 
 def _study_config(config_path: str) -> dict:
-    """A study config -- never an E1-only paper list (config/e1_extra.yaml), whose papers must not reach the study database."""
+    """A study config. E1-only paper lists are rejected."""
     cfg = yaml.safe_load((REPO_ROOT / config_path).read_text(encoding="utf-8"))
     if cfg.get("e1_only"):
         raise SystemExit(f"{config_path} is E1-only (e1_only: true) -- it is never seeded "
@@ -187,7 +187,7 @@ def _db_tag(database_url: str) -> str:
 
 def create_participants(study_id: str, count: int, prefix: str = "R", is_test: bool = True,
                         config_path: str = "final_evaluation/config/main.yaml") -> dict:
-    """Create `count` participants AND their frozen assignments to every existing Task in the study, using the seeded orientation/order (security.orientation_for / block_and_task_order). Re-running with the same count is a no-op for participants and assignments that already exist -- see the two `if existing:` early-returns below."""
+    """Create `count` participants and their assignments with seeded orientation and order."""
     cfg = _study_config(config_path)
     settings = get_settings()
     engine = db_mod.make_engine(settings.database_url)
@@ -283,7 +283,7 @@ def create_admin(study_id: str, display: str = "ADMIN") -> dict:
 
 
 def refresh_reports(config_path: str, systems=("agent", "linear"), dry_run: bool = False) -> dict:
-    """Point a study's reports at the content of its CURRENT manifest -- only where no one has rated against the old content."""
+    """Point a study's reports at its current manifest where nobody has rated the old content."""
     cfg = _study_config(config_path)
     study_dir = cfg.get("inputs_dir") or "main"
     manifest = json.loads(

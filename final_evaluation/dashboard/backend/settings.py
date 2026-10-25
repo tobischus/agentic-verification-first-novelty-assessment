@@ -1,4 +1,4 @@
-"""Environment configuration, loaded once. See .env.example for every variable this reads and what each one is for. Fails loudly and specifically at startup rather than letting a missing secret surface later as an opaque 500 -- "fehlende Cloud-Zugangsdaten blockieren nur das Deployment, nicht die lokale Implementierung" means local dev (APP_ENV != production, STORAGE_BACKEND=local, DATABASE_URL=sqlite:///...) must work with an almost-empty .env, while a cloud deploy is checked strictly."""
+"""Environment configuration, loaded once. The variables are listed in .env.example."""
 from __future__ import annotations
 
 import os
@@ -48,7 +48,7 @@ class Settings:
         return self.is_production
 
     def require_for_start(self) -> list[str]:
-        """Configuration errors that must block startup, given the CURRENT mode. Returns human-readable problem strings; empty = OK to start."""
+        """Configuration errors that block startup in the current mode; empty means OK."""
         problems = []
         if not self.session_secret:
             problems.append("SESSION_SECRET is not set (any long random string; "

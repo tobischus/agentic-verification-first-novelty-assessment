@@ -1,4 +1,4 @@
-"""Agent vs linear from the run records -- read-only, no API call."""
+"""Agent vs linear from the run records, offline."""
 from __future__ import annotations
 
 import hashlib
@@ -72,7 +72,7 @@ def _sha(p: Path) -> str:
 
 
 def _checked(path: str, sha: str, base: Path = ROOT) -> Path:
-    """The manifest's artifact paths are relative to the repo, its report paths to final_evaluation/ -- hence `base`."""
+    """Path of a manifest file, checked against its recorded hash."""
     p = base / Path(path.replace("\\", "/"))
     got = _sha(p) if p.exists() else "missing"
     if got != sha:
@@ -94,7 +94,7 @@ def paper_entries(config: Path = E1_CONFIG) -> list:
 
 
 def pair_endings(artifact_a: dict) -> dict:
-    """{(claim_id, paper_id): ending} from the run log; endings as in the docstring ("checked" = passed the first evidence check)."""
+    """{(claim_id, paper_id): ending} from the run log."""
     out = {}
     for claim in artifact_a.get("claims") or []:
         for pw in (claim.get("run_log") or {}).get("prior_work") or []:
@@ -127,7 +127,7 @@ _TRACE_STATUS = re.compile(r"^\[(\d+)\] EVIDENCE CHECK: status=(\w+)")
 
 
 def reentry_outcomes(artifact_a: dict, overlap_degrees) -> Counter:
-    """For every pair the agent compared more than once: how it ended, read from the decision trace lines `claim_agent` writes per turn ("[t] SEMANTIC DEGREE: x", "[t] EVIDENCE CHECK: status=y"), first turn against last."""
+    """For pairs the agent compared more than once: first and last outcome, from the decision trace."""
     c = Counter()
     for claim in artifact_a.get("claims") or []:
         for pw in (claim.get("run_log") or {}).get("prior_work") or []:
@@ -213,7 +213,7 @@ def matched_values(ends: dict, rows: list, keys: set, vd) -> dict:
 
 
 def paired(per_paper: dict, key: str, block: str = "") -> dict:
-    """Totals (or mean of per-paper shares), and the sign test over papers. `block` selects a nested block of each paper's record ("matched")."""
+    """Totals or mean per-paper shares, with the sign test over papers. `block` selects a nested block such as "matched"."""
     rec = [v[block] if block else v for v in per_paper.values()]
     a = [v["agent"][key] for v in rec]
     b = [v["linear"][key] for v in rec]

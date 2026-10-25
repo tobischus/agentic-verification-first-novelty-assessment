@@ -1,4 +1,4 @@
-"""GROBID client: turns a PDF into GROBID TEI XML via the GROBID REST API, then reuses EnhancedGrobidParser (extract_metadata.py) to produce the pipeline's {id}.json."""
+"""GROBID client: PDF to TEI XML, then the pipeline's {id}.json via EnhancedGrobidParser."""
 import argparse
 import json
 import logging
@@ -195,12 +195,12 @@ class GrobidClient:
 
     @staticmethod
     def _norm_title(s: str) -> str:
-        """Normalized title for matching: lowercase, no whitespace, no hyphens (so GROBID artifacts like 'GEN-ERATION' still match 'generation')."""
+        """Title normalized for matching: lowercase, without whitespace and hyphens."""
         return "".join((s or "").lower().split()).replace("-", "")
 
     @staticmethod
     def _dehyphenate(text: str) -> str:
-        """Join intra-word hyphens so line-break hyphenation stops breaking queries: 'LAN-GUAGE' -> 'LANGUAGE', 'META-INSTRUCTIONS' -> 'METAINSTRUCTIONS'. Whitespace collapsed. (GROBID leaves these hyphens in titles; a raw query then tokenizes to 'LAN' 'GUAGE' and misses the paper -- a main cause of the today-fallback.)"""
+        """Join intra-word hyphens ('LAN-GUAGE' -> 'LANGUAGE') and collapse whitespace."""
         import re
 
         return " ".join(re.sub(r"(?<=\w)-(?=\w)", "", text or "").split())
@@ -232,7 +232,7 @@ class GrobidClient:
 
     @staticmethod
     def _title_close(a: str, b: str) -> bool:
-        """Robust title equality: normalized leading-edge substring OR high fuzzy similarity -- tolerates GROBID hyphen/venue artifacts, subtitles, and minor wording drift, so a real match is not rejected the way a strict prefix test would (this is why the submission date previously fell back to 'today')."""
+        """Title match by normalized prefix or high fuzzy similarity."""
         from rapidfuzz import fuzz
 
         na, nb = GrobidClient._norm_title(a), GrobidClient._norm_title(b)
@@ -244,7 +244,7 @@ class GrobidClient:
 
     @staticmethod
     def _arxiv_get(params, attempts: int = 3):
-        """GET the arXiv API with polite backoff on throttling. Returns the 200 Response or None. arXiv rate-limits bursts with 429/503; the old single-shot gave up immediately, which is a main reason the date fell back to 'today'."""
+        """GET the arXiv API with backoff on 429/503. Returns the response or None."""
         import requests
 
         for i in range(attempts):
@@ -362,7 +362,7 @@ class GrobidClient:
 
     @staticmethod
     def _s2_match(title: str):
-        """Best-effort Semantic Scholar lookup returning the raw item dict (title/publicationDate/year/externalIds), or None."""
+        """Semantic Scholar lookup by title. Returns the raw item or None."""
         import os
 
         key = os.getenv("SEMANTIC_SCHOLAR_API_KEY")

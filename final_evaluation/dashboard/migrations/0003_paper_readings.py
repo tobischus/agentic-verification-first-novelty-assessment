@@ -1,4 +1,4 @@
-"""Add paper_readings: the per-paper "read the submission first" step (models.PaperReading)."""
+"""Add paper_readings (models.PaperReading)."""
 from ..backend import models
 
 

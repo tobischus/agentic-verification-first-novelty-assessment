@@ -82,14 +82,14 @@ def orientation_bit(seed: int, pair_key: str) -> int:
 
 
 def orientation_for(seed: int, pair_key: str, participant_ordinal: int) -> str:
-    """Guarantees two participants with ordinals of different parity (e.g. R01, R02) always see a given pair in OPPOSITE orientation -- the pilot's explicit requirement. For >2 raters this still varies per task while keeping that same guarantee for any even/odd pair of raters."""
+    """Participants with ordinals of different parity see a given pair in opposite orientation."""
     bit = orientation_bit(seed, pair_key) ^ (participant_ordinal % 2)
     return "reversed" if bit else "forward"
 
 
 def block_and_task_order(order_seed: int, paper_keys: list[str],
                          tasks_by_paper: dict[str, list[str]]) -> list[str]:
-    """Shuffle paper blocks, then shuffle tasks within each block, both with `order_seed` (= 100 + participant ordinal). Returns a flat list of task ids in the order this participant will see them. Deterministic and re-derivable, but callers should still persist `order_index` on Assignment rather than recomputing on every request -- the point is auditability, not recomputation cost."""
+    """Shuffle paper blocks, then tasks within each block, with `order_seed`. Returns task ids in presentation order."""
     rng = random.Random(order_seed)
     papers = list(paper_keys)
     rng.shuffle(papers)

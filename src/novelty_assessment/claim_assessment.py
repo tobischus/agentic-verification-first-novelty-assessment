@@ -1,4 +1,4 @@
-"""Step 5c: the claim-level assessment -- why each claim got the verdict it got."""
+"""Claim explanations: why each claim received its verdict."""
 import argparse
 import hashlib
 import json
@@ -176,7 +176,7 @@ _NEG = re.compile(r"\b(not|no|never|without|nor|un(?:supported|confirmed|resolve
 
 
 def consistency_problems(text: str, entry: dict, verdict: str, refs: dict) -> List[str]:
-    """Deterministic checks on a generated text. Each problem is a plain sentence that can be handed back to the model for one revision; none of them judges the prose."""
+    """Deterministic checks on a generated text, each returned as a sentence for one revision."""
     problems = []
     comparisons = entry.get("comparisons") or []
     by_ref = {refs.get(source_refs.paper_id(c), "R?"): c for c in comparisons}

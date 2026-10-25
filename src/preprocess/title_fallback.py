@@ -64,7 +64,7 @@ def recover_title(pdf_path: str, model: str = "gpt-4.1") -> str:
 
 def resolve_title(raw_title: str, pdf_path: str, model: str = "gpt-4.1",
                   min_len: int = 8):
-    """Return (title, source) where source is one of: 'grobid'            -> GROBID title used as-is 'grobid_cleaned'    -> GROBID title after watermark strip 'pdf_llm_fallback'  -> recovered from page-1 text via LLM"""
+    """(title, source) with source 'grobid', 'grobid_cleaned' or 'pdf_llm_fallback'."""
     raw = (raw_title or "").strip()
     cleaned = clean_title(raw)
     if cleaned and len(cleaned) >= min_len:

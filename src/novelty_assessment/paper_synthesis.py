@@ -1,4 +1,4 @@
-"""Step 5b: the paper-level novelty summary."""
+"""Paper-level novelty summary."""
 import argparse
 import hashlib
 import json
@@ -117,7 +117,7 @@ def _txt(x) -> str:
 
 
 def _evidence_phrase(c: dict) -> str:
-    """The evidence check's result, always stated -- never left to be inferred."""
+    """The evidence check's result, always stated explicitly."""
     status = vd.evidence_status(c)
     check = c.get("evidence_check") or {}
     if not status:
@@ -145,7 +145,7 @@ def _comparison_block(c: dict, ref: str, claim_label: str) -> List[str]:
 
 def build_findings(artifact_a: dict, artifact_b: dict, claim_order: List[str],
                    claim_names: dict, refs: dict) -> str:
-    """The only thing the model sees: recorded results, no traces and no quotes."""
+    """What the model sees: recorded results, no traces and no quotes."""
     b_by = {v.get("claim_id"): v for v in (artifact_b or {}).get("per_claim", []) or []}
     a_by = {e.get("claim_id"): e for e in (artifact_a or {}).get("claims", []) or []}
     labels = {cid: f"Claim {i}" for i, cid in enumerate(claim_order, 1)}

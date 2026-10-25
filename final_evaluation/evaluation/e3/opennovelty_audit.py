@@ -23,7 +23,7 @@ UA = {"User-Agent": "novelty-thesis-e3-audit/1.0 (academic research)"}
 
 
 def _s2_key() -> str | None:
-    """The Semantic Scholar key from the environment or the repo's .env; never printed."""
+    """The Semantic Scholar key from the environment or .env."""
     import os
     k = os.getenv("SEMANTIC_SCHOLAR_API_KEY")
     if k:
@@ -73,7 +73,7 @@ def direct_pdf(uri: str) -> str | None:
 
 
 def squash(t: str) -> str:
-    """Lowercase letters and digits only: OpenNovelty's text is lowercased and its word boundaries are unreliable ("proposescalinginter- rl"), so spaces cannot be compared."""
+    """Lowercase letters and digits only, since OpenNovelty's word boundaries are unreliable."""
     return re.sub(r"[^a-z0-9]+", "", t.lower())
 
 
@@ -84,7 +84,7 @@ def _find_one(q: str, text_squashed: str) -> str:
 
 
 def find(quote: str, text_squashed: str) -> str:
-    """OpenNovelty elides with "..." inside a quote, so each piece between ellipses is looked up on its own (pieces under 20 characters are too short to place); the quote is found when every piece is, and is "near" when any piece needed the fuzzy match."""
+    """Find a quote piece by piece between ellipses; "near" if any piece needed fuzzy matching."""
     pieces = [squash(p) for p in re.split(r"\.{3}|…", quote)]
     pieces = [p for p in pieces if len(p) >= 20]
     if not pieces:

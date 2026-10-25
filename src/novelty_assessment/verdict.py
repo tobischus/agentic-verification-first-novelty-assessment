@@ -1,4 +1,4 @@
-"""The one place where a comparison becomes a judgement."""
+"""Turns a comparison into a judgement."""
 
 DEGREES = ("same", "substantial", "partial", "superficial", "none")
 
@@ -67,7 +67,7 @@ def sort_key(comparison: dict):
 
 
 def overlap_label(deg: str) -> str:
-    """As `degree_label`, but blank unless the degree actually counts as an overlap -- for lists where a non-overlapping degree should carry no annotation at all."""
+    """The degree label, blank unless the degree counts as an overlap."""
     d = (deg or "").lower()
     return DEGREE_LABEL.get(d, deg) if d in OVERLAP_DEGREES else ""
 

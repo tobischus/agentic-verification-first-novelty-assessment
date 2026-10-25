@@ -36,7 +36,7 @@ def _check_file_entry(entry: dict | None, findings: list, where: str) -> None:
 
 def _check_anchor_resolution(paper: str, system: str, text_path: Path, qidx_path: Path | None,
                              findings: list) -> dict:
-    """For agent/linear: every '> "..."' blockquote in the rendered text should resolve against the quote index (same check performed manually when quote_index() was first built -- reproduced here as an automated gate)."""
+    """For agent and linear: every blockquote in the rendered text must resolve in the quote index."""
     if qidx_path is None or not qidx_path.is_file():
         return {"resolvable": None, "total": None}
     text = text_path.read_text(encoding="utf-8")

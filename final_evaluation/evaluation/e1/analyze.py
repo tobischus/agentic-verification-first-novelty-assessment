@@ -1,4 +1,4 @@
-"""E1 analysis over judge_calls.jsonl -- read-only, no API call."""
+"""E1 analysis over judge_calls.jsonl, offline."""
 from __future__ import annotations
 
 import itertools
@@ -138,7 +138,7 @@ def _solve(a: list, b: list) -> list:
 
 
 def _bt_fit(games: list, prior: float = 0.5, iters: int = 100, tol: float = 1e-12) -> dict:
-    """Bradley-Terry maximum likelihood by Newton's method: system -> natural-log strength, centred on 0 (the geometric mean of the strengths is 1). The log-likelihood is strictly concave once every compared pair carries its pseudo-wins, so Newton converges in a few steps to the same fit an MM iteration reaches after thousands."""
+    """Bradley-Terry maximum likelihood by Newton's method: system -> log strength, centred on 0."""
     wins, n = defaultdict(float), defaultdict(float)
     for x, y, v in games:
         n[frozenset((x, y))] += 1
@@ -184,7 +184,7 @@ def bradley_terry(us: dict, crit: str, prior: float = 0.5) -> dict:
 
 
 def elo(us: dict, crits=CRITERIA) -> dict:
-    """Bradley-Terry on the Elo scale with paper-bootstrap CIs (see the module doc)."""
+    """Bradley-Terry on the Elo scale with paper-bootstrap CIs."""
     by_paper = games_by_paper(us, crits)
     papers = sorted(by_paper)
     fit = _bt_fit([g for p in papers for g in by_paper[p]])
@@ -211,13 +211,13 @@ def elo(us: dict, crits=CRITERIA) -> dict:
 
 
 def shared_rank(ratings: dict, s: str) -> int:
-    """Chatbot Arena's rank (Chiang et al., 2024): 1 + the number of systems whose CI lies entirely above this system's CI. Systems that cannot be told apart share a rank."""
+    """Arena rank (Chiang et al., 2024): 1 + the number of systems whose CI lies entirely above this one."""
     lo, hi = ratings[s]["ci95"]
     return 1 + sum(1 for t, r in ratings.items() if t != s and r["ci95"][0] > hi)
 
 
 def online_elo(us: dict, crits=CRITERIA, k: float = ELO_K, orders: int = ELO_ORDERS) -> dict:
-    """Arena-style sequential Elo (every system starts at ELO_BASE; stable tie = 0.5), averaged over `orders` random game orders because a single pass depends on the order."""
+    """Sequential Elo, averaged over `orders` random game orders."""
     games = [g for gs in games_by_paper(us, crits).values() for g in gs]
     systems = sorted({s for x, y, _ in games for s in (x, y)}, key=SYSTEMS.index)
     if len(systems) < 2:

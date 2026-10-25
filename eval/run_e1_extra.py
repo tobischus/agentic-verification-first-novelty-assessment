@@ -1,4 +1,4 @@
-"""Agent, linear and Afzal on the ten E1-only papers -- the same steps, in the same order and with the same settings as the ten human-study papers:"""
+"""Agent, linear and Afzal et al. on the ten E1-only papers, with the same steps and settings as for the human-study papers."""
 import json
 import os
 import shutil

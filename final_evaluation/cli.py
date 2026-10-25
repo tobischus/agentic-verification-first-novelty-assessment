@@ -70,7 +70,7 @@ def cmd_create_admin(args):
 
 
 def _sync_instructions_text():
-    """The ONE source of truth for the instruction text and the rubric descriptions is `prompts/` -- this copies them into the frontend's public/ dir (as plain text/JSON) so the UI fetches the same bytes the consent hash is computed over, in dev mode and in the built dist/ alike. Never edit the copies under frontend/public/ by hand; they are regenerated on every build-frontend."""
+    """Copy the instructions and rubric descriptions from `prompts/` into the frontend's public/ directory, so the UI shows the bytes the consent hash covers."""
     import re
     import shutil
     prompts = REPO_ROOT / "final_evaluation" / "prompts"

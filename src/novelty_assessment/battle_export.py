@@ -1,4 +1,4 @@
-"""Deterministic reviewer export, layout v3."""
+"""Deterministic Markdown report built from the stored artifacts."""
 import argparse
 import json
 import re
@@ -58,7 +58,7 @@ _EC_PHRASE = {
 }
 
 def _claim_verdict(comparisons: list, recorded: str):
-    """(verdict, is_derived). Prefers Artifact B's own verdict; falls back to the same challenges()-over-comparisons rule the per-paper review already uses, so a missing synthesis does not silently read as "no assessment" further down the document."""
+    """(verdict, is_derived). Artifact B's verdict, else derived from the comparisons."""
     if recorded:
         return recorded, False
     derived = "challenged" if any(vd.challenges(c) for c in comparisons or []) else "not_challenged"
@@ -66,7 +66,7 @@ def _claim_verdict(comparisons: list, recorded: str):
 
 def _claim_assessment(comparisons: list, recorded_verdict: str, recorded_rationale: str,
                       stored: dict = None, stale: bool = False) -> List[str]:
-    """The claim-level assessment as paragraphs: the verdict on the label's own line, then why this claim got it (claim_assessment.py, stored in Artifact B). Without a stored assessment: the older recorded rationale, if any."""
+    """The claim explanation as paragraphs: the verdict line, then the stored explanation."""
     verdict, derived = _claim_verdict(comparisons, recorded_verdict)
     paragraphs = [f"**Assessment:** {vd.verdict_label(verdict)}."]
     text = str((stored or {}).get("text") or "").strip()
@@ -149,7 +149,7 @@ def _ref(c: dict, refs: dict) -> str:
 
 
 def _snapshot(entry: dict, c: dict) -> dict:
-    """Only this claim's embedded run record (or inline fields), never a current manifest."""
+    """This claim's embedded run record, never the current manifest."""
     result = {k: c[k] for k in ("pinned_version", "pinned_version_date", "pinned_url",
                                "version_status", "final_state", "unresolved_reason",
                                "unresolved_deficit") if c.get(k) is not None}
@@ -179,7 +179,7 @@ def _document_label(snapshot: dict) -> str:
 
 
 def _related_cell(entry) -> str:
-    """Degree and evidence status in one cell -- plus, when they part company, the fact that the check did not confirm the degree. Without that third piece "partial · material evidence" reads as an established partial overlap even where the check said the opposite."""
+    """Degree and evidence status in one cell, noting when the check did not confirm the degree."""
     if entry is None:
         return "not assessed"
     degree, status = entry[0], entry[1]
@@ -407,7 +407,7 @@ def _comparison_detail(c: dict, entry: dict, refs: dict, pool: dict,
 
 def _paper_summary(b: dict, a: dict, order: list, claims: list, refs: dict,
                    out: List[str]) -> None:
-    """The paper-level summary, rendered — never generated here."""
+    """The stored paper-level summary, rendered."""
     summary = (b or {}).get("paper_summary") or {}
     concern = str(summary.get("main_novelty_concern") or "").strip()
     remaining = str(summary.get("remaining_contribution") or "").strip()
@@ -538,7 +538,7 @@ def build(data_dir: str, submission_id: str, variant: str = "") -> str:
 
 
 def quote_index(data_dir: str, submission_id: str, variant: str = "") -> dict:
-    """Every VERIFIED quote this export blockquotes, keyed by its own normalised text."""
+    """Every verified quote the export blockquotes, keyed by its normalized text."""
     sub = Path(data_dir) / submission_id
     suffix = f"_{variant}" if variant else ""
     a = _load(sub / f"{submission_id}_artifact_a{suffix}.json")
@@ -604,7 +604,7 @@ def quote_index(data_dir: str, submission_id: str, variant: str = "") -> dict:
 
 
 def check_sources(data_dir: str, submission_id: str, variant: str = "") -> str:
-    """Read-only diagnosis. Current manifest entries are NOT historical provenance."""
+    """Read-only diagnosis. Current manifest entries are not historical provenance."""
     sub = Path(data_dir) / submission_id
     suffix = f"_{variant}" if variant else ""
     artifact_path = sub / f"{submission_id}_artifact_a{suffix}.json"

@@ -1,4 +1,4 @@
-"""One endpoint serves every asset -- submission PDFs, report text/PDF, quote indexes -- because one endpoint is one place to get authorization right, instead of N endpoints that each have to remember to check it. See deps.py / current_participant for how the session cookie resolves to a participant; this module adds the per-asset ownership check on top: a participant may fetch an asset only if it is reachable from one of THEIR assignments (a Task whose Report or Paper references it) -- never by asset id alone."""
+"""One endpoint serves every asset, so authorization is checked in one place."""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -12,7 +12,7 @@ router = APIRouter(prefix="/api/assets", tags=["assets"])
 
 
 def _participant_may_access(db: Session, participant: models.Participant, asset_id: str) -> bool:
-    """True iff `asset_id` is reachable from one of this participant's assignments."""
+    """True if the asset belongs to one of the participant's assignments."""
     task_ids = [row[0] for row in db.query(models.Assignment.task_id)
                .filter(models.Assignment.participant_id == participant.id).all()]
     if not task_ids:

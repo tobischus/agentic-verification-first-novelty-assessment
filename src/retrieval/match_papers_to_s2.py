@@ -92,7 +92,7 @@ class SemanticScholarAPI:
 
     @staticmethod
     def _retry_after(response, default: float) -> float:
-        """Seconds S2 asks us to wait (Retry-After header), capped; else `default`."""
+        """Retry-After seconds, capped, else `default`."""
         ra = response.headers.get("Retry-After")
         if ra:
             try:

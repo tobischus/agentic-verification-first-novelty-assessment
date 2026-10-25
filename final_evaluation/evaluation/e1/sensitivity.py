@@ -1,4 +1,4 @@
-"""E1 sensitivity analyses -- post hoc, exploratory, read-only, no API call."""
+"""E1 sensitivity analyses (post hoc, offline)."""
 from __future__ import annotations
 
 import hashlib
@@ -155,7 +155,7 @@ BASELINES = ("opennovelty", "deepreviewer", "afzal")
 
 
 def length_overlap(us: dict) -> dict:
-    """How often a baseline report is at least as long as an agent/linear report of the same paper -- the support the five-system length adjustment has for comparing the groups."""
+    """How often a baseline report is at least as long as an agent or linear report of the same paper."""
     ln = {}
     for (p, (x, y)), u in us.items():
         cc = u["xy"]["context_chars"]
@@ -168,7 +168,7 @@ def length_overlap(us: dict) -> dict:
 
 
 def within_group_slope(us: dict, crits) -> dict:
-    """The length slope from agent-vs-linear and baseline-vs-baseline pairs only, where report lengths overlap. Two neutral games at equal length connect the two groups so the fit is defined; they fix the (meaningless) offset between the groups and leave the slope alone."""
+    """Length slope from agent-vs-linear and baseline-vs-baseline pairs only. Two neutral games at equal length connect the groups."""
     sub = {k: u for k, u in us.items() if set(k[1]) <= OURS or not set(k[1]) & OURS}
     bridge = [("agent", "opennovelty", 0.5, (0.0,)), ("linear", "deepreviewer", 0.5, (0.0,))]
     by_paper = _obs_by_paper(sub, crits, _log_length)
