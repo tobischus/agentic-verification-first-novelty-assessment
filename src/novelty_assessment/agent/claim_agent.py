@@ -444,7 +444,7 @@ class ClaimNoveltyAgent:
         data_dir: str,
         submission_id: str,
         *,
-        model_name: str = "gpt-4.1",
+        model_name: str = "gpt-5.6-luna",
         embedder=None,
         max_retrievals: int = 1,
         min_quote_tokens: int = 10,
@@ -498,8 +498,8 @@ class ClaimNoveltyAgent:
 
         self._role_llm = {
             "reading": role_llm("NOVELTY_READING_MODEL", "NOVELTY_READING_EFFORT", "low"),
-            "compare": role_llm("NOVELTY_COMPARE_MODEL", "NOVELTY_COMPARE_EFFORT", "high"),
-            "evidence": role_llm("NOVELTY_EVIDENCE_MODEL", "NOVELTY_EVIDENCE_EFFORT", "high"),
+            "compare": role_llm("NOVELTY_COMPARE_MODEL", "NOVELTY_COMPARE_EFFORT", "low"),
+            "evidence": role_llm("NOVELTY_EVIDENCE_MODEL", "NOVELTY_EVIDENCE_EFFORT", "low"),
         }
         self.llm = self._role_llm["reading"]
         self._cache_stats: dict = {}
@@ -549,9 +549,9 @@ class ClaimNoveltyAgent:
                 "reading": role_cfg("reading", "NOVELTY_READING_MODEL",
                                     "NOVELTY_READING_EFFORT", "low"),
                 "compare": role_cfg("compare", "NOVELTY_COMPARE_MODEL",
-                                    "NOVELTY_COMPARE_EFFORT", "high"),
+                                    "NOVELTY_COMPARE_EFFORT", "low"),
                 "evidence": role_cfg("evidence", "NOVELTY_EVIDENCE_MODEL",
-                                     "NOVELTY_EVIDENCE_EFFORT", "high"),
+                                     "NOVELTY_EVIDENCE_EFFORT", "low"),
             },
             "budgets": {
                 "read_cap_chars": _READ_CAP,

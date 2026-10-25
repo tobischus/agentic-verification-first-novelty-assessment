@@ -271,7 +271,7 @@ def _load(path: Path):
 
 def contexts_for(data_dir: str, submission_id: str, variant: str = ""):
     """[(claim_id, claim_no, entry, verdict, findings)], b_path, artifact_b, refs."""
-    from artifact_a import variant_path
+    from source_refs import variant_path
     import paper_synthesis
     sub_dir = Path(data_dir) / submission_id
     a = _load(variant_path(sub_dir, submission_id, "artifact_a", variant))

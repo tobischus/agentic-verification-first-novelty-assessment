@@ -230,7 +230,7 @@ def prepare(row: dict, model: str, grobid: str, k: int, wait: int = 0) -> bool:
     key, pdf = row["key"], row["pdf"]
     cmd = [sys.executable, str(REPO / "src" / "novelty_assessment" / "orchestrator.py"),
            "--data-dir", str(DATA), "--submission-id", key, "--pdf", str(pdf),
-           "--model", model, "--grobid-server", grobid, "--k", str(k), "--no-hitl"]
+           "--model", model, "--grobid-server", grobid, "--no-hitl"]
     for attempt in (1, 2):
         if not wait_for_grobid(grobid, wait if attempt == 1 else max(wait, 60)):
             print(f"\n=== {key} === SKIPPED: GROBID unreachable at {grobid}", flush=True)

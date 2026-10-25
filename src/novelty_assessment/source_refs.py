@@ -11,7 +11,14 @@ sorted by title (case-insensitively), ties broken by their own id, and numbered 
 in that order. Callers pass the SAME claim order they display, so two callers reading the
 same artifact cannot disagree.
 """
+from pathlib import Path
 from typing import Iterable, Optional
+
+
+def variant_path(sub_dir: Path, submission_id: str, kind: str, variant: str = "") -> Path:
+    """{id}_{kind}.json, or {id}_{kind}_{variant}.json for the agent and linear variants."""
+    tail = f"_{variant}" if variant else ""
+    return sub_dir / f"{submission_id}_{kind}{tail}.json"
 
 
 def paper_id(comparison: dict) -> str:

@@ -439,7 +439,7 @@ class PaperSynthesizer:
 
 def context_for(data_dir: str, submission_id: str, variant: str = ""):
     """(findings, artifact_b_path, artifact_b) -- everything but the model call."""
-    from artifact_a import variant_path
+    from source_refs import variant_path
     sub_dir = Path(data_dir) / submission_id
     a_path = variant_path(sub_dir, submission_id, "artifact_a", variant)
     b_path = variant_path(sub_dir, submission_id, "artifact_b", variant)

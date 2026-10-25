@@ -1,4 +1,4 @@
-// REST client for the novelty-assessment backend (FastAPI).
+// REST client for the backend API.
 const BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8099'
 
 async function j(method, path, body, timeoutMs = 30000) {
@@ -13,10 +13,6 @@ async function j(method, path, body, timeoutMs = 30000) {
 }
 
 export const api = {
-  base: BASE,
-
-  // Direct URLs, not fetches: the PDF viewer streams these itself, and passing it a URL
-  // lets the browser cache and range-request the file instead of holding it in JS memory.
   pdfUrl: (id) => `${BASE}/submissions/${encodeURIComponent(id)}/pdf`,
   paperPdfUrl: (id, paperId) =>
     `${BASE}/submissions/${encodeURIComponent(id)}/papers/${encodeURIComponent(paperId)}/pdf`,
@@ -35,7 +31,6 @@ export const api = {
   state: (id) => j('GET', `/submissions/${id}/state`),
   claims: (id) => j('GET', `/submissions/${id}/claims`),
   editClaims: (id, operations) => j('PATCH', `/submissions/${id}/claims`, { operations }),
-  // HITL: reviewer sets/corrects the publication date (= retrieval cutoff)
   setDate: (id, publicationDate) => j('PATCH', `/submissions/${id}/date`, { publication_date: publicationDate }),
   papers: (id) => j('GET', `/submissions/${id}/papers`),
   editPapers: (id, edit) => j('PATCH', `/submissions/${id}/papers`, edit),
@@ -57,40 +52,18 @@ export const api = {
     return r.json()
   },
   approve: (id, cp) => j('POST', `/submissions/${id}/checkpoints/${cp}/approve`),
-  artifact: (id, name) => j('GET', `/submissions/${id}/${name}`),
-  fulltextStatus: (id) => j('GET', `/submissions/${id}/review/fulltext-status`),
   reviewClaims: (id) => j('GET', `/submissions/${id}/review/claims`),
-  // starts the agent in the background (non-blocking); returns {status: running|done, review?}
   computeClaim: (id, claimId) => j('POST', `/submissions/${id}/review/claim/${claimId}`),
-  // live progress of the running agent: {status, step, max_steps, trajectory[], cost, review?}
   claimLive: (id, claimId) => j('GET', `/submissions/${id}/review/claim/${claimId}/live`, undefined, 8000),
-  // cross-claim summary: overlapping prior work per claim (no verdict)
-  reviewSummary: (id) => j('GET', `/submissions/${id}/review/summary`),
-  // overall novelty conclusion (LLM-synthesised from the gathered evidence)
-  reviewConclusion: (id) => j('GET', `/submissions/${id}/review/conclusion`),
-  generateConclusion: (id) => j('POST', `/submissions/${id}/review/conclusion`),
-  // the claim-level assessment the export prints under a claim; a no-op when current
   ensureClaimAssessment: (id, claimId) =>
     j('POST', `/submissions/${id}/review/claim/${claimId}/assessment`, undefined, 120000),
-  // after the last claim: every claim assessment current + the paper-level novelty summary
   finalizeReview: (id) => j('POST', `/submissions/${id}/review/finalize`, undefined, 300000),
 
-  async report(id) {
-    const r = await fetch(`${BASE}/submissions/${id}/report`)
-    if (!r.ok) throw new Error((await r.text()) || r.statusText)
-    return r.text()
-  },
-
-  // The finished assessment as plain text -- the exact artifact used in the system
-  // comparison. Rendered from Artifact A + B by a template, so it is stable across calls.
   async reviewExport(id) {
     const r = await fetch(`${BASE}/submissions/${id}/review/export`)
     if (!r.ok) throw new Error((await r.text()) || r.statusText)
     return r.text()
   },
 
-  // Which document each verified quote in the export text stands in, and what id to
-  // scroll the PDF viewer to -- lets the Summary tab render the export text verbatim
-  // and still jump to a quote in the PDF, the same way the Review tab does.
   quoteIndex: (id) => j('GET', `/submissions/${id}/review/quote_index`),
 }

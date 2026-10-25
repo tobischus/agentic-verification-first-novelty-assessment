@@ -1,30 +1,22 @@
-#!/usr/bin/env python3
-"""
-Backend API for the verification-first novelty pipeline (bridge to the frontend).
+"""Backend API of the reviewer interface (Section 4.8).
 
-Exposes the orchestrator (Step 0) + the human-in-the-loop operations as REST
-endpoints. Long-running pipeline segments run in a background thread; the
-frontend polls the state and intervenes at the two HITL checkpoints:
-
-  upload PDF                -> POST   /submissions
-  poll state                -> GET    /submissions/{id}/state
-  CHECKPOINT 'claims'       -> GET/PATCH /submissions/{id}/claims  then
-                               POST   /submissions/{id}/checkpoints/claims/approve
-  CHECKPOINT 'papers'       -> GET/PATCH /submissions/{id}/papers  then
-                               POST   /submissions/{id}/checkpoints/papers/approve
-  final report              -> GET    /submissions/{id}/report   (markdown)
-  artifacts (transparency)  -> GET    /submissions/{id}/artifact_a|artifact_b|judge
+Runs the pipeline up to the two checkpoints, lets the reviewer edit claims and prior work,
+runs the comparison per claim in a background thread and serves the report.
 
 Run: PYTHONUTF8=1 python src/novelty_assessment/api.py  (serves on :8099)
 """
+import hashlib
 import json
 import os
+import re
 import sys
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import List, Optional
 
+import requests
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, PlainTextResponse
@@ -36,9 +28,11 @@ import claim_extraction as ce
 import verdict as vd
 
 DATA_DIR = os.getenv("NOVELTY_DATA_DIR", "data")
+AGENT_MODEL = os.getenv("NOVELTY_MODEL", "gpt-5.6-luna")
+CONCLUSION_MODEL = os.getenv("NOVELTY_CONCLUSION_MODEL", AGENT_MODEL)
+GROBID_SERVER = os.getenv("GROBID_SERVER", "http://localhost:8070")
 
 app = FastAPI(title="Verification-First Novelty Assessment API")
-# Research prototype: allow the local SPA dev server (and any origin) to call the API.
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
 )
@@ -52,9 +46,7 @@ def _sub_dir(sid: str) -> Path:
 
 
 def _load_json(path: Path):
-    # Tolerant of a concurrent writer: a poll may hit a file mid-write (empty/partial)
-    # -> return None instead of 500-ing the whole endpoint (e.g. {id}_progress.json,
-    # rewritten ~every 0.4s during long stages while the frontend polls /state).
+    """JSON content of a file, or None if it is missing or being written."""
     if not path.exists():
         return None
     try:
@@ -63,8 +55,8 @@ def _load_json(path: Path):
         return None
 
 
-def _start_run(sid: str, pdf: Optional[str] = None, hitl: bool = True) -> bool:
-    """Run the pipeline (to next checkpoint/completion) in a background thread."""
+def _start_run(sid: str, pdf: Optional[str] = None) -> bool:
+    """Run the pipeline to the next checkpoint in a background thread."""
     with _lock:
         if sid in _running:
             return False
@@ -72,7 +64,8 @@ def _start_run(sid: str, pdf: Optional[str] = None, hitl: bool = True) -> bool:
 
     def _target():
         try:
-            NoveltyPipeline(DATA_DIR, sid, pdf_path=pdf, hitl=hitl).run()
+            NoveltyPipeline(DATA_DIR, sid, pdf_path=pdf, hitl=True,
+                            grobid_server=GROBID_SERVER).run()
         finally:
             with _lock:
                 _running.discard(sid)
@@ -81,23 +74,16 @@ def _start_run(sid: str, pdf: Optional[str] = None, hitl: bool = True) -> bool:
     return True
 
 
-@app.get("/")
-def health():
-    return {"status": "ok", "data_dir": DATA_DIR}
-
-
 @app.post("/submissions")
 async def create_submission(file: UploadFile = File(...), submission_id: Optional[str] = None):
-    # Version every upload (Option A): re-uploading the same paper never overwrites a
-    # prior run. Each submission gets its own timestamped directory, so the orchestrator
-    # always starts a *fresh* run instead of silently resuming/skipping the old outputs.
+    """Store an uploaded PDF under a new timestamped submission id and start the pipeline."""
     base = submission_id or Path(file.filename).stem
     sid = f"{base}__{time.strftime('%Y%m%d-%H%M%S')}"
     d = _sub_dir(sid)
     d.mkdir(parents=True, exist_ok=True)
     pdf = d / f"{sid}.pdf"
     pdf.write_bytes(await file.read())
-    _start_run(sid, str(pdf), hitl=True)
+    _start_run(sid, str(pdf))
     return {"submission_id": sid, "base_id": base, "status": "started"}
 
 
@@ -107,14 +93,10 @@ def get_state(sid: str):
     if state is None:
         raise HTTPException(404, "no such submission")
     state["running"] = sid in _running
-    # Live sub-progress of the current long stage (retrieval / artifact_a), if any.
     prog = _load_json(_sub_dir(sid) / f"{sid}_progress.json")
     if prog is not None:
         state["progress"] = prog
     return state
-
-
-# ----------------------------- checkpoint 'claims' ----------------------------- #
 
 
 @app.get("/submissions/{sid}/claims")
@@ -122,8 +104,6 @@ def get_claims(sid: str):
     doc = _load_json(_sub_dir(sid) / f"{sid}_claims.json")
     if doc is None:
         raise HTTPException(404, "claims not ready")
-    # Ensure the title + submission date (used for the retrieval cutoff) are present,
-    # backfilling from {id}.json for docs produced before these fields were added.
     meta = _load_json(_sub_dir(sid) / f"{sid}.json") or {}
     for k in ("title", "publication_date", "year", "date_source"):
         if not doc.get(k) and meta.get(k) is not None:
@@ -146,6 +126,7 @@ class ClaimOps(BaseModel):
 
 @app.patch("/submissions/{sid}/claims")
 def edit_claims(sid: str, ops: ClaimOps):
+    """Claims checkpoint: accept, edit, delete or add claims."""
     path = _sub_dir(sid) / f"{sid}_claims.json"
     doc = _load_json(path)
     if doc is None:
@@ -175,12 +156,7 @@ class DateEdit(BaseModel):
 
 @app.patch("/submissions/{sid}/date")
 def set_date(sid: str, d: DateEdit):
-    """HITL: reviewer sets/corrects the submission's publication date (= the
-    retrieval cutoff). Needed when the automatic lookup cannot resolve it, e.g.
-    a paper renamed between arXiv v1 and the reviewed version. The date should be
-    the FIRST public disclosure (arXiv v1), since novelty is judged at disclosure.
-    Updates {id}.json (read by retrieval + the agent's admissibility rule) and
-    mirrors into {id}_claims.json (read by the frontend header)."""
+    """Set the submission date t(S) by hand when it could not be determined."""
     val = (d.publication_date or "").strip()
     try:
         time.strptime(val, "%Y-%m-%d")
@@ -194,16 +170,13 @@ def set_date(sid: str, d: DateEdit):
     for doc, path in ((meta, meta_path),
                       (_load_json(sub / f"{sid}_claims.json"), sub / f"{sid}_claims.json")):
         if doc is None:
-            continue  # claims doc may not exist yet; {id}.json alone is fine
+            continue
         doc["publication_date"] = val
         doc["year"] = val[:4]
         doc["date_source"] = "reviewer"
         doc["date_needs_review"] = False
         path.write_text(json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
     return {"saved": True, "publication_date": val, "year": val[:4], "date_source": "reviewer"}
-
-
-# ----------------------------- checkpoint 'papers' ----------------------------- #
 
 
 def _pdf_path(sid: str, paper_id: str) -> Path:
@@ -215,8 +188,6 @@ def get_papers(sid: str):
     rp = _load_json(_sub_dir(sid) / "related_work_data" / "ranked_papers.json")
     if rp is None:
         raise HTTPException(404, "papers not ready")
-    # PDF availability only -- whether GROBID has parsed a paper's full text is a
-    # separate, later concern decided per deep dive during Review (not shown here).
     for p in rp:
         pp = _pdf_path(sid, p.get("paper_id", ""))
         p["pdf_available"] = pp.exists() and pp.stat().st_size > 0
@@ -225,11 +196,7 @@ def get_papers(sid: str):
 
 @app.post("/submissions/{sid}/papers/{paper_id}/pdf")
 async def upload_paper_pdf(sid: str, paper_id: str, file: UploadFile = File(...)):
-    """HITL: reviewer uploads a PDF for an EXISTING pool paper that the automatic
-    download (S2 openAccessPdf / arXiv / Unpaywall) could not fetch -- e.g. a
-    publisher blocks automated downloads (403) even though the paper is open access
-    in a browser. Only stores the PDF; GROBID parsing happens later, on demand, if
-    this paper is deep-dived (see agent/tools.py ensure_fulltext)."""
+    """Prior-work checkpoint: upload the PDF of a pool paper that could not be downloaded."""
     rp = _load_json(_sub_dir(sid) / "related_work_data" / "ranked_papers.json")
     if rp is None or not any(p.get("paper_id") == paper_id for p in rp):
         raise HTTPException(404, "paper not in the related-work pool")
@@ -242,16 +209,7 @@ async def upload_paper_pdf(sid: str, paper_id: str, file: UploadFile = File(...)
     return {"paper_id": paper_id, "pdf_available": True}
 
 
-# --------------------------- PDFs for the reader ---------------------------- #
-# The split view shows the reviewer the document a quote was taken from, beside the
-# quote. Both endpoints stream the file the pipeline already has on disk -- nothing is
-# converted or re-rendered, so what the reviewer checks against is the same artifact
-# GROBID parsed. Declared here, above the /{sid}/{artifact} catch-all, which would
-# otherwise swallow /{sid}/pdf and try to read it as JSON.
-
 def _submission_pdf_path(sid: str) -> Optional[Path]:
-    """The uploaded manuscript. Normally {sid}.pdf; the recorded path wins if a run was
-    started from a file elsewhere on disk."""
     recorded = (_load_json(_sub_dir(sid) / f"{sid}_pipeline_state.json") or {}).get("pdf_path")
     for cand in (Path(recorded) if recorded else None, _sub_dir(sid) / f"{sid}.pdf"):
         if cand and cand.exists():
@@ -264,16 +222,12 @@ def submission_pdf(sid: str):
     path = _submission_pdf_path(sid)
     if path is None:
         raise HTTPException(404, "no PDF stored for this submission")
-    # inline: the viewer renders it in place rather than offering a download
     return FileResponse(path, media_type="application/pdf",
                         headers={"Content-Disposition": f'inline; filename="{sid}.pdf"'})
 
 
 @app.get("/submissions/{sid}/papers/{paper_id}/pdf")
 def paper_pdf(sid: str, paper_id: str):
-    """A related-work paper's PDF -- downloaded by the fetch_pdfs stage or uploaded by
-    the reviewer. Both land in the same place, so a manually added paper reads exactly
-    like a retrieved one."""
     path = _pdf_path(sid, paper_id)
     if not path.exists():
         raise HTTPException(404, "no PDF stored for this paper")
@@ -282,12 +236,13 @@ def paper_pdf(sid: str, paper_id: str):
 
 
 class PaperEdit(BaseModel):
-    remove: List[str] = []            # paper_ids to drop from the pool
-    add: List[dict] = []              # papers to add (need paper_id, title, abstract)
+    remove: List[str] = []
+    add: List[dict] = []
 
 
 @app.patch("/submissions/{sid}/papers")
 def edit_papers(sid: str, edit: PaperEdit):
+    """Prior-work checkpoint: remove papers from the pool or add given records."""
     path = _sub_dir(sid) / "related_work_data" / "ranked_papers.json"
     rp = _load_json(path)
     if rp is None:
@@ -303,9 +258,6 @@ def edit_papers(sid: str, edit: PaperEdit):
     return {"count": len(rp), "papers": rp}
 
 
-# ----- add a related paper by DOI/arXiv/title (Semantic Scholar) or PDF (GROBID) ----- #
-
-
 def _norm_title(s: str) -> str:
     return "".join((s or "").lower().split()).replace("-", "")
 
@@ -314,7 +266,7 @@ _EMB_MODEL = None
 
 
 def _embed_model():
-    """Lazily load the same SPECTER2 model the retrieval stage uses (cached)."""
+    """The SPECTER2 model, loaded once."""
     global _EMB_MODEL
     if _EMB_MODEL is None:
         from sentence_transformers import SentenceTransformer
@@ -323,7 +275,7 @@ def _embed_model():
 
 
 def _compute_relevance(sid: str, abstract: str):
-    """SPECTER2 cosine similarity between the submission and a paper abstract (0-1)."""
+    """Cosine similarity of the submission abstract and a paper abstract."""
     abstract = (abstract or "").strip()
     if not abstract:
         return None
@@ -360,10 +312,7 @@ def _paper_from_s2(d: dict) -> dict:
 
 
 def _resolve_paper_query(query: str):
-    """Resolve a DOI / arXiv id / URL / title to a paper dict via Semantic Scholar."""
-    import re
-    import requests
-
+    """Resolve a DOI, arXiv id or title to a paper record via Semantic Scholar."""
     q = query.strip()
     key = os.getenv("SEMANTIC_SCHOLAR_API_KEY")
     headers = {"X-API-KEY": key} if key and key != "---" else {}
@@ -381,7 +330,6 @@ def _resolve_paper_query(query: str):
             if r.status_code == 200 and r.json():
                 return _paper_from_s2(r.json())
             return None
-        # else: treat as a title -> match endpoint
         r = requests.get(f"{base}/search/match", params={"query": q, "fields": fields}, headers=headers, timeout=20)
         if r.status_code == 200:
             items = (r.json() or {}).get("data") or []
@@ -393,7 +341,7 @@ def _resolve_paper_query(query: str):
 
 
 def _resolve_paper_pdf(sid: str, raw: bytes, filename: str):
-    """Extract title + abstract from an uploaded related-work PDF via GROBID."""
+    """Title and abstract of an uploaded prior-work PDF via GROBID, enriched from Semantic Scholar."""
     from lxml import etree
 
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "preprocess"))
@@ -404,7 +352,7 @@ def _resolve_paper_pdf(sid: str, raw: bytes, filename: str):
     pdf_path = uploads / (filename or "added.pdf")
     pdf_path.write_bytes(raw)
     try:
-        tei = GrobidClient().pdf_to_tei(str(pdf_path))
+        tei = GrobidClient(GROBID_SERVER).pdf_to_tei(str(pdf_path))
         root = etree.fromstring(tei.encode("utf-8"))
         ns = {"t": "http://www.tei-c.org/ns/1.0"}
         title = (root.findtext(".//t:teiHeader//t:titleStmt/t:title", default="", namespaces=ns) or "").strip()
@@ -414,8 +362,6 @@ def _resolve_paper_pdf(sid: str, raw: bytes, filename: str):
         return None
     if not title:
         return None
-    # Enrich via Semantic Scholar (authors/year/venue + a real paper id for the link),
-    # guarded by a title-similarity check so we don't attach a wrong paper's metadata.
     enriched = _resolve_paper_query(title)
     if enriched:
         a, b = _norm_title(title), _norm_title(enriched.get("title", ""))
@@ -424,7 +370,6 @@ def _resolve_paper_pdf(sid: str, raw: bytes, filename: str):
                 enriched["abstract"] = abstract
             enriched["added_by"] = "reviewer"
             return enriched
-    import hashlib
     return {
         "paper_id": "pdf_" + hashlib.sha1(raw).hexdigest()[:12],
         "title": title, "abstract": abstract, "year": "", "venue": "", "authors": "",
@@ -435,6 +380,7 @@ def _resolve_paper_pdf(sid: str, raw: bytes, filename: str):
 
 @app.post("/submissions/{sid}/papers/add")
 async def add_related_paper(sid: str, query: Optional[str] = Form(None), file: UploadFile = File(None)):
+    """Prior-work checkpoint: add a paper by DOI, arXiv id, title or PDF."""
     path = _sub_dir(sid) / "related_work_data" / "ranked_papers.json"
     rp = _load_json(path)
     if rp is None:
@@ -448,14 +394,10 @@ async def add_related_paper(sid: str, query: Optional[str] = Form(None), file: U
         raise HTTPException(400, "could not resolve a paper from the given DOI/title/PDF")
     if any(p.get("paper_id") == paper["paper_id"] for p in rp):
         return {"added": False, "reason": "already in the list", "count": len(rp), "papers": rp}
-    # Relevance score (SPECTER2 cosine to the submission), same metric as the pipeline.
     paper["relevance"] = _compute_relevance(sid, paper.get("abstract"))
     rp.append(paper)
     path.write_text(json.dumps(rp, ensure_ascii=False, indent=2), encoding="utf-8")
     return {"added": True, "paper": paper, "count": len(rp), "papers": rp}
-
-
-# ------------------------------- approve / resume ------------------------------ #
 
 
 @app.post("/submissions/{sid}/checkpoints/{cp}/approve")
@@ -464,22 +406,8 @@ def approve_checkpoint(sid: str, cp: str):
     if not pipe.state_path.exists():
         raise HTTPException(404, "no such submission")
     pipe.approve(cp)
-    _start_run(sid, hitl=True)
+    _start_run(sid)
     return {"submission_id": sid, "approved": cp, "status": "resuming"}
-
-
-# --------------------------------- outputs ------------------------------------- #
-
-
-@app.get("/submissions/{sid}/report", response_class=PlainTextResponse)
-def get_report(sid: str):
-    p = _sub_dir(sid) / f"{sid}_report.md"
-    if not p.exists():
-        raise HTTPException(404, "report not ready")
-    return p.read_text(encoding="utf-8")
-
-
-# ---- claim-level review: assemble per-claim Explore/Evidence (verified) ---- #
 
 
 def _relevance_band(sim):
@@ -493,37 +421,12 @@ def _relevance_band(sim):
 
 
 def _source_label(content_source):
-    """Normalize artifact_a's content_source to a short UI badge."""
     cs = (content_source or "").lower()
     if cs.startswith("full"):
         return "Full text"
     if "abstract" in cs:
         return "Abstract + intro"
     return ""
-
-
-# ---- lazy, per-claim review: fetch-status + on-demand Explore/Evidence ---- #
-
-
-def _agent_budgets() -> dict:
-    """Agent budgets/thresholds (ablation hyperparameters), overridable via env."""
-    return {
-        "max_retrievals": int(os.getenv("NOVELTY_AGENT_MAX_RETRIEVALS", "3")),
-        "min_quote_tokens": int(os.getenv("NOVELTY_AGENT_MIN_QUOTE_TOKENS", "10")),
-    }
-
-
-def _run_agent(sid: str, claim: dict) -> dict:
-    """Run the per-claim agentic Explore/Verify loop -> artifact_a-compatible entry."""
-    from agent.claim_agent import ClaimNoveltyAgent
-
-    agent = ClaimNoveltyAgent(
-        DATA_DIR, sid, embedder=_embed_model(),
-        model_name=os.getenv("NOVELTY_MODEL", "gpt-4.1"),
-        grobid_server=os.getenv("GROBID_SERVER", "http://localhost:8070"),
-        **_agent_budgets(),
-    )
-    return agent.run(claim)
 
 
 def _clusters_of(ranked):
@@ -537,180 +440,83 @@ def _clusters_of(ranked):
 
 
 def _assemble_claim(entry, meta):
-    """Assemble one claim's Explore/Evidence view from its Artifact-A entry.
-
-    Verified evidence only -- synthesis and judge were removed from the per-claim
-    review (the reviewer reads the evidence; no per-claim verdict is rendered)."""
+    """The review view of one claim: ranked prior work and the detailed comparisons."""
     comps = entry.get("comparisons", []) or []
     comp_by = {c.get("paper_id"): c for c in comps}
-    frontier = entry.get("frontier")
-    examined = entry.get("examined_papers")
     explore = []
-    if frontier:  # agentic: the FULL ranked frontier -- all relevant papers, examined or not
-        for p in frontier:
-            pid = p.get("paper_id")
-            c = comp_by.get(pid, {})
-            sim = p.get("similarity")
-            explore.append({
-                "paper_id": pid, "title": p.get("title", ""),
-                "authors": p.get("authors", ""), "year": p.get("year", ""), "venue": p.get("venue", ""),
-                "relevance": sim, "band": _relevance_band(sim),
-                "provenance": p.get("source"), "cited_by_submission": p.get("cited_by_submission", False),
-                "examined": bool(p.get("examined")), "compared": bool(p.get("compared")),
-                "challenges": vd.challenges(c),
-                "overlap_degree": c.get("overlap_degree"),
-                "note": c.get("relevance_reason") or c.get("brief_note", ""),
-                "source": _source_label(c.get("content_source")) if c
-                          else ("Full text" if p.get("has_fulltext") else "Abstract + intro"),
-            })
-    elif examined:  # older agentic entries (before `frontier` existed)
-        for p in sorted(examined, key=lambda x: x.get("similarity") or 0, reverse=True):
-            pid = p.get("paper_id")
-            c = comp_by.get(pid, {})
-            m = meta.get(pid, {})
-            sim = p.get("similarity")
-            explore.append({
-                "paper_id": pid, "title": p.get("title") or c.get("title") or m.get("title", ""),
-                "authors": m.get("authors", ""), "year": m.get("year", ""), "venue": m.get("venue", ""),
-                "relevance": sim, "band": _relevance_band(sim), "provenance": p.get("source"),
-                "examined": True, "compared": bool(p.get("has_comparison")),
-                "challenges": vd.challenges(c),
-                "overlap_degree": c.get("overlap_degree"),
-                "note": c.get("relevance_reason") or c.get("brief_note", ""),
-                "source": _source_label(c.get("content_source")),
-            })
-    else:  # baseline (non-agentic builder): Explore = the comparisons themselves
-        for c in sorted(comps, key=lambda x: x.get("similarity") or 0, reverse=True):
-            m = meta.get(c.get("paper_id"), {})
-            sim = c.get("similarity")
-            explore.append({
-                "paper_id": c.get("paper_id"), "title": c.get("title"),
-                "authors": m.get("authors", ""), "year": m.get("year", ""), "venue": m.get("venue", ""),
-                "relevance": sim, "band": _relevance_band(sim), "examined": True, "compared": True,
-                "challenges": vd.challenges(c),
-                "overlap_degree": c.get("overlap_degree"),
-                "note": c.get("relevance_reason") or c.get("brief_note", ""),
-                "source": _source_label(c.get("content_source")),
-            })
+    for p in entry.get("frontier") or []:
+        pid = p.get("paper_id")
+        c = comp_by.get(pid, {})
+        sim = p.get("similarity")
+        explore.append({
+            "paper_id": pid, "title": p.get("title", ""),
+            "authors": p.get("authors", ""), "year": p.get("year", ""), "venue": p.get("venue", ""),
+            "relevance": sim, "band": _relevance_band(sim),
+            "provenance": p.get("source"), "cited_by_submission": p.get("cited_by_submission", False),
+            "examined": bool(p.get("examined")), "compared": bool(p.get("compared")),
+            "challenges": vd.challenges(c),
+            "overlap_degree": c.get("overlap_degree"),
+            "note": c.get("relevance_reason") or c.get("brief_note", ""),
+            "source": _source_label(c.get("content_source")) if c
+                      else ("Full text" if p.get("has_fulltext") else "Abstract + intro"),
+        })
     verify = []
     for c in comps:
         pairs = c.get("evidence_pairs") or []
-
-        # Keep the original 1-based pair index because EvidenceCheck's
-        # supporting_pair_indices refer to evidence_pairs in exactly this order.
+        # 1-based indices, as referenced by the evidence check's supporting_pair_indices.
         verified_indexed = [
-            (i, p)
-            for i, p in enumerate(pairs, 1)
-            if p.get("claim_quote_verified")
-            and p.get("paper_quote_verified")
+            (i, p) for i, p in enumerate(pairs, 1)
+            if p.get("claim_quote_verified") and p.get("paper_quote_verified")
         ]
-
-        # Keep the old plain list too, so existing code using verified_pairs
-        # continues to work unchanged.
-        verified_pairs = [p for _, p in verified_indexed]
         _m = meta.get(c.get("paper_id"), {})
+        check = c.get("evidence_check") or {}
         verify.append({
             "paper_id": c.get("paper_id"), "title": c.get("title"),
-            # authors/year for the reviewer's context (fall back to the pool meta for
-            # claims computed before authors were stored on the comparison itself)
             "authors": c.get("authors") or _m.get("authors", ""),
             "year": c.get("year") or _m.get("year", ""),
             "challenges": vd.challenges(c),
             "status": c.get("refutation_status"), "analysis": c.get("brief_note", ""),
             "source": _source_label(c.get("content_source")),
             "depth": c.get("depth"),
-            # exact section titles read in full for this comparison (shown as a box)
             "sections_used": c.get("sections_used", []),
-            # outcome of the on-demand GROBID fetch for this deep dive (None = never
-            # attempted, e.g. an abstract-only triage comparison)
             "fulltext_fetch_status": c.get("fulltext_fetch_status"),
             "overlap_degree": c.get("overlap_degree"),
-            # The overlap decision and its ordering are made once, in verdict.py, and sent
-            # to the UI -- rather than restated in JavaScript, where nothing keeps the two
-            # copies in step.
             "is_overlap": vd.is_overlap(c),
             "overlap_rank": vd.degree_rank(vd.degree(c)),
             "overlap_dimensions": c.get("overlap_dimensions", []),
             "what_is_shared": c.get("what_is_shared", ""),
             "submission_delta": c.get("submission_delta", ""),
-            # section-based deep dive: narrative of how this paper realizes the claim
-            # (segments of prose + inline verified quotes) + the overlap assessment
             "paper_realization": c.get("paper_realization", []),
             "assessment": c.get("assessment", ""),
-            # The claim-evidence pairs: a sentence of the SUBMISSION beside the prior
-            # paper's own sentence saying the same thing, each side already checked
             "evidence": [
-                {
-                    "pair_index": i,
-                    "claim_quote": p.get("claim_quote"),
-                    "paper_quote": p.get("paper_quote"),
-                    "rationale": p.get("rationale"),
-                }
+                {"pair_index": i, "claim_quote": p.get("claim_quote"),
+                 "paper_quote": p.get("paper_quote"), "rationale": p.get("rationale")}
                 for i, p in verified_indexed
             ],
-
-            "verified": len(verified_pairs) > 0,
-
-            "decision_trace": list(
-                ((c.get("map_diag") or {}).get("loop") or [])
-            ),
-
-            "evidence_status": (
-                (c.get("evidence_check") or {}).get("status")
-            ),
-
-            "supporting_pair_indices": (
-                (c.get("evidence_check") or {}).get(
-                    "supporting_pair_indices", []
-                )
-            ),
-
-            "evidence_reasoning": (
-                (c.get("evidence_check") or {}).get(
-                    "reasoning", ""
-                )
-            ),
-
-            "grounded_pairs": len(verified_pairs),
-
+            "verified": bool(verified_indexed),
+            "decision_trace": list((c.get("map_diag") or {}).get("loop") or []),
+            "evidence_status": check.get("status"),
+            "supporting_pair_indices": check.get("supporting_pair_indices", []),
+            "evidence_reasoning": check.get("reasoning", ""),
+            "grounded_pairs": len(verified_indexed),
             "insufficient": bool(c.get("insufficient")),
-
-            "unresolved": bool(
-                c.get("unresolved") or c.get("insufficient")
-            ),
-
-            "unresolved_reason": c.get(
-                "unresolved_reason", ""
-            ),
-
-            "unresolved_deficit": c.get(
-                "unresolved_deficit", ""
-            ),
-
-            "paper_state": c.get(
-                "paper_state", ""
-            ),
+            "unresolved": bool(c.get("unresolved") or c.get("insufficient")),
+            "unresolved_reason": c.get("unresolved_reason", ""),
+            "unresolved_deficit": c.get("unresolved_deficit", ""),
+            "paper_state": c.get("paper_state", ""),
         })
     return {
         "claim_id": entry.get("claim_id"),
         "claim_text": entry.get("claim_text") or entry.get("claim_name", ""),
-        # section-based understanding of what the SUBMISSION does for this claim
-        # (verified-quote segments), shown between the claim box and the evidence
         "claim_realization": entry.get("claim_realization", []),
         "explore": explore, "verify": verify,
-        # wall-clock breakdown per phase (understand_submission/triage/deep_dive/
-        # reentry/other/total + per-deep-dive-paper parse-vs-compare split) so the reviewer
-        # can see what makes a claim slow -- rendered as a timing panel in the Review UI.
         "timings": entry.get("timings"),
-        # agentic transparency: how the loop reached its evidence + whether it was sufficient
         "agent": {
             "verdict": entry.get("agent_verdict"),
             "evidence_sufficient": entry.get("evidence_sufficient", True),
-
             "review_complete": entry.get("review_complete", True),
             "unresolved_count": entry.get("unresolved_count", 0),
             "unresolved_papers": entry.get("unresolved_papers", []),
-
             "stop_reason": entry.get("stop_reason"),
             "retrieval_rounds": entry.get("retrieval_rounds", 0),
             "pool_sources": entry.get("pool_sources", {}),
@@ -721,7 +527,7 @@ def _assemble_claim(entry, meta):
 
 @app.get("/submissions/{sid}/review/claims")
 def review_claims(sid: str):
-    """The claim list + reference count + clusters that drive the review walkthrough."""
+    """Claim list of the review, with the computed claims marked."""
     claims_doc = _load_json(_sub_dir(sid) / f"{sid}_claims.json")
     if claims_doc is None:
         raise HTTPException(404, "claims not ready")
@@ -737,11 +543,9 @@ def review_claims(sid: str):
             "clusters": _clusters_of(ranked), "claims": claims}
 
 
-# The agent loop is long-running, so a claim is computed in a BACKGROUND thread that
-# streams progress (trajectory + running token cost) into a live file the frontend polls.
-_claim_running = set()         # (sid, claim_id) currently computing
+_claim_running = set()
 _claim_lock = threading.Lock()
-_artifact_lock = threading.Lock()  # serialise read-modify-write of artifact_a/b.json
+_artifact_lock = threading.Lock()
 
 
 def _live_path(sid: str, cid: str) -> Path:
@@ -755,28 +559,7 @@ def _write_live(sid: str, cid: str, payload: dict):
         pass
 
 
-def _persist_claim_cost(sid: str, cid: str, cost: dict):
-    p = _sub_dir(sid) / f"{sid}_agent_cost.json"
-    doc = _load_json(p) or {"per_claim": {}}
-    doc.setdefault("per_claim", {})[cid] = {**(cost or {}), "at": time.strftime("%Y-%m-%d %H:%M:%S")}
-    try:
-        p.write_text(json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
-    except Exception:
-        pass
-
-
-def _snapshot_cache(sid: str):
-    """Best-effort: fold this submission's freshly-written downstream artefacts (Artifact A,
-    conclusion, agent cost) into the per-PDF cache, so a re-upload of the same paper restores
-    the finished agent results instead of re-running the (slow, paid) per-claim agent."""
-    try:
-        NoveltyPipeline(DATA_DIR, sid).snapshot_cache()
-    except Exception:
-        pass
-
-
 def _assembled_for(sid: str, cid: str):
-    """Assemble one finished claim's Explore/Evidence view from artifact_a."""
     sub = _sub_dir(sid)
     a = _load_json(sub / f"{sid}_artifact_a.json") or {"claims": []}
     ae = next((e for e in a.get("claims", []) if e.get("claim_id") == cid), None)
@@ -787,20 +570,8 @@ def _assembled_for(sid: str, cid: str):
     return _assemble_claim(ae, meta)
 
 
-def _conclusion_model() -> str:
-    """The model that writes the report's prose (claim assessment, novelty summary): the
-    one the evaluated batch path uses (eval/out/e1_extra/run_all.py), not gpt-4.1."""
-    return os.getenv("NOVELTY_CONCLUSION_MODEL", os.getenv("NOVELTY_MODEL", "gpt-5.6-luna"))
-
-
 def _ensure_claim_assessments(sid: str, only: Optional[str] = None) -> List[str]:
-    """Step 5c for the walkthrough: write per_claim[i].claim_assessment where it is missing
-    or stale, so the Review tab shows the same claim-level assessment the export prints.
-
-    Same module, prompt and settings as the batch path (claim_assessment.build). The source
-    ids it cites (R#) are numbered over every claim computed so far, so a later claim can
-    renumber them and mark an earlier assessment stale -- which is why this checks staleness
-    instead of writing once, and why finalize runs it over all claims again."""
+    """Write the claim explanations (first report stage) where missing or stale."""
     import claim_assessment as ca
     contexts, b_path, b, refs = ca.contexts_for(DATA_DIR, sid)
     stored = {v.get("claim_id"): v.get("claim_assessment") for v in b.get("per_claim", [])}
@@ -808,13 +579,12 @@ def _ensure_claim_assessments(sid: str, only: Optional[str] = None) -> List[str]
             and x[0] in stored and (not stored[x[0]] or ca.is_stale(stored[x[0]], x[4]))]
     if not todo:
         return []
-    assessor = ca.ClaimAssessor(model_name=_conclusion_model())
-    from concurrent.futures import ThreadPoolExecutor
+    assessor = ca.ClaimAssessor(model_name=CONCLUSION_MODEL)
     with ThreadPoolExecutor(max_workers=6) as pool:
         results = list(pool.map(lambda x: assessor.assess(x[4], x[2], x[3], refs), todo))
     by_id = {x[0]: r for x, r in zip(todo, results)}
     with _artifact_lock:
-        b = _load_json(b_path) or b  # re-read: a claim worker may have written meanwhile
+        b = _load_json(b_path) or b
         for v in b.get("per_claim", []):
             if v.get("claim_id") in by_id:
                 v["claim_assessment"] = by_id[v["claim_id"]]
@@ -823,10 +593,7 @@ def _ensure_claim_assessments(sid: str, only: Optional[str] = None) -> List[str]
 
 
 def _claim_worker(sid: str, cid: str):
-    """Run the agent for one claim, streaming progress, then persist evidence + cost.
-
-    The per-claim review is evidence-only: no synthesis (Artifact B) or judge stage is
-    run here -- the agent's verified comparison ledger (Artifact A) is the whole review."""
+    """Run the agent for one claim, stream its progress, then store the results."""
     try:
         sub = _sub_dir(sid)
         claims_doc = _load_json(sub / f"{sid}_claims.json") or {"claims": []}
@@ -835,94 +602,41 @@ def _claim_worker(sid: str, cid: str):
         if claim is None:
             _write_live(sid, cid, {"status": "error", "claim_id": cid, "error": "claim not found"})
             return
-        budgets = _agent_budgets()
         _write_live(sid, cid, {"status": "running", "claim_id": cid, "step": 0,
                                "max_steps": 0, "trajectory": [],
                                "cost": {"prompt_tokens": 0, "completion_tokens": 0, "usd": 0.0}})
 
         from agent.claim_agent import ClaimNoveltyAgent
         agent = ClaimNoveltyAgent(
-            DATA_DIR, sid, embedder=_embed_model(),
-            model_name=os.getenv("NOVELTY_MODEL", "gpt-4.1"),
-            grobid_server=os.getenv("GROBID_SERVER", "http://localhost:8070"), **budgets,
+            DATA_DIR, sid, embedder=_embed_model(), model_name=AGENT_MODEL,
+            grobid_server=GROBID_SERVER,
+            max_retrievals=int(os.getenv("NOVELTY_AGENT_MAX_RETRIEVALS", "1")),
         )
         entry = agent.run(claim, progress_cb=lambda info: _write_live(sid, cid, info))
 
-                # 1. Artifact A kurz und atomar schreiben.
         with _artifact_lock:
             a_path = sub / f"{sid}_artifact_a.json"
-            a = _load_json(a_path) or {
-                "submission_id": sid,
-                "agentic": True,
-                "n_related_pool": 0,
-                "claims": [],
-            }
+            a = _load_json(a_path) or {"submission_id": sid, "agentic": True,
+                                       "n_related_pool": 0, "claims": []}
+            a["claims"] = [e for e in a["claims"] if e.get("claim_id") != cid] + [entry]
+            a["n_related_pool"] = (sum(entry.get("pool_sources", {}).values())
+                                   or a.get("n_related_pool", 0))
+            a_path.write_text(json.dumps(a, ensure_ascii=False, indent=2), encoding="utf-8")
 
-            a["claims"] = [
-                e for e in a["claims"]
-                if e.get("claim_id") != cid
-            ] + [entry]
-
-            a["n_related_pool"] = (
-                sum(entry.get("pool_sources", {}).values())
-                or a.get("n_related_pool", 0)
-            )
-
-            a_path.write_text(
-                json.dumps(a, ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
-
-        # 2. LLM-Rationale AUSSERHALB des Locks erzeugen.
-        from artifact_b import ArtifactBBuilder
-
-        fixed_fallback = {
-            "claim_id": entry["claim_id"],
-            "claim_name": entry.get("claim_name", ""),
-            "verdict": entry.get("agent_verdict", "uncertain"),
-            "rationale": "",
-            "challenging_papers": [
-                c["title"]
-                for c in entry.get("comparisons", [])
-                if vd.challenges(c)
-            ],
-        }
-
-        try:
-            model = os.getenv(
-                "NOVELTY_CONCLUSION_MODEL",
-                os.getenv("NOVELTY_MODEL", "gpt-5.6-luna"),
-            )
-            claim_b = ArtifactBBuilder(
-                model_name=model
-            ).build_one(entry)
-        except Exception:
-            claim_b = fixed_fallback
-
-        # 3. Artifact B wieder kurz unter Lock aktualisieren.
-        with _artifact_lock:
             b_path = sub / f"{sid}_artifact_b.json"
+            b_doc = _load_json(b_path) or {"submission_id": sid,
+                                           "generated_from": f"{sid}_artifact_a.json",
+                                           "per_claim": [], "overall_assessment": ""}
+            b_doc["per_claim"] = [v for v in b_doc.get("per_claim", []) if v.get("claim_id") != cid]
+            b_doc["per_claim"].append({
+                "claim_id": entry["claim_id"],
+                "claim_name": entry.get("claim_name", ""),
+                "verdict": entry.get("agent_verdict"),
+                "rationale": "",
+                "challenging_papers": [],
+            })
+            b_path.write_text(json.dumps(b_doc, ensure_ascii=False, indent=2), encoding="utf-8")
 
-            b_doc = _load_json(b_path) or {
-                "submission_id": sid,
-                "generated_from": f"{sid}_artifact_a.json",
-                "per_claim": [],
-                "overall_assessment": "",
-            }
-
-            b_doc["per_claim"] = [
-                v for v in b_doc.get("per_claim", [])
-                if v.get("claim_id") != cid
-            ]
-            b_doc["per_claim"].append(claim_b)
-
-            b_path.write_text(
-                json.dumps(b_doc, ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
-
-        # 4. The claim-level assessment the export prints under this claim (step 5c).
-        #    Not fatal: without it the export falls back to the recorded rationale.
         _write_live(sid, cid, {"status": "running", "claim_id": cid,
                                "step": len(entry.get("trajectory", []) or []),
                                "max_steps": 0,
@@ -934,10 +648,6 @@ def _claim_worker(sid: str, cid: str):
         except Exception as e:
             print(f"[{sid}] claim assessment for {cid} skipped: {repr(e)[:160]}")
 
-        _persist_claim_cost(sid, cid, entry.get("cost", {}))
-        # Fold the just-written Artifact A + cost into the per-PDF cache so a re-upload of
-        # this paper restores this claim's agent result instead of recomputing it.
-        _snapshot_cache(sid)
         _write_live(sid, cid, {
             "status": "done", "claim_id": cid,
             "step": len(entry.get("trajectory", []) or []), "max_steps": 0,
@@ -955,9 +665,7 @@ def _claim_worker(sid: str, cid: str):
 
 @app.post("/submissions/{sid}/review/claim/{claim_id}")
 def compute_claim(sid: str, claim_id: str):
-    """Start (or reuse) the agentic per-claim assessment. Non-blocking: returns
-    immediately with a status; the frontend polls .../live for the streamed
-    trajectory + cost, and the assembled review once done."""
+    """Start the comparison for one claim; progress is polled via .../live."""
     sub = _sub_dir(sid)
     if _load_json(sub / f"{sid}_claims.json") is None:
         raise HTTPException(404, "claims not ready")
@@ -974,9 +682,7 @@ def compute_claim(sid: str, claim_id: str):
 
 @app.post("/submissions/{sid}/review/claim/{claim_id}/assessment")
 def claim_assessment_for(sid: str, claim_id: str):
-    """Make sure a computed claim carries a current claim-level assessment (step 5c).
-    A no-op when it already does; used when the walkthrough opens a claim that was
-    computed earlier or restored from the cache."""
+    """Make sure a computed claim has a current explanation."""
     a = _load_json(_sub_dir(sid) / f"{sid}_artifact_a.json") or {"claims": []}
     if not any(e.get("claim_id") == claim_id for e in a.get("claims", [])):
         raise HTTPException(404, "claim not computed yet")
@@ -988,9 +694,7 @@ def claim_assessment_for(sid: str, claim_id: str):
 
 @app.post("/submissions/{sid}/review/finalize")
 def finalize_review(sid: str):
-    """After the last claim: bring every claim-level assessment up to date, then write the
-    paper-level novelty summary (step 5b) -- the two model-written parts the export prints,
-    with the settings of the evaluated batch path. Idempotent: current parts are kept."""
+    """Update all claim explanations and write the paper-level summary."""
     sub = _sub_dir(sid)
     if _load_json(sub / f"{sid}_artifact_a.json") is None:
         raise HTTPException(404, "no claims computed yet -- run the claim-level review first")
@@ -1007,312 +711,28 @@ def finalize_review(sid: str):
         stored = b.get("paper_summary")
         if not stored or paper_synthesis.is_stale(stored, findings):
             with _artifact_lock:
-                paper_synthesis.build(DATA_DIR, sid, model_name=_conclusion_model())
+                paper_synthesis.build(DATA_DIR, sid, model_name=CONCLUSION_MODEL)
             summary_written = True
     except Exception as e:
         raise HTTPException(502, f"novelty summary failed: {repr(e)[:200]}")
-    _snapshot_cache(sid)
     return {"status": "done", "claims_regenerated": regenerated,
             "summary_written": summary_written}
 
 
 @app.get("/submissions/{sid}/review/claim/{claim_id}/live")
 def claim_live(sid: str, claim_id: str):
-    """Live progress of an in-flight claim: {status, step, trajectory[], cost, review?}."""
     live = _load_json(_live_path(sid, claim_id))
     if live is not None:
         return live
-    rev = _assembled_for(sid, claim_id)  # computed in an earlier session -> no live file
+    rev = _assembled_for(sid, claim_id)
     if rev is not None:
         return {"status": "done", "claim_id": claim_id, "trajectory": [], "cost": {}, "review": rev}
     return {"status": "idle", "claim_id": claim_id}
 
 
-@app.get("/submissions/{sid}/agent-cost")
-def agent_cost(sid: str):
-    """Aggregate agent token cost across all computed claims (money spent so far)."""
-    doc = _load_json(_sub_dir(sid) / f"{sid}_agent_cost.json") or {"per_claim": {}}
-    per = doc.get("per_claim", {})
-    return {
-        "per_claim": per,
-        "total_usd": round(sum((v.get("usd") or 0) for v in per.values()), 4),
-        "total_prompt_tokens": sum((v.get("prompt_tokens") or 0) for v in per.values()),
-        "total_completion_tokens": sum((v.get("completion_tokens") or 0) for v in per.values()),
-        "model": os.getenv("NOVELTY_MODEL", "gpt-4.1"),
-    }
-
-
-@app.get("/submissions/{sid}/pipeline-cost")
-def pipeline_cost(sid: str):
-    """Aggregate token/cost across the WHOLE run so far -- document processing
-    (title fallback), claim extraction, retrieval, and the per-claim review agent --
-    so the reviewer sees what an entire run costs, not just one stage. Works
-    incrementally (pipeline_state.json's metrics are updated per-stage as it runs),
-    so this can be shown from the Claims tab onward, not only after Review."""
-    sub = _sub_dir(sid)
-    state = _load_json(sub / f"{sid}_pipeline_state.json") or {}
-    metrics = state.get("metrics", {})
-
-    stages = {}
-    total_usd, total_pt, total_ct = 0.0, 0, 0
-    for name in ("document_processing", "claim_extraction", "retrieval", "fetch_pdfs"):
-        m = metrics.get(name) or {}
-        usd = float(m.get("usd") or 0.0)
-        pt, ct = int(m.get("prompt_tokens") or 0), int(m.get("completion_tokens") or 0)
-        if name == "retrieval":
-            # retrieval's keyword-generation + RankGPT reranking cost is tracked
-            # separately in metadata.json (litellm cost_per_token) -- not all of it
-            # flows through the langchain callback that captures the other stages,
-            # so this is ADDITIVE to metrics['retrieval']['usd'], not a duplicate.
-            rw_meta = _load_json(sub / "related_work_data" / "metadata.json") or {}
-            usd += float(rw_meta.get("total_cost") or 0.0)
-        stages[name] = {"usd": round(usd, 4), "prompt_tokens": pt, "completion_tokens": ct}
-        total_usd += usd
-        total_pt += pt
-        total_ct += ct
-
-    agent = _load_json(sub / f"{sid}_agent_cost.json") or {"per_claim": {}}
-    per = agent.get("per_claim", {})
-    review = {
-        "usd": round(sum((v.get("usd") or 0) for v in per.values()), 4),
-        "prompt_tokens": sum((v.get("prompt_tokens") or 0) for v in per.values()),
-        "completion_tokens": sum((v.get("completion_tokens") or 0) for v in per.values()),
-        "n_claims": len(per),
-    }
-    stages["review"] = review
-    total_usd += review["usd"]
-    total_pt += review["prompt_tokens"]
-    total_ct += review["completion_tokens"]
-
-    return {
-        "submission_id": sid,
-        "stages": stages,
-        "total_usd": round(total_usd, 4),
-        "total_prompt_tokens": total_pt,
-        "total_completion_tokens": total_ct,
-        "model": os.getenv("NOVELTY_MODEL", state.get("model") or "gpt-4.1"),
-    }
-
-
-@app.get("/submissions/{sid}/review/claim/{claim_id}/trajectory")
-def claim_trajectory(sid: str, claim_id: str):
-    """The agent's step-by-step trajectory + stop reason for one claim (transparency)."""
-    a = _load_json(_sub_dir(sid) / f"{sid}_artifact_a.json") or {"claims": []}
-    e = next((x for x in a.get("claims", []) if x.get("claim_id") == claim_id), None)
-    if e is None:
-        raise HTTPException(404, "claim not computed yet")
-    return {
-        "claim_id": claim_id,
-        "agent_verdict": e.get("agent_verdict"),
-        "evidence_sufficient": e.get("evidence_sufficient"),
-        "stop_reason": e.get("stop_reason"),
-        "retrieval_rounds": e.get("retrieval_rounds", 0),
-        "pool_sources": e.get("pool_sources", {}),
-        "candidates_examined": e.get("candidates_examined"),
-        "trajectory": e.get("trajectory", []),
-    }
-
-
-@app.get("/submissions/{sid}/review/summary")
-def review_summary(sid: str):
-    """Cross-claim summary of the evidence-based review: for every computed claim, the
-    prior-work papers that OVERLAP the claim (the important contexts) with their overlap
-    degree + comparison. No final novelty verdict -- just the gathered contexts."""
-    sub = _sub_dir(sid)
-    a = _load_json(sub / f"{sid}_artifact_a.json")
-    if a is None:
-        raise HTTPException(404, "no claims computed yet")
-    claims_doc = _load_json(sub / f"{sid}_claims.json") or {"claims": []}
-    order = [c["id"] for c in claims_doc.get("claims", []) if c.get("status") != "rejected"]
-    a_by = {e.get("claim_id"): e for e in a.get("claims", [])}
-    ranked = _load_json(sub / "related_work_data" / "ranked_papers.json") or []
-    meta = {p.get("paper_id"): p for p in ranked}
-
-    out_claims, distinct_overlap = [], set()
-    for cid in order:
-        e = a_by.get(cid)
-        if e is None:
-            continue
-        comps = e.get("comparisons", []) or []
-        overlaps = []
-        for c in comps:
-            deg = vd.degree(c)
-            challenges = vd.challenges(c)
-            if not vd.is_overlap(c):
-                continue
-            _m = meta.get(c.get("paper_id"), {})
-            distinct_overlap.add(c.get("paper_id"))
-            overlaps.append({
-                "paper_id": c.get("paper_id"), "title": c.get("title"),
-                "authors": c.get("authors") or _m.get("authors", ""),
-                "year": c.get("year") or _m.get("year", ""),
-                "overlap_degree": deg, "challenges": challenges,
-                "what_is_shared": c.get("what_is_shared", ""),
-                "submission_delta": c.get("submission_delta", ""),
-                "assessment": c.get("assessment", ""),
-                "unresolved": bool(
-                    c.get("unresolved") or c.get("insufficient")
-                ),
-                "unresolved_reason": c.get(
-                    "unresolved_reason", ""
-                ),
-                "unresolved_deficit": c.get(
-                    "unresolved_deficit", ""
-                ),
-                "paper_realization": c.get("paper_realization", []),
-                # The claim-evidence pairs, so the summary shows the review's actual result
-                # and not only prose about it. Pre-filtered to pairs verified on BOTH sides.
-                "evidence": [{"claim_quote": q.get("claim_quote"),
-                              "paper_quote": q.get("paper_quote"),
-                              "rationale": q.get("rationale")}
-                             for q in (c.get("evidence_pairs") or [])
-                             if q.get("claim_quote_verified") and q.get("paper_quote_verified")],
-                "sections_used": c.get("sections_used", []),
-                "cited_by_submission": c.get("cited_by_submission", False),
-            })
-        overlaps.sort(key=lambda o: (not o["challenges"], vd.degree_rank(o["overlap_degree"])))
-        out_claims.append({
-            "claim_id": cid,
-            "claim_text": e.get("claim_text") or e.get("claim_name", ""),
-            "claim_realization": e.get("claim_realization", []),
-            "n_compared": len(comps),
-            "overlaps": overlaps,
-        })
-    # Artifact B is the deliverable: the per-claim verdicts and the overall assessment that
-    # go into the battle. Merge them in here so this one endpoint returns the complete
-    # output rather than only the evidence it was derived from.
-    b = _load_json(sub / f"{sid}_artifact_b.json") or {}
-    b_by = {v.get("claim_id"): v for v in b.get("per_claim", [])}
-    for oc in out_claims:
-        e = a_by.get(oc["claim_id"]) or {}
-        v = b_by.get(oc["claim_id"]) or {}
-
-        oc["verdict"] = e.get("agent_verdict", "not_challenged")
-
-        oc["review_complete"] = e.get("review_complete", True)
-        oc["unresolved_count"] = e.get("unresolved_count", 0)
-        oc["unresolved_papers"] = e.get("unresolved_papers", [])
-
-        # Artifact B only contributes prose.
-        oc["rationale"] = v.get("rationale", "")
-
-        oc["challenging_papers"] = [
-            c["title"]
-            for c in e.get("comparisons", [])
-            if vd.challenges(c)
-        ]
-
-        oc["evidence_sufficient"] = e.get("evidence_sufficient", False)
-        oc["stop_reason"] = e.get("stop_reason", "")
-
-    return {
-        "submission_id": sid, "title": claims_doc.get("title", ""),
-        "n_claims": len(out_claims),
-        # DISTINCT overlapping papers -- a paper that overlaps several claims counts once
-        "n_overlap_papers": len(distinct_overlap),
-        "claims": out_claims,
-        "overall_assessment": b.get("overall_assessment", ""),
-        "judge": _load_json(sub / f"{sid}_judge.json"),
-        "assessment_ready": bool(b.get("overall_assessment")),
-    }
-
-
-# ----------------------- overall novelty conclusion ------------------------ #
-
-
-def _author_year(authors: str, year) -> str:
-    """'Haoyu Han, Harry Shomer, ...', '2025' -> 'Han et al. (2025)'."""
-    names = [a.strip() for a in (authors or "").split(",") if a.strip()]
-    if not names:
-        return ""
-    surname = names[0].split()[-1] if names[0].split() else names[0]
-    cite = f"{surname} et al." if len(names) > 1 else names[0]
-    return f"{cite} ({year})" if year else cite
-
-
-def _segments_text(segments) -> str:
-    return " ".join((s.get("content") or "").strip() for s in (segments or [])
-                    if (s.get("content") or "").strip())
-
-
-def _conclusion_path(sid: str) -> Path:
-    return _sub_dir(sid) / f"{sid}_conclusion.json"
-
-
-@app.get("/submissions/{sid}/review/conclusion")
-def get_conclusion(sid: str):
-    """The paper-level assessment: Artifact B's overall_assessment, plus its per-claim
-    verdicts and the Judge's evidence check. Falls back to the cached doc for runs
-    produced before the summary was unified onto Artifact B."""
-    sub = _sub_dir(sid)
-    b = _load_json(sub / f"{sid}_artifact_b.json")
-    if b and b.get("overall_assessment"):
-        cached = _load_json(_conclusion_path(sid)) or {}
-        return {"text": b["overall_assessment"],
-                "per_claim": b.get("per_claim", []),
-                "judge": _load_json(sub / f"{sid}_judge.json"),
-                "model": cached.get("model"), "generated_at": cached.get("generated_at"),
-                "n_claims": len(b.get("per_claim", []))}
-    doc = _load_json(_conclusion_path(sid))
-    if doc and doc.get("text"):
-        return doc
-    return {"text": None}
-
-
-@app.post("/submissions/{sid}/review/conclusion")
-def generate_conclusion(sid: str):
-    """Build the paper-level assessment = Artifact B, then audit it with the Judge.
-
-    Artifact B is the ONE paper-level summary: it is synthesized solely from Artifact A,
-    surfaces only both-sides-verified evidence, and is what artifact_judge checks for
-    that it stays within the evidence. The UI previously rendered a second, parallel summary
-    generated by its own
-    prompt, so the object a reviewer read was not the object that got audited. Same
-    endpoint and same response key, so the frontend is unaffected."""
-    sub = _sub_dir(sid)
-    a = _load_json(sub / f"{sid}_artifact_a.json")
-    if a is None or not a.get("claims"):
-        raise HTTPException(404, "no claims computed yet -- run the claim-level review first")
-    if not os.getenv("OPENAI_API_KEY"):
-        raise HTTPException(500, "OPENAI_API_KEY not set")
-    model = os.getenv("NOVELTY_CONCLUSION_MODEL", "gpt-4.1")
-    try:
-        from artifact_b import ArtifactBBuilder
-        from artifact_judge import Judge
-        b = ArtifactBBuilder(model_name=model).build(DATA_DIR, sid)
-    except Exception as e:
-        raise HTTPException(502, f"artifact B generation failed: {repr(e)[:200]}")
-    try:
-        import paper_synthesis
-        paper_synthesis.build(DATA_DIR, sid, model_name=model)
-        b = _load_json(sub / f"{sid}_artifact_b.json") or b
-    except Exception:
-        pass  # the per-claim assessment stands without the paper-level summary
-    judge = None
-    try:
-        judge = Judge(model_name=model).judge(DATA_DIR, sid)
-    except Exception:
-        pass  # the assessment stands on its own; the audit is additional
-    doc = {"text": b.get("overall_assessment", ""), "model": model,
-           "n_claims": len(b.get("per_claim", [])),
-           "generated_at": time.strftime("%Y-%m-%d %H:%M:%S")}
-    try:
-        _conclusion_path(sid).write_text(json.dumps(doc, ensure_ascii=False, indent=2),
-                                         encoding="utf-8")
-    except Exception:
-        pass
-    _snapshot_cache(sid)
-    return {**doc, "per_claim": b.get("per_claim", []), "judge": judge}
-
-
 @app.get("/submissions/{sid}/review/export", response_class=PlainTextResponse)
 def export_assessment(sid: str):
-    """The finished assessment as plain text -- the artifact used in the system comparison.
-
-    Rendered from Artifact A and Artifact B by a template, never by a model, so the same
-    run always exports the same bytes. Verbatim quotations appear as blockquotes and
-    everything else as prose; the checkmarks, their legend and the per-comparison section
-    lists are reader aids and stay in the UI."""
+    """The report as text, rendered from the artifacts by a template."""
     from battle_export import build
     try:
         return build(DATA_DIR, sid)
@@ -1322,22 +742,9 @@ def export_assessment(sid: str):
 
 @app.get("/submissions/{sid}/review/quote_index")
 def export_quote_index(sid: str):
-    """Which document each VERIFIED quote in the export text can be found in, and what
-    id to scroll the PDF viewer to -- the side channel that lets the Summary tab render
-    `/review/export`'s own text and still make its quotes click-to-PDF, the same way
-    the Review tab's quotes are. See battle_export.quote_index for the exact contract."""
+    """For each verified quote of the report, the document and position it is found in."""
     from battle_export import quote_index
     return quote_index(DATA_DIR, sid)
-
-
-@app.get("/submissions/{sid}/{artifact}")
-def get_artifact(sid: str, artifact: str):
-    if artifact not in ("artifact_a", "artifact_b", "judge"):
-        raise HTTPException(404, "unknown artifact")
-    doc = _load_json(_sub_dir(sid) / f"{sid}_{artifact}.json")
-    if doc is None:
-        raise HTTPException(404, f"{artifact} not ready")
-    return doc
 
 
 if __name__ == "__main__":

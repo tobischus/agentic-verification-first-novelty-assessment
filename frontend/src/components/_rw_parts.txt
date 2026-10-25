@@ -1,0 +1,265 @@
+=====TIMING
+// Human-readable duration: 2m 05s / 47.3s / 0.8s
+const dur = (s) => {
+  const v = Number(s || 0);
+  if (v >= 60) {
+    const m = Math.floor(v / 60);
+    return `${m}m ${String(Math.round(v - m * 60)).padStart(2, "0")}s`;
+  }
+  return `${v.toFixed(1)}s`;
+};
+const PHASE_LABEL = {
+  rerank: "Rerank pool (relevance)",
+  understand_submission: "Read the submission for this claim",
+  triage: "Triage whole pool (abstracts)",
+  deep_dive_total: "Deep dives (section-based compare)",
+  reentry: "Re-entry retrieval + triage",
+  other: "Indexing / bookkeeping",
+};
+const PHASE_ORDER = [
+  "rerank",
+  "understand_submission",
+  "triage",
+  "deep_dive_total",
+  "reentry",
+  "other",
+];
+
+// Wall-clock breakdown for one claim: where the time went. Almost all of it is LLM
+// latency (triage + the per-paper deep-dive comparisons); PDF parsing is ~1s each.
+function TimingPanel({ timings }) {
+  const [open, setOpen] = useState(false);
+  if (!timings || !timings.total) return null;
+  const total = Number(timings.total);
+  const rows = PHASE_ORDER.filter((k) => Number(timings[k]) > 0)
+    .map((k) => ({ k, label: PHASE_LABEL[k], s: Number(timings[k]) }))
+    .sort((a, b) => b.s - a.s);
+  const papers = timings.deep_dive_papers || [];
+  const slowest = rows[0];
+  return (
+    <div className="rv-block timing-block">
+      <div
+        className="rv-h sm timing-head"
+        onClick={() => setOpen((o) => !o)}
+        style={{ cursor: "pointer" }}
+      >
+        <span className="rv-ic">⏱️</span>
+        <h4>This claim took {dur(total)}</h4>
+        <span className="timing-toggle">
+          {open ? "hide breakdown ▲" : "show breakdown ▼"}
+        </span>
+      </div>
+      {slowest && (
+        <p className="muted rv-sub">
+          Biggest chunk: <strong>{slowest.label}</strong> ({dur(slowest.s)},{" "}
+          {Math.round((100 * slowest.s) / total)}%). This is model latency —
+          deep-dive comparisons and pool triage dominate; PDF parsing is ~1s per
+          paper.
+        </p>
+      )}
+      {open && (
+        <>
+          <div className="timing-bars">
+            {rows.map((r) => (
+              <div className="timing-row" key={r.k}>
+                <div className="tr-label">{r.label}</div>
+                <div className="tr-bar-wrap">
+                  <div
+                    className="tr-bar"
+                    style={{ width: `${Math.max(2, (100 * r.s) / total)}%` }}
+                  />
+                </div>
+                <div className="tr-val">
+                  {dur(r.s)} · {Math.round((100 * r.s) / total)}%
+                </div>
+              </div>
+            ))}
+          </div>
+          {papers.length > 0 && (
+            <div className="timing-papers">
+              <div className="tp-title">
+                Per deep-dive paper (parse vs. LLM compare)
+              </div>
+              {papers.map((p, i) => (
+                <div className="tp-row" key={i}>
+                  <div className="tp-name" title={p.title}>
+                    {p.title || p.paper_id}
+                  </div>
+                  <div className="tp-nums">
+                    <span className="tp-parse" title="PDF parsing (in-process)">
+                      parse {dur(p.parse_s)}
+                    </span>
+                    <span className="tp-cmp" title="LLM comparison">
+                      compare {dur(p.compare_s)}
+                    </span>
+                    <span className="tp-tot">= {dur(p.total_s)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+=====LIVE
+  // ---------- live progress (agent running) ----------
+  const livePanel = () => {
+    const lv = live || {};
+    const traj = lv.trajectory || [];
+    const step = lv.step || 0;
+    const maxs = lv.max_steps || 0;
+    const c = lv.cost || {};
+    const toks = (c.prompt_tokens || 0) + (c.completion_tokens || 0);
+    const paperTraces = lv.paper_traces || [];
+    return (
+      <div className="rv-block">
+        <div className="live-head">
+          <div className="spinner" />
+          <div className="live-title">
+            <strong>Agent working on claim {ci + 1}…</strong>
+            <div className="muted">{lv.last_action || "starting up"}</div>
+          </div>
+          <div className="live-metrics">
+            <span className="lm">
+              Step {step}
+              {maxs ? `/${maxs}` : ""}
+            </span>
+            <span className="lm">📄 {lv.examined ?? 0} examined</span>
+            <span className="lm">🔀 {lv.comparisons ?? 0} compared</span>
+            {(lv.retrieval_rounds ?? 0) > 0 && (
+              <span className="lm">🌐 {lv.retrieval_rounds} retrieval</span>
+            )}
+            <span className="lm cost">
+              {usd(c.usd)} · {toks.toLocaleString()} tok
+            </span>
+          </div>
+        </div>
+        {maxs > 0 && (
+          <div className="live-bar">
+            <div
+              className="live-fill"
+              style={{
+                width: `${Math.min(100, Math.round((step / maxs) * 100))}%`,
+              }}
+            />
+          </div>
+        )}
+        <div className="paper-traces" ref={trajRef}>
+          {paperTraces.length === 0 && (
+            <div className="muted">Reading prior work…</div>
+          )}
+
+          {paperTraces.map((p) => (
+            <div
+              className={
+                "paper-trace-card" + (p.insufficient ? " insufficient" : "")
+              }
+              key={p.paper_id}
+            >
+              <div className="pt-head">
+                <strong>{p.title || p.paper_id}</strong>
+
+                {p.overlap_degree && (
+                  <span className="relbadge mid">
+                    {DEGREE_LABEL[p.overlap_degree] || p.overlap_degree}
+                  </span>
+                )}
+              </div>
+
+              <div className="pt-summary">
+                <span>{p.grounded_pairs} grounded + owned pair(s)</span>
+                {p.evidence_status && (
+                  <span>evidence: {p.evidence_status}</span>
+                )}
+                {p.insufficient && <span>⚠ insufficient</span>}
+              </div>
+
+              <div className="pt-lines">
+                {(p.trace || []).filter(traceImportant).map((line, i) => (
+                  <div className="pt-line" key={i}>
+                    {prettyTrace(line)}
+                  </div>
+                ))}
+              </div>
+
+              <details className="raw-trace">
+                <summary>Full audit trace</summary>
+                {(p.trace || []).map((line, i) => (
+                  <div key={i}>{line}</div>
+                ))}
+              </details>
+            </div>
+          ))}
+
+          <details className="raw-trace global">
+            <summary>Raw execution log</summary>
+            {traj.map((t) => (
+              <div key={t.step}>
+                {t.action}: {t.detail}
+              </div>
+            ))}
+          </details>
+        </div>
+      </div>
+    );
+  };
+=====TRACES
+const traceImportant = (s = "") =>
+  s.includes("mandatory initial read") ||
+  s.includes("read_more") ||
+  s.includes("dismissal_falsification") ||
+  s.includes("dismissed after") ||
+  s.includes("SEMANTIC DEGREE:") ||
+  s.includes("GROUNDED OWNED PAIRS:") ||
+  s.includes("EVIDENCE CHECK:") ||
+  s.includes("MATERIAL AGREEMENT:") ||
+  s.includes("evidence gate REFUSED") ||
+  s.includes("evidence gate passed") ||
+  s.includes("INSUFFICIENT");
+
+const prettyTrace = (s = "") =>
+  s
+    .replace(/^\[read \d+\]\s*/, "")
+    .replace(/^\[\d+\]\s*/, "")
+    .replace("SEMANTIC DEGREE:", "Semantic comparison:")
+    .replace("GROUNDED OWNED PAIRS:", "Grounded + owned pairs:")
+    .replace("EVIDENCE CHECK: status=", "Evidence check:")
+    .replace("compared, evidence gate passed", "✓ Evidence gate passed")
+    .replace(
+      "evidence gate REFUSED -> read again:",
+      "↻ Evidence gate refused → read again:",
+    );
+=====POLL
+  const pollLive = (id) =>
+    new Promise((resolve, reject) => {
+      let fails = 0;
+      const tick = async () => {
+        let d = null;
+        try {
+          d = await api.claimLive(submissionId, id);
+          fails = 0;
+        } catch (e) {
+          // transient network/timeout hiccup: keep polling, give up after 5 in a row
+          if (++fails >= 5) {
+            reject(e);
+            return;
+          }
+        }
+        if (d) {
+          setLive(d);
+          // only stop on a done payload that carries the assembled review
+          if (d.status === "done" && d.review) {
+            resolve(d);
+            return;
+          }
+          if (d.status === "error") {
+            reject(new Error(d.error || "agent error"));
+            return;
+          }
+        }
+        pollRef.current = setTimeout(tick, 1200);
+      };
+      pollRef.current = setTimeout(tick, 400);
+    });
