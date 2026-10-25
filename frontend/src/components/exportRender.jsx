@@ -1,8 +1,4 @@
-// The export renderer, shared by the Summary tab (the whole report) and the Review tab (one
-// claim of it). Moved out of ReviewSummary.jsx unchanged, so the two tabs cannot drift
-// apart: both show `/review/export`'s own text, parsed, never re-typed. The only additions
-// are options -- a DOM id prefix per tab, the v4 layout flag for a slice, and claim cards
-// that start open -- plus the helpers that cut one claim out of the report.
+// Renders the report text of /review/export, for the whole report or one claim.
 import { colorFor } from "../pdf/PdfViewer.jsx";
 import {
   ASSESSMENT_LINE,
@@ -20,20 +16,11 @@ import {
 } from "./assessmentStyle.js";
 
 export const norm = (s) => (s || "").replace(/\s+/g, " ").trim();
-// Strip the curly quotes _quote() wraps a span in, so the inner text matches the index's
-// key exactly (the index normalises with the same ' '.join(text.split()) rule).
 export const unquote = (s) => norm(s).replace(/^[“"]/, "").replace(/[”"]$/, "");
 
-// One colour per claim, shared by the claim's text on the left and every submission
-// passage filed under it in the PDF -- with one colour for all, six claim anchors on the
-// same page could not be told apart.
 export const claimColor = (n) => colorFor(n - 1);
-// Highlights that are not the one just jumped to are drawn at this alpha (hex suffix on
-// the '#rrggbb' palette), so the target stands out while keeping its claim's hue.
 export const DIM = "73";
 
-/** **bold**, [text](url) / [text](<url>), the export's own "#cmp-<claim>-<ref>" jump
- *  links, and plain text -> inline React nodes. */
 export function inline(text, keyPrefix, idPrefix = "se") {
   const out = [];
   const re = /\*\*(.+?)\*\*|\[([^\]]+)\]\(<?([^()>]+)>?\)/g;
@@ -79,9 +66,6 @@ export function inline(text, keyPrefix, idPrefix = "se") {
   return out;
 }
 
-/** A rendered quote block: clickable + coloured when the index resolves it to a
- *  document, plain (but still visually a quote) when it does not -- e.g. a span the
- *  export itself marked "Not confirmed verbatim", which the index never indexes. */
 export function Quote({ text, target, activeId, onPick, color, claim }) {
   const clickable = !!target;
   const active = clickable && activeId === target.id;
@@ -106,9 +90,6 @@ export function Quote({ text, target, activeId, onPick, color, claim }) {
   );
 }
 
-/** A table, with assessment cells coloured and any row carrying substantial-or-higher
- *  overlap marked. Only a cell that is ENTIRELY an assessment phrase is classified, so a
- *  paper title or a version date is never tinted by accident. */
 function Table({ rows, keyPrefix, idPrefix }) {
   const cells = (line) =>
     line
@@ -116,11 +97,9 @@ function Table({ rows, keyPrefix, idPrefix }) {
       .replace(/\|$/, "")
       .split("|")
       .map((c) => c.trim().replace(/&#124;/g, "|"));
-  // A linked assessment reads "[partial overlap · material evidence](#cmp-2-R7)"; the
-  // classification looks at the label, the link keeps working either way.
   const bare = (c) => c.replace(/^\[([^\]]+)\]\(#[^)]*\)$/, "$1");
   const head = cells(rows[0]);
-  const body = rows.slice(2).map(cells); // rows[1] is the |---|---| separator
+  const body = rows.slice(2).map(cells);
   return (
     <div className="se-table-wrap">
       <table className="se-table">
@@ -160,18 +139,7 @@ function Table({ rows, keyPrefix, idPrefix }) {
   );
 }
 
-/** Parse the export text into React blocks, resolving each blockquote against the
- *  quote index as it walks past the "### R# — Title" heading that names which paper's
- *  passages follow -- see quote_index's own docstring for why text alone is the key.
- *
- *  Two passes, like the dashboard's renderer: the first turns lines into items, the
- *  second folds the level-4 blocks of a comparison into their own boxes. Grouping needs
- *  to know where the next heading starts, and nothing is dropped in either pass -- a
- *  folded block still holds its full text. */
 export function renderExport(text, index, activeId, onPick, claimOf = new Map(), opts = {}) {
-  // idPrefix keeps DOM ids unique when two tabs render the same export at once;
-  // grouped lets a caller that renders one claim's slice keep the v4 layout, whose
-  // marker heading the slice does not contain; openClaims starts claim cards open.
   const { idPrefix = "se", openClaims = false } = opts;
   const lines = (text || "").split("\n");
   const subMap = new Map((index?.submission || []).map((q) => [q.text, q.id]));
@@ -192,8 +160,6 @@ export function renderExport(text, index, activeId, onPick, claimOf = new Map(),
   };
 
   const items = [];
-  // v4 exports are grouped by the shared rules in assessmentStyle.js (same as the study
-  // dashboard); anything older keeps the rendering below unchanged.
   const grouped = opts.grouped ?? isGroupedLayout(text);
   let currentPaper = null;
   let claimNo = 0;
@@ -209,7 +175,6 @@ export function renderExport(text, index, activeId, onPick, claimOf = new Map(),
       continue;
     }
 
-    // Context: which paper (if any) the following passages belong to.
     const refHead = t.match(/^###\s+(R\d+)\s+—\s+(.+)$/);
     if (/^#\s+Claim\s+\d+\s+—\s+Review$/.test(t) || t === "## Extracted claims" ||
         t === "## Related work examined" || (grouped && /^#\s/.test(t))) {
@@ -228,13 +193,9 @@ export function renderExport(text, index, activeId, onPick, claimOf = new Map(),
     if (heading) {
       const level = heading[1].length;
       const body = heading[2];
-      const Tag = `h${Math.min(level + 1, 6)}`; // export's h1 is the doc title, not the page's
-      // The claim heading fixes which claim the "### R# — ..." sections below belong to;
-      // together they are battle_export._anchor()'s two halves, so a linked assessment in
-      // the overview tables lands on the comparison it names.
+      const Tag = `h${Math.min(level + 1, 6)}`;
       const claim = CLAIM_HEADING.exec(body);
       if (claim) claimNo = Number(claim[1]);
-      // v4.4: the claim's own text, the next paragraph, links to its anchor in the PDF.
       claimTextFor = grouped && claim ? claimNo : 0;
       const ref = DETAIL_HEADING.exec(body);
       const cmpId = ref && claimNo ? anchorId(idPrefix, claimNo, ref[1]) : null;
@@ -253,7 +214,6 @@ export function renderExport(text, index, activeId, onPick, claimOf = new Map(),
       continue;
     }
 
-    // v4 only: the claim row's verdict, and recorded open points.
     const verdictLine = grouped && VERDICT_LINE.exec(t);
     const verdictMark = verdictLine && assessment(verdictLine[1]);
     if (verdictMark) {
@@ -286,8 +246,6 @@ export function renderExport(text, index, activeId, onPick, claimOf = new Map(),
       continue;
     }
 
-    // "**Assessment:** …" / "**Status:** …": the assessment gets its colour here, wherever
-    // in the document it stands. Only these two labels are classified -- never loose prose.
     const labelled = ASSESSMENT_LINE.exec(t);
     const marked = labelled && assessment(labelled[2]);
     if (marked) {
@@ -322,8 +280,6 @@ export function renderExport(text, index, activeId, onPick, claimOf = new Map(),
     if (t.startsWith("> ")) {
       const quoteText = unquote(t.slice(2));
       const target = resolve(quoteText, currentPaper);
-      // Only a submission passage carries its claim's colour: a prior-work quote is
-      // highlighted in its own paper's PDF, in that paper's colour.
       const claim = target && !target.paperId ? claimOf.get(target.id) : undefined;
       items.push({
         type: "node",
@@ -409,8 +365,6 @@ export function renderExport(text, index, activeId, onPick, claimOf = new Map(),
 
   if (grouped) return renderGrouped(groupReport(items), "g", { openClaims });
 
-  // Second pass: each level-4 block of a comparison becomes its own tinted box, folded
-  // where SUB_BLOCKS says so. Folding hides no text -- it is one click from open.
   const out = [];
   let j = 0;
   while (j < items.length) {
@@ -439,9 +393,6 @@ export function renderExport(text, index, activeId, onPick, claimOf = new Map(),
   return out;
 }
 
-/** The v4 tree as markup: claims and every fold start closed, a comparison is shown down
- *  to its two folded blocks. A comparison's jump anchor stays on its heading (set in the
- *  first pass), and jumpToId unfolds every <details> it sits in. */
 export function renderGrouped(nodes, keyBase, opts = {}) {
   return nodes.map((n, idx) => {
     const k = `${keyBase}-${idx}`;
@@ -475,8 +426,6 @@ export function renderGrouped(nodes, keyBase, opts = {}) {
   });
 }
 
-/** One claim's section of the report: from its "# Claim N — Review" heading up to the
- *  next level-1 heading. Empty when the report has no such claim (not computed yet). */
 export function claimSection(text, claimNo) {
   const lines = (text || "").split("\n");
   const start = lines.findIndex((l) => {
@@ -490,7 +439,6 @@ export function claimSection(text, claimNo) {
   return lines.slice(start, end).join("\n");
 }
 
-/** The quoted passages a piece of the report prints, as the quote index keys them. */
 export function quotedTexts(text) {
   return new Set(
     (text || "")
@@ -501,7 +449,6 @@ export function quotedTexts(text) {
   );
 }
 
-/** The source ids ("R7") whose detailed comparison a piece of the report contains. */
 export function detailRefs(text) {
   const out = [];
   for (const l of (text || "").split("\n")) {

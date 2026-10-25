@@ -6,10 +6,6 @@ import { claimOfPassages } from '../components/assessmentStyle.js'
 import StudyPdfPane from '../components/StudyPdfPane.jsx'
 import { colorFor } from '../vendor/pdf/PdfViewer.jsx'
 
-// The five criteria, in form order. Their wording -- the short question and the full
-// description -- comes from /criteria.json (a copy of prompts/criteria.json, synced by
-// `cli build-frontend`), the same file the judge rubric is checked against; a second copy
-// of the questions here once drifted from it (rubric v3: "limitations" vs "scope").
 const CRITERIA = [
   { key: 'submission_fidelity' },
   { key: 'comparison_specificity' },
@@ -34,7 +30,7 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
   const [fullDescriptions, setFullDescriptions] = useState({})
   const [questions, setQuestions] = useState({})
   const [revision, setRevision] = useState(0)
-  const [saveState, setSaveState] = useState('saved') // saved | unsaved | saving | error
+  const [saveState, setSaveState] = useState('saved')
   const [savedAt, setSavedAt] = useState(null)
   const [conflict, setConflict] = useState(null)
   const [reports, setReports] = useState({ a: null, b: null })
@@ -44,9 +40,6 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
   const [famNeeded, setFamNeeded] = useState(false)
   const [famJustRecorded, setFamJustRecorded] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  // Validation is computed from the first keystroke, but only SHOWN for fields the
-  // person has actually touched, or after they press Submit -- a form that lights up
-  // red before anything was filled in reads as broken rather than as guidance.
   const [touched, setTouched] = useState({})
   const [submitAttempted, setSubmitAttempted] = useState(false)
   const submitKeyRef = useRef(idempotencyKey())
@@ -54,7 +47,6 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
   const formRef = useRef(null)
   const readOnly = task?.status === 'submitted'
 
-  // --- load task + both reports ------------------------------------------------- //
   useEffect(() => {
     let alive = true
     ;(async () => {
@@ -68,9 +60,6 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
 
         const serverDraft = t.final ? t.final.criteria : (t.draft || {})
         const local = await loadLocalDraft(me.participant_id, assignmentId)
-        // The server is the authority; a local draft is only offered when the server
-        // has nothing (a save that never made it through) -- never silently merged over
-        // a server state, which would resurrect stale text after a successful save.
         setCriteria(Object.keys(serverDraft || {}).length ? serverDraft : (local || {}))
 
         const load = async (rep) => {
@@ -97,10 +86,9 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
       }
     })()
     return () => { alive = false }
-  }, [assignmentId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [assignmentId])
 
   useEffect(() => {
-    // no-store: a copy the browser cached before a rubric change would show the old wording
     fetch('/criteria.json', { cache: 'no-store' }).then((r) => r.json())
       .then((d) => {
         setFullDescriptions(Object.fromEntries(d.criteria.map((c) => [c.key, c.full_description])))
@@ -109,7 +97,6 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
       .catch(() => {})
   }, [])
 
-  // --- autosave ----------------------------------------------------------------- //
   const flushSave = useCallback(async (next) => {
     if (readOnly) return
     setSaveState('saving')
@@ -134,10 +121,6 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
 
   const markTouched = (key) => setTouched((t) => (t[key] ? t : { ...t, [key]: true }))
 
-  // Persist the background answers as soon as BOTH are given, not at submit time: they
-  // are not part of the criteria draft, so a reload in between used to discard them and
-  // ask again. The endpoint refuses to overwrite an existing answer, so an early save
-  // cannot change what a previous task on this paper already recorded.
   const saveFamiliarity = useCallback(async (next) => {
     if (readOnly || !next.familiarity || next.read_before === null) return
     try {
@@ -172,7 +155,6 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
 
   useEffect(() => () => clearTimeout(saveTimer.current), [])
 
-  // Warn before leaving with unsaved edits, rather than losing them silently.
   useEffect(() => {
     const handler = (e) => {
       if (saveState === 'unsaved' || saveState === 'error') { e.preventDefault(); e.returnValue = '' }
@@ -181,9 +163,6 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
     return () => window.removeEventListener('beforeunload', handler)
   }, [saveState])
 
-  // --- validation + submit ------------------------------------------------------ //
-  // Per criterion, so a message can sit next to the field it is about instead of in one
-  // list at the bottom; `problems` (the flat list) is still what gates submission.
   const fieldProblems = useMemo(() => {
     const out = {}
     for (const c of CRITERIA) {
@@ -213,8 +192,6 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
     if (problems.length) { setSubmitAttempted(true); return }
     setSubmitting(true)
     try {
-      // Familiarity is saved the moment both answers are given (see saveFamiliarity);
-      // this is only the belt-and-braces path for a save that failed earlier.
       if (famNeeded) await saveFamiliarity(familiarity)
       await flushSave(criteria)
       const r = await api.submitTask(assignmentId, {
@@ -223,9 +200,6 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
       await clearLocalDraft(me.participant_id, assignmentId)
       onDone(r)
     } catch (e) {
-      // A submit that raced its own autosave lands here with the current server
-      // revision; re-read the task and let the participant press submit again rather
-      // than silently retrying with a stale revision.
       if (e.status === 409) {
         const t = await api.getTask(assignmentId)
         setRevision(t.revision)
@@ -240,10 +214,6 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
 
   if (!task) return <div className="fe-page">Loading task…</div>
 
-  // Each report numbers its own quotes ("sub#0", "sub#1", ...), so the same id means a
-  // different passage in report A and report B. Highlights are therefore keyed by the
-  // passage TEXT (one id per distinct passage), and each panel's local ids are translated
-  // to those -- a click in report B used to land on report A's passage of the same number.
   const { submissionHighlights, toGlobal } = (() => {
     const byText = new Map()
     const toGlobal = { a: new Map(), b: new Map() }
@@ -253,10 +223,6 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
         toGlobal[side].set(q.id, byText.get(q.text))
       }
     }
-    // One colour per claim, as on the claim text in the panels (claimColor). Both reports
-    // of a task number the paper's claims alike (same claim extraction), so a passage's
-    // claim is read from whichever panel quotes it -- a claim's own anchor first, then
-    // the first claim a passage is quoted under.
     const claimOf = new Map()
     for (const anchorsOnly of [true, false]) {
       for (const side of ['a', 'b']) {
@@ -269,8 +235,6 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
         }
       }
     }
-    // Every quoted passage of both reports is marked, so the one just jumped to is drawn
-    // at full strength and the rest at a pale tint of their own claim's colour.
     return {
       submissionHighlights: [...byText.entries()].map(([text, id]) => {
         const color = claimOf.has(id) ? claimColor(claimOf.get(id)) : colorFor(0)
@@ -279,7 +243,6 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
       toGlobal,
     }
   })()
-  // The panel compares against its own ids: give it the local id of the focused passage.
   const localActive = (side) => {
     for (const [local, global] of toGlobal[side]) if (global === focusId) return local
     return null
@@ -352,10 +315,6 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
           </button>
         </div>
 
-        {/* Asked once per person and paper. On any further comparison of the SAME paper
-            the stored answers are carried over and shown read-only -- see
-            models.PaperFamiliarity (unique on participant x paper) and the backend's
-            /api/familiarity, which refuses to overwrite an existing answer. */}
         {famNeeded ? (
           <div className="fe-fam">
             <div className="fe-fam-intro muted">
@@ -473,7 +432,6 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
         )}
       </div>
 
-      {/* Reachable from anywhere on the page without scrolling for it. */}
       {!readOnly && (
         <button type="button" className="fe-jump-form"
                onClick={() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>

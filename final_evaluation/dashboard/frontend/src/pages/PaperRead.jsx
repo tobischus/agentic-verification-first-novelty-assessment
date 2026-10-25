@@ -2,17 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { api } from '../api.js'
 import StudyPdfPane from '../components/StudyPdfPane.jsx'
 
-// The reading step of a non-pilot study: before a paper's tasks open, the participant
-// answers the two background questions and then reads (or skims) the submission.
-//
-//   1. The background questions come FIRST, and the document appears only once both are
-//      answered: they ask about familiarity BEFORE the study, which reading the paper
-//      right before answering would colour.
-//   2. The submission is shown plain -- no highlights. Highlights come from the reports,
-//      and seeing them before either report would show the rater in advance what the
-//      systems attend to.
-//   3. The checkbox is a commitment, not a check. Time with the page visible and focused
-//      is recorded (PaperReading.active_ms) and never used to block anyone.
 export default function PaperRead({ paperId, onDone, onBack, onError }) {
   const [view, setView] = useState(null)
   const [fam, setFam] = useState({ familiarity: '', read_before: null })
@@ -30,10 +19,8 @@ export default function PaperRead({ paperId, onDone, onBack, onError }) {
       if (v.reading?.confirmed_at) setChecked(true)
     }).catch((e) => onError(String(e.message || e)))
     return () => { alive = false }
-  }, [paperId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [paperId])
 
-  // Visible-and-focused time on this page, in the browser; capped per tick so a sleeping
-  // laptop does not count as reading.
   useEffect(() => {
     let last = Date.now()
     const t = setInterval(() => {

@@ -1,8 +1,4 @@
-// A local recovery buffer for in-progress drafts, keyed by participant + study + task +
-// material/rubric hash. The SERVER is the authority (PROTOCOL.md section 10) -- this
-// exists only so a closed tab, a crashed browser, or a dropped connection does not lose
-// what someone typed before the next successful autosave. It never stores session
-// tokens or access codes, and is cleared on logout (see App.jsx's logout handler).
+// Local backup of unsaved drafts. The server stays authoritative.
 const DB_NAME = 'fe_outbox'
 const STORE = 'drafts'
 
@@ -34,8 +30,6 @@ export async function saveLocalDraft(participantId, assignmentId, payload) {
       tx.onerror = () => reject(tx.error)
     })
   } catch {
-    // IndexedDB unavailable (private mode, storage blocked) -- the server autosave still
-    // works; this is only the extra local recovery buffer, so failing quietly is correct.
   }
 }
 
@@ -62,11 +56,9 @@ export async function clearLocalDraft(participantId, assignmentId) {
       tx.oncomplete = resolve
       tx.onerror = () => reject(tx.error)
     })
-  } catch { /* see saveLocalDraft */ }
+  } catch {  }
 }
 
-// Called on logout: remove every locally-buffered draft for THIS participant only, so a
-// shared machine cannot show the next person who logs in a prior participant's draft.
 export async function clearAllForParticipant(participantId) {
   try {
     const db = await openDb()
@@ -83,5 +75,5 @@ export async function clearAllForParticipant(participantId) {
       tx.oncomplete = resolve
       tx.onerror = () => reject(tx.error)
     })
-  } catch { /* see saveLocalDraft */ }
+  } catch {  }
 }

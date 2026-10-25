@@ -4,15 +4,14 @@ import PublicationDate from './PublicationDate.jsx'
 import SplitView from '../pdf/SplitView.jsx'
 import PdfViewer, { colorFor } from '../pdf/PdfViewer.jsx'
 
-// Checkpoint 1: claims shown as readable cards; hover a card for the edit (pencil) icon.
 export default function ClaimsReview({ submissionId, onApproved }) {
   const [doc, setDoc] = useState(null)
   const [claims, setClaims] = useState(null)
-  const [open, setOpen] = useState({})       // evidence expanded
-  const [editing, setEditing] = useState({}) // claim in edit mode
+  const [open, setOpen] = useState({})
+  const [editing, setEditing] = useState({})
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
-  const [focus, setFocus] = useState(null)   // claim whose quote the PDF should jump to
+  const [focus, setFocus] = useState(null)
 
   useEffect(() => {
     api.claims(submissionId).then((d) => {
@@ -60,10 +59,6 @@ export default function ClaimsReview({ submissionId, onApproved }) {
     }
   }
 
-  // One colour per claim, keyed by position in the ORIGINAL list so that removing a claim
-  // does not recolour the others under the reviewer's eyes. Rejected claims and claims the
-  // reviewer just added (which have no quote yet) contribute no highlight, so the PDF
-  // always shows exactly the evidence the current list rests on.
   const colors = useMemo(() => {
     const m = {}
     ;(claims || []).forEach((c, i) => { m[c._key] = colorFor(i) })

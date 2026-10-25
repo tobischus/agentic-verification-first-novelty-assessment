@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 
-// Only the two genuinely-long stages get a progress bar; the per-step list is gone.
 const LONG_STAGES = new Set(['retrieval', 'fetch_pdfs'])
 
 function fmtDur(s) {
@@ -10,7 +9,6 @@ function fmtDur(s) {
 }
 
 export default function StatusBar({ state, stageLabels }) {
-  // Local 1s clock so elapsed/ETA tick smoothly between the parent's 2.5s polls.
   const [now, setNow] = useState(() => Date.now() / 1000)
   useEffect(() => {
     const iv = setInterval(() => setNow(Date.now() / 1000), 1000)

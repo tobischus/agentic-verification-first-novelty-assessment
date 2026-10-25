@@ -1,6 +1,4 @@
-// REST client for the study API. Same-origin in production (see backend/app.py);
-// vite.config.js proxies /api during `npm run dev`.
-
+// REST client for the study API (same origin, proxied by Vite in development).
 let csrfToken = null
 
 function getCookie(name) {

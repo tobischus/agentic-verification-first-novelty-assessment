@@ -7,9 +7,6 @@ const SRC_NOTE = {
   reviewer: ' — set by you',
 }
 
-// Publication-date line with HITL edit. The date is the retrieval cutoff (what counts
-// as prior work), so the reviewer can correct it when the automatic lookup fails
-// (e.g. a paper renamed since its arXiv version is unfindable by title).
 export default function PublicationDate({ submissionId, date, src, onSaved, retrievalDone }) {
   const [editing, setEditing] = useState(false)
   const [val, setVal] = useState('')

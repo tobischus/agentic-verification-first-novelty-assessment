@@ -3,7 +3,6 @@ import { api } from '../api'
 import SplitView from '../pdf/SplitView.jsx'
 import PdfViewer from '../pdf/PdfViewer.jsx'
 
-// Map long Semantic Scholar venue names to short, readable abbreviations.
 const VENUE_ABBR = [
   [/empirical methods in natural language processing/i, 'EMNLP'],
   [/north american chapter/i, 'NAACL'],
@@ -39,8 +38,6 @@ function fmtAuthors(a) {
 }
 const s2Url = (id) => (/^[0-9a-f]{40}$/i.test(id || '') ? `https://www.semanticscholar.org/paper/${id}` : null)
 
-// The final related work grouped by topical cluster, strongest cluster first and the
-// reviewer's own additions last -- the order the list is shown in.
 function groupPapers(papers) {
   const groups = {}
   papers.forEach((p) => {
@@ -64,7 +61,6 @@ function groupPapers(papers) {
   return { groups, order }
 }
 
-// Checkpoint 2: validate the related-work pool (grouped into topical clusters); add missing papers.
 export default function PapersReview({ submissionId, status, onApproved }) {
   const [papers, setPapers] = useState(null)
   const [remove, setRemove] = useState(new Set())
@@ -76,21 +72,14 @@ export default function PapersReview({ submissionId, status, onApproved }) {
   const [adding, setAdding] = useState(false)
   const [addErr, setAddErr] = useState('')
   const [dragOver, setDragOver] = useState(false)
-  const [pdfBusy, setPdfBusy] = useState(new Set())   // paper_ids currently uploading a PDF
-  const [pdfErr, setPdfErr] = useState({})            // paper_id -> error message
-  const [selected, setSelected] = useState(null)      // paper shown in the right-hand pane
+  const [pdfBusy, setPdfBusy] = useState(new Set())
+  const [pdfErr, setPdfErr] = useState({})
+  const [selected, setSelected] = useState(null)
 
-  // This component mounts as soon as retrieval is done (tab becomes available) --
-  // which is BEFORE the fetch_pdfs stage has finished downloading the PDFs. A single
-  // mount-time fetch would therefore snapshot a half-downloaded pool (only the first
-  // PDF present -> everything else shows "no PDF" forever). Re-fetch on every pipeline
-  // status transition so that when the 'papers' checkpoint is reached (all PDFs on
-  // disk) the pdf_available flags refresh to their true values.
   useEffect(() => {
     api.papers(submissionId).then((d) => setPapers(d.papers)).catch((e) => setErr(String(e)))
   }, [submissionId, status])
 
-  // Open the first listed paper that has a PDF, so the reader pane is never empty.
   useEffect(() => {
     if (selected || !papers) return
     const { groups, order } = groupPapers(papers)
@@ -218,7 +207,6 @@ export default function PapersReview({ submissionId, status, onApproved }) {
         </p>
       )}
 
-      {/* collapsible add box */}
       <div className="addbox">
         <button className="addbox-head" onClick={() => setAddOpen((o) => !o)}>
           <span>Add a paper</span>
@@ -270,9 +258,6 @@ export default function PapersReview({ submissionId, status, onApproved }) {
     </div>
   )
 
-  // The PDFs arrive in the background during fetch_pdfs, so this pane fills up while the
-  // reviewer works through the list; a paper added by hand is served from the same place
-  // and opens the same way.
   const viewer = (
     <div className="pdfpane">
       <div className="pdfpicker">

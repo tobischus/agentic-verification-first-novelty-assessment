@@ -1,10 +1,6 @@
 import { useState } from 'react'
 import { api } from '../api.js'
 
-// No system names, no study framing beyond the code field itself -- PROTOCOL.md section
-// 8 ("Keine Systemnamen auf der Loginseite"). No contact line either: the raters are
-// recruited personally and reach the study author directly (study author's decision,
-// 2026-09-23).
 export default function Login({ onLoggedIn }) {
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)

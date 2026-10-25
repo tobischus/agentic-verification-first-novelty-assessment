@@ -15,8 +15,6 @@ const STAGE_LABELS = {
   artifact_a: 'Evidence (Artifact A)', artifact_b: 'Assessment (Artifact B)',
   judge: 'Verification (Judge)', export: 'Report',
 }
-// The tabs are the navigation: all of them are shown from the start, and each one opens
-// once the pipeline has produced what it shows.
 const TABS = [
   { id: 'document', label: 'Document' },
   { id: 'claims', label: 'Claims' },
@@ -66,12 +64,11 @@ export default function App() {
   const [submissionId, setSubmissionId] = useState(() => localStorage.getItem('sid') || '')
   const [state, setState] = useState(null)
   const [active, setActive] = useState('document')
-  // Set when the reviewer approves the related work: the review then starts on its own.
   const [reviewRequested, setReviewRequested] = useState(false)
   const prevStatus = useRef('')
 
   const poll = useCallback(async (sid) => {
-    try { setState(await api.state(sid)) } catch { /* state may not exist yet */ }
+    try { setState(await api.state(sid)) } catch {  }
   }, [])
 
   useEffect(() => {
@@ -82,8 +79,6 @@ export default function App() {
     return () => clearInterval(iv)
   }, [submissionId, poll])
 
-  // Auto-advance the active tab on pipeline transitions; manual navigation in between
-  // is respected (we only switch when the status actually changes).
   useEffect(() => {
     const s = state?.status
     if (!s || s === prevStatus.current) return
@@ -136,8 +131,6 @@ export default function App() {
 
       <StatusBar state={state} stageLabels={STAGE_LABELS} />
 
-      {/* Only the active tab is visible; the others stay mounted (hidden) so edits are
-          preserved when switching back and forth. */}
       <div className="tabpane" hidden={active !== 'document'}>
         {submissionId
           ? <DocumentInfo submissionId={submissionId} state={state} />

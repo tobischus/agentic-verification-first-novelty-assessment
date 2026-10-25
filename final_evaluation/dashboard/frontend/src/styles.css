@@ -1,8 +1,3 @@
-/* Study dashboard styling. Deliberately plain: the study measures reports, not this UI,
-   and a visually "designed" shell would only add a confound. Target is desktop/laptop
-   down to 1366x768 -- the two report panels stay side by side there, each with its own
-   scroll, and every panel can be enlarged (report panels by dragging the browser window
-   or going fullscreen on a PDF; the submission opens as a full overlay). */
 
 :root {
   --line: #d9dee8;
@@ -120,8 +115,6 @@ textarea { resize: vertical; }
   display: grid; grid-template-columns: 120px 1fr auto; align-items: center; gap: 12px;
   border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; background: #fbfcfe;
 }
-/* Reading step (non-pilot study): one row above a paper's tasks, the tasks locked until
-   it is done -- see PaperRead.jsx. */
 .fe-read-row {
   display: grid; grid-template-columns: 120px 1fr auto; align-items: center; gap: 12px;
   border: 1px dashed var(--accent); border-radius: 8px; padding: 8px 12px; background: #f3f6ff;
@@ -146,7 +139,6 @@ textarea { resize: vertical; }
 .fe-status-in_progress { background: #fff6e0; border-color: #f0d9b8; }
 .fe-status-submitted { background: #e7f6ee; border-color: #bfe3cd; color: var(--ok); }
 
-/* --- rating screen --------------------------------------------------------- */
 .fe-rate { display: flex; flex-direction: column; min-height: 100vh; }
 .fe-save-state { font-size: 13px; color: var(--muted); }
 .fe-reports {
@@ -175,14 +167,11 @@ textarea { resize: vertical; }
 }
 .fe-fam-carried-label { color: var(--muted); }
 
-/* Validation messages appear only after the field was touched or Submit was pressed --
-   see TaskRate.jsx's `showFor`. */
 .fe-field-error {
   color: var(--warn); font-size: 12.5px; margin: 6px 0 0; padding-left: 18px;
 }
 .fe-problems-summary { color: var(--warn); font-size: 13px; margin-bottom: 10px; }
 
-/* Always-reachable rating form. */
 .fe-jump-form {
   position: fixed; right: 18px; bottom: 18px; z-index: 40;
   border-radius: 999px; padding: 10px 16px; box-shadow: 0 2px 10px rgba(0,0,0,.18);
@@ -208,7 +197,6 @@ textarea { resize: vertical; }
 .fe-receipt { border-top: 1px solid var(--line); padding-top: 14px; font-size: 13px; }
 .fe-conflict { border-color: #f0d9b8; background: #fff8ec; }
 
-/* --- report content rendering (mirrors the main app's review styling) ------- */
 .rr-doc { font-size: 13.5px; }
 .rr-h { margin: 1.2em 0 0.4em; line-height: 1.3; }
 .rr-h1 { font-size: 18px; }
@@ -231,8 +219,6 @@ textarea { resize: vertical; }
 .rz-quote.qjump { cursor: pointer; }
 .rz-quote.qjump:hover { background: #eef3fb; border-left-color: var(--accent); }
 .rz-quote.active { background: #fff6d6; border-left-color: #e0a92b; }
-/* A quote with no stored verbatim check is visibly a different thing from a checked
-   one -- see ReportRenderer.jsx's "two different things, two different marks". */
 .rz-quote.unverified { border-left-style: dashed; background: #fbfbfc; }
 .rz-qmark { color: var(--ok); margin-right: 6px; font-weight: 700; }
 .rz-qmark-none { color: var(--muted); font-weight: 400; }
@@ -244,7 +230,6 @@ textarea { resize: vertical; }
 }
 .rz-qjump:hover { border-color: var(--accent); background: #eef3ff; }
 
-/* Contents + collapsible per-source comparisons. Folding never removes content. */
 .rr-toc {
   border: 1px solid var(--line); border-radius: 8px; background: #fbfcfe;
   padding: 6px 10px; margin-bottom: 12px; font-size: 12.5px;
@@ -262,14 +247,6 @@ textarea { resize: vertical; }
 .rr-detail[open] > summary { border-bottom: 1px solid var(--line); border-radius: 8px 8px 0 0; }
 .rr-detail-body { padding: 4px 12px 10px; }
 
-/* --- assessment colour + the blocks of one comparison ----------------------- */
-/* Mirrors components/assessmentStyle.js, which decides WHICH classes an assessment gets;
-   this decides what they look like, and is the same block in both apps' stylesheets.
-   Two dimensions, deliberately not collapsed into one: the TINT is how much overlap was
-   found, the OUTLINE is whether an evidence check materially carried it. Dashed means it
-   did not, or that none was run -- missing evidence must not look like a secured result,
-   the same reason the export prints both halves of "partial overlap · insufficient
-   evidence" instead of just the first. */
 .as {
   --as-ink: #42526b;
   --as-bg: #f1f3f8;
@@ -300,13 +277,6 @@ textarea { resize: vertical; }
 .ev-nocheck {
   --as-line: dashed;
 }
-/* A non-overlapping degree whose evidence check nonetheless found material overlap is
-   exactly the case battle_export._conflict() reports under "Unresolved assessment
-   conflicts". The green of a settled "no overlap" would misread it, so it takes the
-   neutral, dashed treatment instead: the conflict is unresolved, not decided. The
-   mirror case (an overlap degree with nonmaterial evidence) keeps its stronger tint --
-   understating a strong finding would be the opposite error -- and is already marked
-   dashed by its evidence class above. */
 .as-weak.ev-material {
   --as-ink: #4d5666;
   --as-bg: #f3f4f7;
@@ -333,11 +303,6 @@ summary .as-pill {
   margin-top: 10px;
 }
 
-/* An assessment cell in the overview tables, plus the row marker for the papers that
-   were asked to stand out there: substantial overlap or stronger. In a table of ~60
-   cells, tinting the "no overlap" ones too would wash the whole grid and leave nothing
-   standing out, so there the tint is dropped and only the ink and the evidence outline
-   remain -- the strong and partial findings are the ones that get a background. */
 td.as-cell {
   color: var(--as-ink);
   background: var(--as-bg);
@@ -362,7 +327,6 @@ td.as-cell a {
   font-weight: 700;
 }
 
-/* Every assessment in the overview tables jumps to the comparison it names. */
 .as-jump {
   color: inherit;
   text-decoration: underline;
@@ -388,9 +352,6 @@ td.as-cell a {
   }
 }
 
-/* The blocks of one comparison, tinted apart: what the prior paper does (folded), what
-   the comparison argues, the evidence pairs the check accepted, the candidates it set
-   aside (folded), and the check's own record (folded). Folding drops no text. */
 .blk {
   --blk-edge: #dde2ec;
   --blk-bg: #fff;
@@ -440,10 +401,6 @@ td.as-cell a {
   --blk-bg: #faf8fe;
   --blk-ink: #4a3d77;
 }
-/* --- report layout v4: claims, comparisons, folds ---------------------------- */
-/* assessmentStyle.groupReport decides the structure; this is how it looks, the same in
-   both apps. A claim is one closed card whose row already says what the reader needs to
-   choose whether to open it; a comparison is a framed section; folds reuse .blk. */
 .lay-claim {
   margin: 12px 0;
   border: 1px solid #cdd6e6;
@@ -476,7 +433,6 @@ td.as-cell a {
 .lay-claim > summary h3 { font-size: 15px; margin: 0 0 4px; }
 .lay-claim-body { padding: 6px 16px 14px; }
 .lay-verdict { display: inline-block; margin-right: 14px; }
-/* v4.4: the claim text in a claim's row links to its anchor passage in the submission PDF. */
 .claim-jump { color: inherit; text-decoration: underline dotted #8a94a6; text-underline-offset: 3px; cursor: pointer; }
 .claim-jump:hover { text-decoration: underline solid #2f5bd3; }
 .claim-jump.active { background: #fff5c2; }
@@ -524,11 +480,7 @@ td.as-cell a {
 .blk-legend,
 .blk-matrix,
 .blk-meta { --blk-edge: #c6cfe0; --blk-bg: #f6f8fc; --blk-ink: #3c4a63; }
-/* --- end of the shared assessment block ----------------------------------- */
 
-/* The claim text carries a soft wash of the colour its passages have in the submission
-   PDF (ReportRenderer's claimColor), full strength while its anchor is the one shown; a
-   quoted submission passage carries a swatch of the same colour. */
 .claim-jump.claim-colored {
   background: color-mix(in srgb, var(--claim-color) 38%, transparent);
   border-radius: 3px; padding: 1px 3px;
@@ -540,7 +492,6 @@ td.as-cell a {
   margin: 0 6px 0 0; vertical-align: baseline;
 }
 
-/* --- PDF pane -------------------------------------------------------------- */
 .study-pdf-pane { display: flex; flex-direction: column; height: 100%; background: #fff; }
 .study-pdf-bar {
   display: flex; align-items: center; gap: 10px; padding: 6px 10px;
@@ -550,16 +501,9 @@ td.as-cell a {
 .study-pdf-search { display: flex; gap: 6px; flex: 1; max-width: 420px; }
 .study-pdf-search input { max-width: none; }
 .study-pdf-pane .pdfpane, .study-pdf-pane > div:last-child { flex: 1; min-height: 0; overflow: hidden; }
-/* The viewer scrolls `.pdfscroll` to a passage (PdfViewer's focus effect). It has to be the
-   element that actually scrolls: with the pane scrolling instead, every "show in PDF" jump
-   was a no-op and the document stayed on page 1. */
 .study-pdf-pane .pdfpane { display: flex; flex-direction: column; }
 .study-pdf-pane .pdfscroll { flex: 1 1 auto; min-height: 0; overflow: auto; position: relative; }
 
-/* The vendored viewer (vendor/pdf/PdfViewer.jsx) ships no styles of its own: in the main
-   app these rules live in frontend/src/styles.css. Without them a highlight box is an
-   ordinary block below the page canvas rather than laid over the text, so every quote was
-   "located" and none was visibly marked. Copied from frontend/src/styles.css. */
 .pdfpane { background: #f6f7f9; }
 .pdftools {
   display: flex; align-items: center; gap: 10px; padding: 6px 10px;
@@ -589,7 +533,6 @@ td.as-cell a {
 }
 .fe-overlay-inner .study-pdf-pane { flex: 1; min-height: 0; }
 
-/* --- admin ----------------------------------------------------------------- */
 .fe-admin-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .fe-admin-table th, .fe-admin-table td { border: 1px solid var(--line); padding: 5px 8px; text-align: left; }
 .fe-admin-table th { background: #f5f7fb; }

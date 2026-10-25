@@ -1,16 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-/**
- * Assessment on the left, the document it is about on the right.
- *
- * The divider is draggable because the two sides are read differently: checking a quote
- * wants the PDF wide, working through the claim list wants the text wide, and a reviewer
- * switches between the two constantly. The position is remembered per `storageKey` so it
- * survives tab switches and reloads -- a split that resets itself is worse than a fixed one.
- *
- * `right` may be null, in which case the left side simply takes the whole width; that is
- * what a submission with no stored PDF looks like, and it must stay usable.
- */
 export default function SplitView({ left, right, storageKey = 'split', minLeft = 320, minRight = 320 }) {
   const [pct, setPct] = useState(() => {
     const v = Number(localStorage.getItem(`split:${storageKey}`))
@@ -24,7 +13,7 @@ export default function SplitView({ left, right, storageKey = 'split', minLeft =
     if (!el) return
     const r = el.getBoundingClientRect()
     const x = Math.min(Math.max(clientX - r.left, minLeft), r.width - minRight)
-    if (r.width - minRight < minLeft) return          // too narrow to split meaningfully
+    if (r.width - minRight < minLeft) return
     setPct(Math.round((x / r.width) * 1000) / 10)
   }, [minLeft, minRight])
 

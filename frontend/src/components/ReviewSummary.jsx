@@ -5,23 +5,6 @@ import PdfViewer, { colorFor } from "../pdf/PdfViewer.jsx";
 import { claimOfPassages } from "./assessmentStyle.js";
 import { DIM, claimColor, renderExport } from "./exportRender.jsx";
 
-// The Summary tab renders `/review/export`'s text -- the exact artifact used in the
-// system comparison -- and NOTHING else: no synthesis, no extra framing, no fields the
-// export itself does not print. What this file adds is presentation only: headings,
-// tables and blockquotes instead of one <pre>, quotes that jump to their passage in the
-// PDF the same way the Review tab's quotes do, colour for the assessments the export
-// already states, and folding for the blocks a reader asked to have out of the way. The
-// content is the export's; the interactivity is a side channel (`/review/quote_index`,
-// see battle_export.quote_index) that maps each VERIFIED blockquote's own text back to a
-// document and a highlight id. Content and interactivity can never drift apart on the
-// CONTENT side, because the content is never re-typed here -- it is parsed, not
-// regenerated.
-//
-// The rules shared with the study dashboard's own renderer (which phrase gets which
-// colour, how "#cmp-2-R7" resolves, which blocks start folded) live in
-// ./assessmentStyle.js; that file is byte-identical in both apps and
-// final_evaluation/tests/test_renderer_parity.py fails if the copies drift.
-
 export default function ReviewSummary({ submissionId, active }) {
   const [text, setText] = useState(null);
   const [index, setIndex] = useState(null);
@@ -48,7 +31,6 @@ export default function ReviewSummary({ submissionId, active }) {
   useEffect(load, [submissionId]);
   useEffect(() => {
     if (active) load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
 
   if (err)
@@ -80,7 +62,6 @@ export default function ReviewSummary({ submissionId, active }) {
   });
 
   const claimOf = claimOfPassages(text, index);
-  // Once a passage has been jumped to, the others fade to their pale tint of the same hue.
   const shade = (id, color) => (reader.focusId && id !== reader.focusId ? color + DIM : color);
   const highlights = readerPaper
     ? readerPaper.quotes.map((q) => ({

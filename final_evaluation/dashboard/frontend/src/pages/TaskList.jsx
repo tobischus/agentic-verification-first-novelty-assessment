@@ -9,7 +9,7 @@ export default function TaskList({ me, onOpenTask, onReadPaper, onLogout, onErro
 
   const load = () => api.listTasks().then((d) => { setTasks(d.tasks); setReadingRequired(!!d.reading_required) })
     .catch((e) => onError(String(e.message || e)))
-  useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load() }, [])
 
   if (!tasks) return <div className="fe-page">Loading tasks…</div>
 
@@ -43,8 +43,6 @@ export default function TaskList({ me, onOpenTask, onReadPaper, onLogout, onErro
         <p className="muted">{submitted} of {tasks.length} submitted.</p>
 
         {Object.entries(byPaper).map(([paperId, group]) => {
-          // Non-pilot study: the paper's tasks stay locked until its submission has been
-          // read and confirmed (PaperRead.jsx; enforced by the server as well).
           const locked = readingRequired && !group.read
           return (
             <div key={paperId} className="fe-paper-group">

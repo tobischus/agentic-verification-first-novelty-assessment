@@ -13,13 +13,6 @@ import {
   renderExport,
 } from "./exportRender.jsx";
 
-// The Review tab walks the claims one at a time. For a finished claim it shows that
-// claim's section of `/review/export` -- the same text, parsed by the same renderer as the
-// Summary tab (./exportRender.jsx), in the same styles -- so the two tabs cannot disagree
-// about a claim. What only this tab adds is the live agent view while a claim is computed,
-// which is not part of the report.
-
-// DOM ids of this tab's copy of the report; the Summary tab renders its copy as "se".
 const ID_PREFIX = "rv";
 const EMPTY_INDEX = { submission: [], papers: {}, refs: {}, claim_anchors: {} };
 
@@ -54,21 +47,15 @@ export default function ReviewWalkthrough({ submissionId, active, autoStart, onF
   const [err, setErr] = useState("");
   const [started, setStarted] = useState(false);
   const [ci, setCi] = useState(0);
-  const [cache, setCache] = useState({}); // claim_id -> computed claim data (process view)
+  const [cache, setCache] = useState({});
   const [loading, setLoading] = useState(false);
-  const [live, setLive] = useState(null); // live agent progress for the current claim
-  // The report as the export prints it ({text, index}); a finished claim is read from it.
+  const [live, setLive] = useState(null);
   const [report, setReport] = useState(null);
   const [assessing, setAssessing] = useState(false);
   const [finishing, setFinishing] = useState(false);
-  // Which document the right-hand pane shows and which passage it should scroll to.
-  // paperId === null means the submission itself, where the reader starts.
   const [reader, setReader] = useState({ paperId: null, focusId: null });
   const pollRef = useRef(null);
   const trajRef = useRef(null);
-  // The review starts on its own when the reviewer approved the related work in this
-  // session, or when claim 1 is already computed (showing it costs nothing). A reload of
-  // an unreviewed submission never starts the agent -- that would spend without a click.
   const startRef = useRef(null);
   const autoStarted = useRef(false);
   useEffect(() => {
@@ -118,7 +105,6 @@ export default function ReviewWalkthrough({ submissionId, active, autoStart, onF
           d = await api.claimLive(submissionId, id);
           fails = 0;
         } catch (e) {
-          // transient network/timeout hiccup: keep polling, give up after 5 in a row
           if (++fails >= 5) {
             reject(e);
             return;
@@ -126,7 +112,6 @@ export default function ReviewWalkthrough({ submissionId, active, autoStart, onF
         }
         if (d) {
           setLive(d);
-          // only stop on a done payload that carries the assembled review
           if (d.status === "done" && d.review) {
             resolve(d);
             return;
@@ -141,15 +126,12 @@ export default function ReviewWalkthrough({ submissionId, active, autoStart, onF
       pollRef.current = setTimeout(tick, 400);
     });
 
-  // A finished claim is shown from the report itself: make sure its claim-level
-  // assessment is written (a no-op when it is current), then re-read the export.
   const refreshReport = async (cid) => {
     setAssessing(true);
     try {
       try {
         await api.ensureClaimAssessment(submissionId, cid);
       } catch {
-        // not fatal: the export then prints the recorded rationale instead
       }
       const [text, index] = await Promise.all([
         api.reviewExport(submissionId),
@@ -189,8 +171,6 @@ export default function ReviewWalkthrough({ submissionId, active, autoStart, onF
     if (ok) await refreshReport(id);
   };
 
-  // After the last claim: every claim assessment current + the paper-level novelty
-  // summary, then hand over to the Summary tab.
   const finish = async () => {
     setFinishing(true);
     try {
@@ -207,19 +187,16 @@ export default function ReviewWalkthrough({ submissionId, active, autoStart, onF
   const claim = started ? claims[ci] : null;
   const data = claim ? cache[claim.claim_id] : null;
 
-  // advance to the next claim, or finish after the last one
   const goNext = async () => {
     if (ci < n - 1) await loadClaim(ci + 1);
     else await finish();
   };
-  // go back to a previous (already reviewed) claim -- instant, it's cached
   const goPrev = async () => {
     if (ci > 0) await loadClaim(ci - 1);
   };
 
   startRef.current = () => loadClaim(0);
 
-  // ---------- before the first claim ----------
   if (!started) {
     const pending = autoStart || claims[0]?.computed;
     return (
@@ -248,7 +225,6 @@ export default function ReviewWalkthrough({ submissionId, active, autoStart, onF
     );
   }
 
-  // ---------- live progress (agent running) ----------
   const livePanel = () => {
     const lv = live || {};
     const traj = lv.trajectory || [];
@@ -345,15 +321,12 @@ export default function ReviewWalkthrough({ submissionId, active, autoStart, onF
     );
   };
 
-  // ---------- one finished claim: its section of the report ----------
-  const claimNo = ci + 1; // the export numbers the non-rejected claims in this order
+  const claimNo = ci + 1;
   const text = report?.text || "";
   const index = report?.index || EMPTY_INDEX;
   const section = claimSection(text, claimNo);
   const ready = !!data && !loading && !assessing && !!section;
 
-  // Colours exactly as in the Summary tab: a passage takes its claim's colour, a prior
-  // paper its own, both assigned over the whole report.
   const claimOf = claimOfPassages(text, index);
   const shown = quotedTexts(section);
   const anchor = index.claim_anchors?.[String(claimNo)];
@@ -371,7 +344,6 @@ export default function ReviewWalkthrough({ submissionId, active, autoStart, onF
   const shade = (id, color) =>
     reader.focusId && id !== reader.focusId ? color + DIM : color;
   const readerPaper = reader.paperId ? index.papers?.[reader.paperId] : null;
-  // Only the passages this claim's section prints, so the PDF marks what the left shows.
   const highlights = readerPaper
     ? readerPaper.quotes
         .filter((q) => shown.has(q.text))

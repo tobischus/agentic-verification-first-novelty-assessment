@@ -1,9 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api.js'
 
-// The instructions TEXT itself lives on the server (prompts/human_instructions.md,
-// PROTOCOL.md section 8's verbatim text) and is fetched, not duplicated here, so there
-// is exactly one copy of it to keep in sync with the consent hash the server records.
 export default function Instructions({ me, onConsented, onLogout }) {
   const [text, setText] = useState('')
   const [sha, setSha] = useState('')

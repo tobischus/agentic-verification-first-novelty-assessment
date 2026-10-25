@@ -9,16 +9,11 @@ import PaperRead from './pages/PaperRead.jsx'
 import Done from './pages/Done.jsx'
 import Admin from './pages/Admin.jsx'
 
-// Deliberately no router library: five screens, a linear flow, and the extra dependency
-// would not buy readability at this size. `view` is the single source of truth for
-// which screen shows; browser Back is handled by pushing state for each transition
-// (see go()) so it moves between screens instead of losing in-progress work.
-
 const PILOT_BANNER = 'Development pilot — excluded from final study.'
 
 export default function App() {
-  const [me, setMe] = useState(undefined) // undefined = loading, null = logged out
-  const [view, setView] = useState('login') // login | instructions | tasks | rate | done | admin
+  const [me, setMe] = useState(undefined)
+  const [view, setView] = useState('login')
   const [activeAssignmentId, setActiveAssignmentId] = useState(null)
   const [activePaperId, setActivePaperId] = useState(null)
   const [err, setErr] = useState('')
@@ -39,10 +34,6 @@ export default function App() {
       if (!d) { setView('login'); return }
       if (d.role === 'admin') { setView('admin'); return }
       if (!d.consented) { setView('instructions'); return }
-      // A reload must come back to the task that was open, not to the list: the draft
-      // itself is safe either way (the server holds it), but landing somewhere else
-      // makes "refresh and carry on" feel like the work was lost. The browser keeps
-      // history.state across a reload, so the task being rated is still known here.
       const s = window.history.state
       if (s && s.view === 'rate' && s.assignmentId) {
         setActiveAssignmentId(s.assignmentId)
@@ -82,7 +73,7 @@ export default function App() {
 
   const onLogout = async () => {
     const pid = me?.participant_id
-    try { await api.logout() } catch { /* proceed to clear local state regardless */ }
+    try { await api.logout() } catch {  }
     if (pid) await clearAllForParticipant(pid)
     setMe(null)
     go('login')
@@ -92,8 +83,6 @@ export default function App() {
 
   return (
     <div className="fe-app">
-      {/* Only in a pilot study: main-study raters were shown "excluded from final study"
-          on every page while doing the study's counted work. */}
       {me?.is_pilot && <div className="fe-pilot-banner">{PILOT_BANNER}</div>}
       {err && <div className="fe-error-bar">{err} <button className="link" onClick={() => setErr('')}>dismiss</button></div>}
       {view === 'login' && <Login onLoggedIn={onLoggedIn} />}

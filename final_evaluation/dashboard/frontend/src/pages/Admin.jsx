@@ -1,10 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api.js'
 
-// No system ranking here while the study is active -- PROTOCOL.md section 7. This
-// screen shows readiness/progress/technical issues and management actions only; the
-// only place system identity and a comparable result appear is the downloaded export
-// ZIP (api.admin.exportUrl()), which an admin has to deliberately request.
 export default function Admin({ me, onLogout }) {
   const [overview, setOverview] = useState(null)
   const [issues, setIssues] = useState(null)
@@ -16,7 +12,7 @@ export default function Admin({ me, onLogout }) {
     api.admin.overview().then(setOverview).catch((e) => setErr(String(e.message || e)))
     api.admin.technicalIssues().then((d) => setIssues(d.issues)).catch(() => {})
   }
-  useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load() }, [])
 
   if (!overview) return <div className="fe-page">{err || 'Loading admin overview…'}</div>
 

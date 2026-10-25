@@ -1,56 +1,18 @@
-// Renders one system's frozen markdown report, structurally the same way
-// frontend/src/components/ReviewSummary.jsx renders the live pipeline's export text:
-// headings/tables/blockquotes parsed from the text (never re-typed). This file does not
-// import that component (it lives in a different, independent Vite app -- see
-// vendor/pdf/README.md for why the PDF viewer itself is copied rather than imported);
-// it mirrors the same parsing approach for the same reason: the report is a frozen
-// document text, not a live API response. The rules both renderers share -- which phrase
-// gets which colour, how "#cmp-2-R7" resolves -- live in ./assessmentStyle.js, which is
-// byte-identical in both apps and checked by test_renderer_parity.py.
-//
-// `quoteIndex` (agent/linear only) is {submission:[{id,text}],
-// papers:{paper_id:{title,quotes:[{id,text}]}}, refs:{paper_id:"R#"}} -- see
-// battle_export.quote_index()'s docstring. ONLY `submission` entries become click
-// targets here, on purpose: `papers` indexes quotes from the CITED PRIOR-WORK papers
-// (e.g. "R7 Zhou et al."), and PROTOCOL.md section 5 is explicit that a prior-work PDF
-// is never served during E2, from any control, "auch nicht über PDF-Buttons". No such
-// asset even exists in this study's database (import_pilot.py never imports one) --
-// this is the second, UI-logic layer of that same boundary: even the id resolution
-// never looks a prior-work quote up as something to jump to. Those quotes are still
-// shown in full (that is what PROTOCOL.md means by "im Report navigierbar") and still
-// carry the ✓ if the index says they were verified -- they simply are not clickable.
-//
-// TWO DIFFERENT THINGS, TWO DIFFERENT MARKS (they were conflated before):
-//   ✓   a stored verbatim check MATCHED this quote in its source document. Shown only
-//       when the quote's text is present in the quote index -- which battle_export's
-//       quote_index() fills exclusively with verified spans. A quote the export itself
-//       labelled "Not confirmed verbatim", and every quote in a report that ships no
-//       index at all (deepreviewer, afzal, opennovelty), gets NO tick: an unknown check
-//       status must not look like a passed one.
-//   ⤴   this passage can be located in the submission PDF. A navigation affordance,
-//       not a verification claim.
-
+// Renders one system's frozen Markdown report.
 import {
   ASSESSMENT_LINE, CLAIM_HEADING, DETAIL_HEADING, OPEN_POINT_LINE, VERDICT_LINE, anchorId,
   assessment, claimOfPassages, groupReport, isGroupedLayout, jumpToId, resolveAnchor, subBlock,
 } from './assessmentStyle.js'
 import { colorFor } from '../vendor/pdf/PdfViewer.jsx'
 
-// One colour per claim, the same as in the main app's Summary tab: the claim's text here
-// and every submission passage filed under that claim in the PDF (TaskRate.jsx) share it.
 export const claimColor = (n) => colorFor(n - 1)
-// Alpha suffix for the passages that are not the one just jumped to.
 export const DIM = '73'
 
 const norm = (s) => (s || '').replace(/\s+/g, ' ').trim()
 const unquote = (s) => norm(s).replace(/^[“"]/, '').replace(/[”"]$/, '')
 
-// The exact line battle_export._span() prints above a span it could NOT confirm.
 const UNVERIFIED_MARKER = /^not confirmed verbatim:?$/i
 
-/** **bold**, [text](url) and the export's own "#cmp-<claim>-<ref>" jump links.
- *  A jump link is resolved against THIS panel's id prefix and scrolls in place; without a
- *  `ctx` it stays an ordinary anchor, so the parser is still usable outside a panel. */
 function inline(text, keyPrefix, ctx) {
   const out = []
   const re = /\*\*(.+?)\*\*|\[([^\]]+)\]\(<?([^()>]+)>?\)/g
@@ -67,10 +29,6 @@ function inline(text, keyPrefix, ctx) {
              onClick={(e) => { e.preventDefault(); jumpToId(target) }}>{m[2]}</a>,
         )
       } else {
-        // An external link is shown as its text only. The export links each source to its
-        // arXiv PDF ("Source used: [v2 · 2023-07-18](https://arxiv.org/pdf/…)"), and a live
-        // link would open the prior-work paper mid-rating -- PROTOCOL.md section 4 rules
-        // that out "by button, link, direct URL". The version and date stay visible.
         out.push(<span key={`${keyPrefix}-a${i++}`} className="rr-extlink">{m[2]}</span>)
       }
     }
@@ -114,14 +72,9 @@ function Quote({ text, verified, target, activeId, onPick, claim }) {
   )
 }
 
-/** A table, with assessment cells coloured and any row carrying substantial-or-higher
- *  overlap marked. Only a cell that is ENTIRELY an assessment phrase is classified, so a
- *  title or a version date is never tinted by accident. */
 function Table({ rows, keyPrefix, ctx }) {
   const cells = (line) => line.replace(/^\|/, '').replace(/\|$/, '').split('|')
     .map((c) => c.trim().replace(/&#124;/g, '|'))
-  // A linked assessment reads "[partial overlap · material evidence](#cmp-2-R7)"; the
-  // classification looks at the label, the link keeps working either way.
   const bare = (c) => c.replace(/^\[([^\]]+)\]\(#[^)]*\)$/, '$1')
   const head = cells(rows[0])
   const body = rows.slice(2).map(cells)
@@ -148,15 +101,6 @@ function Table({ rows, keyPrefix, ctx }) {
   )
 }
 
-/** Parse the frozen report text into rendered items plus a table of contents.
- *
- *  Two passes on purpose: the first turns lines into items (headings stay identifiable
- *  as headings), the second groups each "### R# — ..." comparison and everything under
- *  it into a collapsed <details>, and the level-4 blocks inside it into their own boxes.
- *  Grouping cannot be done in one pass without knowing where the next heading starts, and
- *  NOTHING is dropped in either pass -- a collapsed section still contains its full text,
- *  it is only folded.
- */
 export function parseReport(text, quoteIndex, { idPrefix = 'r', activeId, onPick } = {}) {
   const lines = (text || '').split('\n')
   const ctx = { idPrefix }
@@ -165,17 +109,12 @@ export function parseReport(text, quoteIndex, { idPrefix = 'r', activeId, onPick
     Object.values(quoteIndex?.papers || {}).flatMap((p) => (p.quotes || []).map((q) => q.text)),
   )
   const hasIndex = !!quoteIndex
-  // `quoteIndex.papers` (cited prior-work quotes) is consulted ONLY to know whether a
-  // quote passed its verbatim check -- never to build a click target. See file header.
   const resolve = (quoteText) => (subMap.has(quoteText) ? { id: subMap.get(quoteText) } : null)
   const isVerified = (quoteText) => hasIndex && (subMap.has(quoteText) || paperTexts.has(quoteText))
   const claimOf = claimOfPassages(text, quoteIndex)
 
   const items = []
   const toc = []
-  // v4 reports (battle_export reviewer-v4.0) are grouped by the shared rules in
-  // assessmentStyle.js; anything older -- the pilot's frozen reports -- keeps exactly the
-  // rendering it was rated in. Every branch below that is new is gated on this flag.
   const grouped = isGroupedLayout(text)
   let i = 0, key = 0, headingNo = 0
   let prevNonEmpty = ''
@@ -193,8 +132,6 @@ export function parseReport(text, quoteIndex, { idPrefix = 'r', activeId, onPick
     }
 
     if (t === '---') {
-      // battle_export prints "---" immediately before each "### R# — ..." section; that
-      // rule is redundant once the section is its own collapsible block.
       const nextNonEmpty = lines.slice(i + 1).find((l) => l.trim())?.trim() || ''
       const nextIsDetail = /^#{2,4}\s+/.test(nextNonEmpty)
         && DETAIL_HEADING.test(nextNonEmpty.replace(/^#{2,4}\s+/, ''))
@@ -208,11 +145,8 @@ export function parseReport(text, quoteIndex, { idPrefix = 'r', activeId, onPick
       const body = heading[2]
       const hid = `${idPrefix}-h${headingNo++}`
       const Tag = `h${Math.min(level + 1, 6)}`
-      // The claim heading fixes which claim the "### R# — ..." sections below belong to;
-      // together they are battle_export._anchor()'s two halves.
       const claim = CLAIM_HEADING.exec(body)
       if (claim) claimNo = Number(claim[1])
-      // v4.4: the claim's own text, the next paragraph, links to its anchor in the PDF.
       claimTextFor = grouped && claim ? claimNo : 0
       const ref = DETAIL_HEADING.exec(body)
       items.push({
@@ -226,7 +160,6 @@ export function parseReport(text, quoteIndex, { idPrefix = 'r', activeId, onPick
       prevNonEmpty = t; i++; continue
     }
 
-    // v4 only: the claim row's verdict, and recorded open points.
     const verdictLine = grouped && VERDICT_LINE.exec(t)
     const verdictMark = verdictLine && assessment(verdictLine[1])
     if (verdictMark) {
@@ -255,8 +188,6 @@ export function parseReport(text, quoteIndex, { idPrefix = 'r', activeId, onPick
       prevNonEmpty = t; i++; continue
     }
 
-    // "**Assessment:** …" / "**Status:** …": the verdict gets its colour here, wherever in
-    // the document it stands. Only these two labels are classified -- never loose prose.
     const labelled = ASSESSMENT_LINE.exec(t)
     const marked = labelled && assessment(labelled[2])
     if (marked) {
@@ -282,8 +213,6 @@ export function parseReport(text, quoteIndex, { idPrefix = 'r', activeId, onPick
 
     if (t.startsWith('> ')) {
       const quoteText = unquote(t.slice(2))
-      // The export's own "Not confirmed verbatim:" line wins over anything else: if it
-      // says the check failed, no tick, whatever an index might contain.
       const declaredUnverified = UNVERIFIED_MARKER.test(prevNonEmpty.replace(/\*\*/g, '').trim())
       items.push({
         type: 'node',
@@ -342,8 +271,6 @@ export function parseReport(text, quoteIndex, { idPrefix = 'r', activeId, onPick
 
   if (grouped) return { nodes: renderGrouped(groupReport(items), 'g'), toc }
 
-  // Second pass: fold the level-4 blocks of a comparison into their own tinted boxes,
-  // the ones SUB_BLOCKS marks as folded starting closed.
   const foldSub = (list, keyBase) => {
     const acc = []
     let j = 0
@@ -368,7 +295,6 @@ export function parseReport(text, quoteIndex, { idPrefix = 'r', activeId, onPick
     return acc
   }
 
-  // ... and each per-source comparison into a collapsed <details>.
   const nodes = []
   let j = 0
   while (j < items.length) {
@@ -379,9 +305,6 @@ export function parseReport(text, quoteIndex, { idPrefix = 'r', activeId, onPick
       while (k < items.length && !(items[k].type === 'heading' && items[k].level <= it.level)) {
         bodyItems.push(items[k]); k++
       }
-      // The assessment is the one thing a reader cannot see while the section is folded,
-      // so the summary line carries it: the section's own words, in the same colour they
-      // have inside, not a second judgement.
       const line = bodyItems.map((b) => ASSESSMENT_LINE.exec(b.raw || '')).find(Boolean)
       const mark = line && assessment(line[2])
       nodes.push(
@@ -402,10 +325,6 @@ export function parseReport(text, quoteIndex, { idPrefix = 'r', activeId, onPick
   return { nodes, toc }
 }
 
-/** The v4 tree (assessmentStyle.groupReport) as markup. Claims and every fold start
- *  closed; a comparison is shown in full down to its two folded blocks. Each fold carries
- *  the id of its own heading, so a jump or a contents link opens it (jumpToId unfolds every
- *  <details> on the way), and a comparison carries battle_export's #cmp-N-R# anchor. */
 function renderGrouped(nodes, keyBase) {
   return nodes.map((n, idx) => {
     const k = `${keyBase}-${idx}`

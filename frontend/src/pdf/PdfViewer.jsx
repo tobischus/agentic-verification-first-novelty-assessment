@@ -5,41 +5,24 @@ import { locateQuotes, pageTokens } from './locate'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl
 
-// Colours for quote highlights. Multiply blending keeps the glyphs underneath readable,
-// which a solid fill would not, and the hues are far enough apart to tell four or five
-// claims apart at a glance on a white page.
 export const HIGHLIGHT_COLORS = [
   '#ffe066', '#a5d8ff', '#b2f2bb', '#ffc9c9', '#e5dbff',
   '#ffd8a8', '#99e9f2', '#fcc2d7', '#d8f5a2', '#bac8ff',
 ]
 export const colorFor = (i) => HIGHLIGHT_COLORS[i % HIGHLIGHT_COLORS.length]
 
-/**
- * A PDF beside the assessment, with the quoted passages marked in it.
- *
- * `highlights` is [{id, text, color, label?}]. Each is located in the text layer (see
- * locate.js) and drawn over the rendered page. `focusId` scrolls to one of them; setting
- * it again to the same id re-scrolls, so clicking the same quote twice always works.
- *
- * Pages render only once they come near the viewport. A twelve-page paper at reading
- * scale is around 40 MB of canvas if drawn all at once, which stalls the tab on the very
- * machines a reviewer is likely to use. Text extraction, by contrast, runs for every page
- * immediately: it is cheap, and a highlight cannot be found on a page nobody has read.
- */
 export default function PdfViewer({ url, highlights = [], focusId = null, onLocated }) {
   const [doc, setDoc] = useState(null)
-  const [pages, setPages] = useState([])       // [{viewportAt1, textContent, tokens}]
+  const [pages, setPages] = useState([])
   const [scale, setScale] = useState(1.2)
-  const userZoomed = useRef(false)   // once the reviewer zooms, stop refitting under them
+  const userZoomed = useRef(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const scrollRef = useRef(null)
   const paneRef = useRef(null)
   const pageRefs = useRef([])
-  const docRef = useRef(null)     // for cleanup: destroying inside a state updater would
-                                  // run twice under StrictMode
+  const docRef = useRef(null)
 
-  // ------------------------------- load ---------------------------------- //
   useEffect(() => {
     if (!url) { setDoc(null); setPages([]); setError(''); return }
     let cancelled = false
@@ -75,18 +58,12 @@ export default function PdfViewer({ url, highlights = [], focusId = null, onLoca
 
     return () => {
       cancelled = true
-      // Both: the task if the load is still in flight, the document if it finished. A
-      // reviewer clicking through ten prior papers would otherwise keep all ten alive.
-      try { task?.destroy() } catch { /* already gone */ }
-      try { docRef.current?.destroy() } catch { /* already gone */ }
+      try { task?.destroy() } catch {  }
+      try { docRef.current?.destroy() } catch {  }
       docRef.current = null
     }
   }, [url])
 
-  // ---------------------------- locate quotes ----------------------------- //
-  // Keyed on the quote texts, not the array identity: the parent rebuilds this list on
-  // every render, and re-scanning a twelve-page document on each keystroke of a claim
-  // edit would make typing stutter.
   const key = useMemo(
     () => JSON.stringify(highlights.map((h) => [h.id, (h.text || '').slice(0, 400)])),
     [highlights],
@@ -94,31 +71,19 @@ export default function PdfViewer({ url, highlights = [], focusId = null, onLoca
   const located = useMemo(() => {
     if (!pages.length || !highlights.length) return []
     return locateQuotes(pages, highlights, pdfjsLib.Util)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pages, key])
 
   useEffect(() => {
     if (onLocated) onLocated({ found: located.length, total: highlights.length })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [located, highlights.length])
 
-  // Keep the page as wide as the pane allows, rather than at a fixed 120% that leaves a
-  // wide paper hanging off the right edge -- where `margin: auto` cannot centre it, so the
-  // page looks shifted until the reviewer zooms out by hand.
-  //
-  // Tracked rather than set once, because the pane's width is something the reviewer
-  // changes constantly: dragging the divider to see more of the document should show more
-  // of the document, not the same small page with more grey around it. An explicit zoom
-  // ends the tracking -- past that point the scale is the reviewer's choice, not ours.
   useEffect(() => {
     const pane = paneRef.current
     if (!pages.length || !pane) return
     const fit = () => {
       if (userZoomed.current) return
-      const avail = pane.clientWidth - 26          // the scroll container's padding
+      const avail = pane.clientWidth - 26
       const w = pages[0].viewportAt1.width
-      // clientWidth excludes the inner scrollbar, so refitting cannot feed back into
-      // itself through a scrollbar appearing and disappearing
       if (avail > 100 && w > 0) {
         setScale(Math.min(2.5, Math.max(0.4, Math.round((avail / w) * 100) / 100)))
       }
@@ -134,27 +99,18 @@ export default function PdfViewer({ url, highlights = [], focusId = null, onLoca
     setScale((sc) => Math.min(3, Math.max(0.4, +(sc + d).toFixed(2))))
   }
 
-  // Colour is taken from the CURRENT highlights, not from `located`: locating is keyed on
-  // id and text only (see above), so a colour change -- the jumped-to passage turning
-  // strong, the rest pale -- would otherwise never reach the page. Keyed on the colours
-  // themselves for the same reason as `key`: the array is new on every parent render.
   const colorKey = highlights.map((h) => `${h.id}:${h.color || ''}`).join('|')
   const byPage = useMemo(() => {
     const colorOf = new Map(highlights.map((h) => [h.id, h.color]))
     const m = new Map()
-    // The focused passage first: PdfPage draws a line shared by several passages once, in
-    // the colour of the first, and a jump target overlapping another quote would
-    // otherwise show its opening lines in that other quote's colour.
     const ordered = [...located].sort((a, b) => (b.id === focusId) - (a.id === focusId))
     for (const h of ordered) {
       if (!m.has(h.pageIndex)) m.set(h.pageIndex, [])
       m.get(h.pageIndex).push({ ...h, color: colorOf.get(h.id) ?? h.color })
     }
     return m
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [located, colorKey, focusId])
 
-  // ------------------------------- focus ---------------------------------- //
   useEffect(() => {
     if (!focusId || !located.length) return
     const target = located.find((h) => h.id === focusId)
@@ -162,20 +118,9 @@ export default function PdfViewer({ url, highlights = [], focusId = null, onLoca
     const el = pageRefs.current[target.pageIndex]
     const box = scrollRef.current
     if (!el || !box) return
-    // The FIRST line of the passage: rects are merged per row and ordered by position, so
-    // the smallest `top` is where the quote begins. Landing on the last line -- which is
-    // what offsetTop produced here, measured against the wrong positioned ancestor -- puts
-    // the reviewer at the end of the sentence they wanted to read.
     const first = target.rects.reduce((min, r) => Math.min(min, r.top), Infinity)
-    // Measured, not derived from offsetTop: the page's offset parent depends on which
-    // ancestors happen to be positioned, and getting that wrong silently scrolls to the
-    // wrong place. Rects are relative to the viewport, so the arithmetic holds whatever
-    // the layout above looks like.
     const delta = el.getBoundingClientRect().top - box.getBoundingClientRect().top
-    const top = Math.max(0, box.scrollTop + delta + first * scale - 90)  // headroom above
-    // A long way (a document just opened at its top, say) is jumped, not glided: gliding
-    // past every page in between queues each of them for rendering ahead of the page the
-    // reader asked for, which then stays blank for seconds on a large paper.
+    const top = Math.max(0, box.scrollTop + delta + first * scale - 90)
     const far = Math.abs(top - box.scrollTop) > box.clientHeight * 3
     box.scrollTo({ top, behavior: far ? 'auto' : 'smooth' })
   }, [focusId, located, scale])
@@ -216,11 +161,10 @@ export default function PdfViewer({ url, highlights = [], focusId = null, onLoca
   )
 }
 
-/** One page: a canvas drawn on first approach, with the highlight boxes over it. */
 function PdfPage({ doc, index, meta, scale, highlights, pageRefs }) {
   const holder = useRef(null)
   const canvasRef = useRef(null)
-  const [visible, setVisible] = useState(index < 2)   // first pages eagerly, the rest lazily
+  const [visible, setVisible] = useState(index < 2)
   const renderedAt = useRef(null)
 
   const setRefs = useCallback((el) => {
@@ -261,21 +205,14 @@ function PdfPage({ doc, index, meta, scale, highlights, pageRefs }) {
       try {
         await task.promise
         if (!cancelled) renderedAt.current = scale
-      } catch { /* superseded by a newer render */ }
+      } catch {  }
     })()
-    return () => { cancelled = true; try { task?.cancel() } catch { /* not started */ } }
+    return () => { cancelled = true; try { task?.cancel() } catch {  } }
   }, [visible, doc, index, scale])
 
   const w = meta.viewportAt1.width * scale
   const h = meta.viewportAt1.height * scale
 
-  // Several evidence pairs can reuse the exact same submission sentence (one paper's
-  // "shared" span quoted against five different correspondences, say) -- each is still
-  // its own highlight entry, at IDENTICAL rects, so their multiply-blended colours stack
-  // and a much-reused quote goes nearly black and unreadable. Same rect on this page ==
-  // the same on-page span, so one box is drawn per span rather than one per highlight;
-  // ids of everything that landed there are kept so a click on any of them still resolves
-  // (locateQuotes keeps every original entry -- this collapses only the drawing).
   const boxes = useMemo(() => {
     const byRect = new Map()
     for (const hl of highlights) {
