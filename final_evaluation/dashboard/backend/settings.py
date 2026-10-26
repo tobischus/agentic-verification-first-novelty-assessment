@@ -41,10 +41,6 @@ class Settings:
         default_factory=lambda: os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
     )
     supabase_bucket: str = field(default_factory=lambda: os.getenv("SUPABASE_BUCKET", ""))
-    public_base_url: str = field(default_factory=lambda: os.getenv("PUBLIC_BASE_URL", ""))
-    study_contact: str = field(default_factory=lambda: os.getenv("STUDY_CONTACT", ""))
-    host: str = field(default_factory=lambda: os.getenv("HOST", "127.0.0.1"))
-    port: int = field(default_factory=lambda: int(os.getenv("PORT", "8010")))
 
     @property
     def is_production(self) -> bool:

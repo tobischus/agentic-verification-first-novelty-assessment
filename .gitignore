@@ -15,7 +15,6 @@
 !/pyproject.toml
 !/requirements.txt
 !/src/
-!/start-backend.ps1
 
 __pycache__/
 *.py[cod]

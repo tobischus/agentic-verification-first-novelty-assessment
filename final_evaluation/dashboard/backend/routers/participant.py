@@ -16,12 +16,6 @@ from ..settings import get_settings as get_settings
 router = APIRouter(prefix="/api", tags=["participant"])
 
 
-@router.get("/public/config")
-def public_config():
-    """Unauthenticated configuration for the login page."""
-    return {"study_contact": get_settings().study_contact}
-
-
 CRITERIA_KEYS = (
     "submission_fidelity",
     "comparison_specificity",
@@ -155,7 +149,6 @@ def me(
         "study_title": study.title if study else "",
         "consented": participant.consent_at is not None,
         "instructions_version": study.instructions_version if study else None,
-        "study_contact": get_settings().study_contact,
     }
 
 
