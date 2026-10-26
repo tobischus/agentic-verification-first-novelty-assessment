@@ -1,13 +1,13 @@
 // Locates verified quotes in the text layer of a PDF.
 const LIGATURES = { ﬀ: 'ff', ﬁ: 'fi', ﬂ: 'fl', ﬃ: 'ffi', ﬄ: 'ffl', ﬅ: 'st' }
 
-export const MIN_SCORE = 0.6
+const MIN_SCORE = 0.6
 
 function expand(s) {
   return (s || '').replace(/[ﬀ-ﬅ]/g, (ch) => LIGATURES[ch] || ch)
 }
 
-export function words(text) {
+function words(text) {
   return (
     expand(text)
       .toLowerCase()
@@ -47,7 +47,7 @@ export function pageTokens(textContent) {
   return tokens
 }
 
-export function findWindow(tokens, quoteWords) {
+function findWindow(tokens, quoteWords) {
   const m = quoteWords.length
   if (!m || tokens.length < 1) return null
 
@@ -133,7 +133,7 @@ function widthShare(str, i, fontFamily) {
   return i / str.length
 }
 
-export function rectsForRange(textContent, tokens, start, end, viewportAt1, Util) {
+function rectsForRange(textContent, tokens, start, end, viewportAt1, Util) {
   const spans = new Map()
   const cover = (idx, from, to) => {
     if (idx == null || idx < 0) return

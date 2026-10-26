@@ -3,7 +3,6 @@ import { api } from '../api.js'
 
 export default function Admin({ me, onLogout }) {
   const [overview, setOverview] = useState(null)
-  const [issues, setIssues] = useState(null)
   const [err, setErr] = useState('')
   const [confirmClose, setConfirmClose] = useState('')
   const [resetResult, setResetResult] = useState(null)
@@ -13,10 +12,6 @@ export default function Admin({ me, onLogout }) {
       .overview()
       .then(setOverview)
       .catch((e) => setErr(String(e.message || e)))
-    api.admin
-      .technicalIssues()
-      .then((d) => setIssues(d.issues))
-      .catch(() => {})
   }
   useEffect(() => {
     load()
@@ -100,38 +95,13 @@ export default function Admin({ me, onLogout }) {
       </div>
 
       <div className="fe-card">
-        <h2>Technical issues ({overview.open_technical_issues} open)</h2>
-        {(issues || []).length === 0 && <p className="muted">None reported.</p>}
-        {(issues || []).map((i) => (
-          <div key={i.id} className={'fe-issue' + (i.resolved ? ' resolved' : '')}>
-            <div className="fe-issue-meta">
-              {new Date(i.created_at).toLocaleString()} — participant {i.participant_id.slice(0, 8)}
-            </div>
-            <div>{i.message}</div>
-            {!i.resolved && (
-              <button
-                className="link"
-                onClick={async () => {
-                  await api.admin.resolveIssue(i.id)
-                  setIssues((d) => d.map((x) => (x.id === i.id ? { ...x, resolved: true } : x)))
-                }}
-              >
-                mark resolved
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
-
-      <div className="fe-card">
         <h2>Export</h2>
         <a className="fe-export-link" href={api.admin.exportUrl()}>
           Download full research export (.zip)
         </a>
         <p className="muted">
           ratings.jsonl, ratings_long.csv, assignments.csv, tasks.json, manifest.json, rubric.txt,
-          protocol.md, technical_issues.csv, completion.csv. Pseudonymised; no access codes or
-          session secrets.
+          protocol.md, completion.csv. Pseudonymised; no access codes or session secrets.
         </p>
       </div>
 

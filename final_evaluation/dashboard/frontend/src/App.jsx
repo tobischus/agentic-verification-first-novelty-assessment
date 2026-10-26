@@ -9,8 +9,6 @@ import PaperRead from './pages/PaperRead.jsx'
 import Done from './pages/Done.jsx'
 import Admin from './pages/Admin.jsx'
 
-const PILOT_BANNER = 'Development pilot — excluded from final study.'
-
 export default function App() {
   const [me, setMe] = useState(undefined)
   const [view, setView] = useState('login')
@@ -100,7 +98,6 @@ export default function App() {
 
   return (
     <div className="fe-app">
-      {me?.is_pilot && <div className="fe-pilot-banner">{PILOT_BANNER}</div>}
       {err && (
         <div className="fe-error-bar">
           {err}{' '}

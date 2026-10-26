@@ -112,7 +112,7 @@ export function jumpToId(id) {
   return true
 }
 
-export const SUB_BLOCKS = [
+const SUB_BLOCKS = [
   { re: /^prior work summary$/i, kind: 'priorwork', open: false },
   { re: /^comparison$/i, kind: 'comparison', open: true },
   { re: /^evidence pairs$/i, kind: 'pairs', open: true },

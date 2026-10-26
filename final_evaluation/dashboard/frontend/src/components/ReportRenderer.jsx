@@ -156,7 +156,7 @@ function Table({ rows, keyPrefix, ctx }) {
   )
 }
 
-export function parseReport(text, quoteIndex, { idPrefix = 'r', activeId, onPick } = {}) {
+function parseReport(text, quoteIndex, { idPrefix = 'r', activeId, onPick } = {}) {
   const lines = (text || '').split('\n')
   const ctx = { idPrefix }
   const subMap = new Map((quoteIndex?.submission || []).map((q) => [q.text, q.id]))

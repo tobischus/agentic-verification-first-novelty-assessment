@@ -48,21 +48,16 @@ export const api = {
   listTasks: () => req('GET', '/api/tasks'),
   getTask: (assignmentId) => req('GET', `/api/tasks/${assignmentId}`),
   setFamiliarity: (body) => req('POST', '/api/familiarity', body),
-  getReading: (paperId) => req('GET', `/api/papers/${encodeURIComponent(paperId)}/reading`),
   openReading: (paperId) =>
     req('POST', `/api/papers/${encodeURIComponent(paperId)}/reading/open`, {}),
   confirmReading: (paperId, body) =>
     req('POST', `/api/papers/${encodeURIComponent(paperId)}/reading/confirm`, body),
   saveDraft: (assignmentId, body) => req('POST', `/api/tasks/${assignmentId}/draft`, body),
   submitTask: (assignmentId, body) => req('POST', `/api/tasks/${assignmentId}/submit`, body),
-  reportIssue: (body) => req('POST', '/api/issues', body),
   exportMine: () => req('GET', '/api/export/mine'),
 
   admin: {
     overview: () => req('GET', '/api/admin/overview'),
-    technicalIssues: () => req('GET', '/api/admin/technical-issues'),
-    resolveIssue: (issueId) =>
-      req('POST', '/api/admin/technical-issues/resolve', { issue_id: issueId }),
     resetCode: (participantId) =>
       req('POST', '/api/admin/participants/reset-code', { participant_id: participantId }),
     lock: (participantId, locked) =>
@@ -72,9 +67,6 @@ export const api = {
   },
 }
 
-export function setCsrfToken(t) {
-  csrfToken = t
-}
 export function idempotencyKey() {
   return 'idem-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10)
 }

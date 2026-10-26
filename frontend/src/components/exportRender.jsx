@@ -15,13 +15,13 @@ import {
   subBlock,
 } from './assessmentStyle.js'
 
-export const norm = (s) => (s || '').replace(/\s+/g, ' ').trim()
-export const unquote = (s) => norm(s).replace(/^[“"]/, '').replace(/[”"]$/, '')
+const norm = (s) => (s || '').replace(/\s+/g, ' ').trim()
+const unquote = (s) => norm(s).replace(/^[“"]/, '').replace(/[”"]$/, '')
 
 export const claimColor = (n) => colorFor(n - 1)
 export const DIM = '73'
 
-export function inline(text, keyPrefix, idPrefix = 'se') {
+function inline(text, keyPrefix, idPrefix = 'se') {
   const out = []
   const re = /\*\*(.+?)\*\*|\[([^\]]+)\]\(<?([^()>]+)>?\)/g
   let last = 0,
@@ -61,7 +61,7 @@ export function inline(text, keyPrefix, idPrefix = 'se') {
   return out
 }
 
-export function Quote({ text, target, activeId, onPick, color, claim }) {
+function Quote({ text, target, activeId, onPick, color, claim }) {
   const clickable = !!target
   const active = clickable && activeId === target.id
   return (
@@ -385,7 +385,7 @@ export function renderExport(text, index, activeId, onPick, claimOf = new Map(),
   return out
 }
 
-export function renderGrouped(nodes, keyBase, opts = {}) {
+function renderGrouped(nodes, keyBase, opts = {}) {
   return nodes.map((n, idx) => {
     const k = `${keyBase}-${idx}`
     if (n.t === 'item') return n.item.node

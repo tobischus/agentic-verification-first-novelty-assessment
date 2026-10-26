@@ -5,7 +5,7 @@ import { locateQuotes, pageTokens } from './locate'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl
 
-export const HIGHLIGHT_COLORS = [
+const HIGHLIGHT_COLORS = [
   '#ffe066',
   '#a5d8ff',
   '#b2f2bb',

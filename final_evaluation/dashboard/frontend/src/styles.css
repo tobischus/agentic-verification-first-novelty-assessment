@@ -83,14 +83,6 @@ textarea {
   color: var(--muted);
 }
 
-.fe-pilot-banner {
-  background: #fff4e5;
-  border-bottom: 1px solid #f0d9b8;
-  color: #7a4b12;
-  font-size: 12px;
-  padding: 4px 12px;
-  text-align: center;
-}
 .fe-error-bar {
   background: #fdecea;
   border-bottom: 1px solid #f5c6c0;
@@ -134,11 +126,6 @@ textarea {
 }
 .fe-login label {
   font-weight: 600;
-}
-.fe-contact {
-  font-size: 12.5px;
-  color: var(--muted);
-  margin-top: 6px;
 }
 .fe-form-error {
   color: var(--warn);
@@ -449,12 +436,6 @@ textarea {
 .fe-wordcount.over {
   color: var(--warn);
   font-weight: 700;
-}
-.fe-problems {
-  color: var(--warn);
-  font-size: 13px;
-  margin: 0 0 10px;
-  padding-left: 18px;
 }
 .fe-submit-row {
   border-top: 1px solid var(--line);
@@ -1078,19 +1059,6 @@ td.as-cell a {
 }
 .fe-admin-table th {
   background: #f5f7fb;
-}
-.fe-issue {
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 8px 10px;
-  margin: 8px 0;
-}
-.fe-issue.resolved {
-  opacity: 0.55;
-}
-.fe-issue-meta {
-  font-size: 12px;
-  color: var(--muted);
 }
 .fe-reset-result {
   border-color: #bfe3cd;

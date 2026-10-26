@@ -1,30 +1,17 @@
-# Secrets, credentials, participant data, and anything derived from them.
-# Rule of thumb: if it identifies a person, unlocks an account, or is a study response,
-# it does not belong in git.
-
+# Secrets, study data and everything derived from them
 .env
 .env.*
 !.env.example
-
 private/
 backups/
 results/
 inputs/
 manifests/
-
-# Study materials derived from the database (report texts per task, named by system
-# pair) -- local reference only; the repository is public and raters must stay blind.
 task_texts/
 archive/
 
-# Frontend build artefacts and dependencies
 dashboard/frontend/node_modules/
 dashboard/frontend/dist/
-dashboard/frontend/public/instructions.txt
-dashboard/frontend/public/criteria.json
-
-__pycache__/
-*.pyc
+dashboard/frontend/public/
 *.sqlite
 *.sqlite-journal
-.pytest_cache/
