@@ -27,7 +27,9 @@ python final_evaluation/scripts/thesis_figures.py
 ```
 
 The files in `out/` are identical to the stored results in
-`final_evaluation/results/main/`. The last command redraws the figures there.
+`final_evaluation/results/main/`. On Linux, two bootstrap shares in `e1_analysis.json`
+that the thesis does not report differ in the third decimal because of floating-point
+rounding. The last command redraws the figures there.
 
 ## Run the system
 
