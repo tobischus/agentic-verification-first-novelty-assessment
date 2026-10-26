@@ -8,8 +8,8 @@ papers. The code builds on Afzal et al., *Beyond "Not Novel Enough"* (Apache 2.0
 ## Reproduce the results
 
 Needs Python 3.11 and the data archive `thesis_data_archive.tar.xz` (sent separately,
-contents in `DATA.md`). No API key or network access is needed after installation.
-Run from the repository root:
+see [Data archive](#data-archive)). No API key or network access is needed after
+installation. Run from the repository root:
 
 ```bash
 python3.11 -m venv .venv               # Windows: py -3.11 -m venv .venv
@@ -26,10 +26,12 @@ python -m final_evaluation.cli compare-e1 --input final_evaluation/results/main/
 python final_evaluation/scripts/thesis_figures.py
 ```
 
-The files in `out/` are identical to the stored results in
-`final_evaluation/results/main/`. On Linux, two bootstrap shares in `e1_analysis.json`
-that the thesis does not report differ in the third decimal because of floating-point
-rounding. The last command redraws the figures there.
+The commands compute E1 (`analyze-e1`, `sensitivity-e1`), agent vs linear baseline
+(`agent-linear`), E3 (`source-audit`) and E2 (`analyze-human`, `compare-e1`). The last
+command redraws the figures in `final_evaluation/results/main/figures/`. The files in
+`out/` are identical to the stored results in `final_evaluation/results/main/`. On Linux,
+two bootstrap shares in `e1_analysis.json` that the thesis does not report differ in the
+third decimal because of floating-point rounding.
 
 ## Run the system
 
@@ -70,6 +72,33 @@ python src/novelty_assessment/pipeline.py --data-dir data --submission-id <id>
 These extract the claims and retrieve the prior work, run the agent and the linear
 baseline, and run the baseline of Afzal et al. All results are written to `data/<id>/`.
 
+## Run the evaluation
+
+The rules of the evaluation are in `final_evaluation/PROTOCOL.md`. Besides the analyses
+above, `python -m final_evaluation.cli plan-e1 --execute` runs the 400 E1 judge calls
+(billed), and `python -m final_evaluation.evaluation.e3.opennovelty_audit` checks the
+quotes of the OpenNovelty reports against the cited papers (needs network access).
+
+**Rating dashboard** of the human study, in the environment installed above. It needs the
+original PDFs of the submissions and reports, which are not part of the data archive:
+
+```bash
+pip install -r final_evaluation/requirements.txt
+cp final_evaluation/.env.example final_evaluation/.env    # set the two secrets
+python -m final_evaluation.cli import-inputs
+python -m final_evaluation.cli validate-inputs --study main_study_v2
+python -m final_evaluation.cli init-db
+python -m final_evaluation.cli seed-study
+python -m final_evaluation.cli create-participants --study main_study_v2 --count 3 --prefix M --not-test
+python -m final_evaluation.cli create-admin --study main_study_v2
+python -m final_evaluation.cli build-frontend
+python -m final_evaluation.cli serve
+```
+
+The dashboard runs at <http://127.0.0.1:8010>. Access codes are written to
+`final_evaluation/private/`. `export`, `backup`, `restore` and `upload-assets` handle the
+research export, backups and cloud storage.
+
 ## Layout
 
 ```
@@ -78,3 +107,16 @@ eval/              batch runs of all systems and the E1 judge
 final_evaluation/  E1 to E3 analyses and the rating dashboard of the human study
 frontend/          reviewer UI
 ```
+
+## Data archive
+
+The archive unpacks into the repository root. `SHA256SUMS.txt` lists the hash of every
+file. Not included: PDFs, the study database, access codes and API keys.
+
+| Path | Content |
+|---|---|
+| `data/<paper>/` | Per paper: claims, prior-work pool and texts, results of agent, linear baseline and Afzal et al., one log per claim run |
+| `final_evaluation/inputs/`, `manifests/` | The report and submission texts the judge and the raters read, with hashes |
+| `final_evaluation/results/main/` | Judge calls, the export of the human study, all analyses and figures |
+| `data/oec_rejected/`, `eval/out/rejected_case/` | The rejected submission of Section 7.4 |
+| `eval/out/` | Metadata of the batch runs |

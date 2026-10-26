@@ -24,8 +24,7 @@ def create_app() -> FastAPI:
         joined = "\n  - ".join(problems)
         raise RuntimeError(
             f"final_evaluation cannot start in APP_ENV={settings.app_env!r}:\n  - {joined}\n"
-            "Fix these in final_evaluation/.env (copy from .env.example) and retry. "
-            "See final_evaluation/README.md."
+            "Fix these in final_evaluation/.env (copy from .env.example) and retry."
         )
 
     app = FastAPI(title="Novelty Report Evaluation Dashboard", docs_url=None, redoc_url=None)
