@@ -220,28 +220,9 @@ def _import_opennovelty_e1_text(paper: str, pdf_spec: dict) -> dict:
     if not pdf_path.is_file():
         return {"blocker": f"missing file: {pdf_spec['path']}"}
     sys.path.insert(0, str(REPO_ROOT / "eval"))
-    import importlib
+    import pdf_to_md
 
-    pdf_to_md = importlib.import_module("pdf_to_md")
-    text = pdf_to_md.convert(str(pdf_path)) if hasattr(pdf_to_md, "convert") else None
-    if text is None:
-        tmp_out = _out_dir(paper) / "_opennovelty_e1_tmp.md"
-        r = subprocess.run(
-            [
-                sys.executable,
-                str(REPO_ROOT / "eval" / "pdf_to_md.py"),
-                "--pdf",
-                str(pdf_path),
-                "--out",
-                str(tmp_out),
-            ],
-            capture_output=True,
-            text=True,
-        )
-        if r.returncode != 0 or not tmp_out.is_file():
-            return {"blocker": f"eval/pdf_to_md.py failed: {r.stderr[-400:]}"}
-        text = tmp_out.read_text(encoding="utf-8")
-        tmp_out.unlink(missing_ok=True)
+    text = pdf_to_md.convert(str(pdf_path))
     f = _write(paper, "opennovelty.e1_text.md", text.encode("utf-8"))
     return {"e1_text_file": f, "needs_manual_equivalence_check": True}
 
