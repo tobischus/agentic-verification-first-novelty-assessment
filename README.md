@@ -13,8 +13,8 @@ Run from the repository root:
 
 ```bash
 python3.11 -m venv .venv               # Windows: py -3.11 -m venv .venv
-source .venv/bin/activate              # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+source .venv/bin/activate              # Windows (cmd): .venv\Scripts\activate
+pip install -r requirements.txt        # about 4 GB with PyTorch
 tar -xJf thesis_data_archive.tar.xz
 mkdir out
 python -m final_evaluation.cli analyze-e1 --out out/e1_analysis.json
@@ -31,7 +31,8 @@ The files in `out/` are identical to the stored results in
 
 ## Run the system
 
-Needs an OpenAI API key and Docker for GROBID. Model calls are billed.
+Uses the environment installed above and needs an OpenAI API key and Docker for
+GROBID. Model calls are billed.
 
 ```bash
 git clone https://github.com/sunnweiwei/RankGPT.git
