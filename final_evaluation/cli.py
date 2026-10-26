@@ -44,15 +44,6 @@ def cmd_seed_study(args):
     print(seed.seed_study(args.config))
 
 
-def cmd_refresh_reports(args):
-    import json
-    from .scripts import seed
-
-    systems = tuple(x.strip() for x in args.systems.split(",") if x.strip())
-    res = seed.refresh_reports(args.config, systems, dry_run=args.dry_run)
-    print(json.dumps(res, indent=1, default=str))
-
-
 def cmd_create_participants(args):
     from final_evaluation.scripts import seed
 
@@ -283,15 +274,6 @@ def main():
     p.add_argument("--config", default="final_evaluation/config/main.yaml")
     p.set_defaults(func=cmd_seed_study)
 
-    p = sub.add_parser(
-        "refresh-reports",
-        help="replace report content from the current manifest where no one has rated it",
-    )
-    p.add_argument("--config", required=True)
-    p.add_argument("--systems", default="agent,linear")
-    p.add_argument("--dry-run", action="store_true")
-    p.set_defaults(func=cmd_refresh_reports)
-
     p = sub.add_parser("create-participants")
     p.add_argument("--study", required=True)
     p.add_argument("--count", type=int, required=True)
@@ -410,7 +392,6 @@ def main():
     if args.command in {
         "init-db",
         "seed-study",
-        "refresh-reports",
         "create-participants",
         "create-admin",
         "upload-assets",
