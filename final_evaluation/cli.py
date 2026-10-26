@@ -149,7 +149,9 @@ def cmd_analyze_human(args):
     out_path = (
         Path(args.out) if args.out else Path(args.input).with_suffix("").parent / "analysis.json"
     )
-    out_path.write_text(json.dumps(result, ensure_ascii=False, indent=1), encoding="utf-8")
+    out_path.write_text(
+        json.dumps(result, ensure_ascii=False, indent=1), encoding="utf-8", newline="\n"
+    )
     analyze.print_report(result)
     print(f"\nwritten: {out_path}")
 
@@ -182,7 +184,7 @@ def cmd_analyze_e1(args):
     res = analyze.analyze(recs, corr, plan)
     analyze.print_report(res, args.paper_set)
     out = Path(args.out) if args.out else Path(args.e1).parent / "e1_analysis.json"
-    out.write_text(json.dumps(res, indent=2), encoding="utf-8")
+    out.write_text(json.dumps(res, indent=2), encoding="utf-8", newline="\n")
     print()
     print(f"written: {out}")
 
@@ -194,7 +196,7 @@ def cmd_sensitivity_e1(args):
     res = sensitivity.analyze(recs)
     sensitivity.print_report(res)
     out = Path(args.out) if args.out else Path(args.e1).parent / "e1_sensitivity.json"
-    out.write_text(json.dumps(res, indent=2), encoding="utf-8")
+    out.write_text(json.dumps(res, indent=2), encoding="utf-8", newline="\n")
     print()
     print(f"written: {out}")
 
@@ -206,7 +208,7 @@ def cmd_agent_linear(args):
     agent_linear.print_report(res)
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(res, indent=2), encoding="utf-8")
+    out.write_text(json.dumps(res, indent=2), encoding="utf-8", newline="\n")
     print()
     print(f"written: {out}")
 
@@ -218,7 +220,7 @@ def cmd_source_audit(args):
     source_audit.print_report(res)
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(res, indent=2, ensure_ascii=False), encoding="utf-8")
+    out.write_text(json.dumps(res, indent=2, ensure_ascii=False), encoding="utf-8", newline="\n")
     print()
     print(f"written: {out}")
 
@@ -228,7 +230,9 @@ def cmd_compare_e1(args):
 
     result = analyze.compare_to_e1(args.input, args.e1, include_test=args.include_test)
     out_path = Path(args.out) if args.out else Path(args.e1).parent / "e1_vs_human.json"
-    out_path.write_text(json.dumps(result, ensure_ascii=False, indent=1), encoding="utf-8")
+    out_path.write_text(
+        json.dumps(result, ensure_ascii=False, indent=1), encoding="utf-8", newline="\n"
+    )
     analyze.print_e1_comparison(result)
     print(f"\nwritten: {out_path}")
 
