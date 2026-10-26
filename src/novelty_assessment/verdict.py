@@ -8,8 +8,11 @@ DEGREE_RANK = {"same": 0, "substantial": 1, "partial": 2, "superficial": 3, "non
 UNRANKED = 9
 
 DEGREE_LABEL = {
-    "same": "same contribution", "substantial": "substantial overlap",
-    "partial": "partial overlap", "superficial": "no overlap", "none": "no overlap",
+    "same": "same contribution",
+    "substantial": "substantial overlap",
+    "partial": "partial overlap",
+    "superficial": "no overlap",
+    "none": "no overlap",
 }
 
 VERDICT_LABEL = {
@@ -34,8 +37,6 @@ def is_overlap(comparison: dict) -> bool:
     return challenges(comparison) or degree(comparison) in OVERLAP_DEGREES
 
 
-
-
 def evidence_status(comparison: dict) -> str:
     """The evidence check's own verdict on this comparison, normalised; "" if none ran."""
     return str(((comparison or {}).get("evidence_check") or {}).get("status") or "").strip().lower()
@@ -43,9 +44,11 @@ def evidence_status(comparison: dict) -> str:
 
 def degree_confirmed(comparison: dict) -> bool:
     """Whether the evidence check confirmed the overlap the comparison proposed."""
-    return (evidence_status(comparison) == "material"
-            and ((comparison or {}).get("evidence_check") or {})
-            .get("proposed_degree_supported") is True)
+    return (
+        evidence_status(comparison) == "material"
+        and ((comparison or {}).get("evidence_check") or {}).get("proposed_degree_supported")
+        is True
+    )
 
 
 def conflicts(comparison: dict) -> bool:
@@ -62,8 +65,6 @@ def degree_rank(deg: str) -> int:
 def sort_key(comparison: dict):
     """Refuting papers first, then by decreasing strength of overlap."""
     return (not challenges(comparison), degree_rank(degree(comparison)))
-
-
 
 
 def overlap_label(deg: str) -> str:

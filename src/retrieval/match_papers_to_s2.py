@@ -28,9 +28,7 @@ class Paper:
     paper_id: str
     title: str = ""
     abstract: str = ""
-    citations: List[str] = field(
-        default_factory=list
-    )
+    citations: List[str] = field(default_factory=list)
     embedding: Optional[np.ndarray] = None
     publication_date: Optional[str] = None
     venue: Optional[str] = None
@@ -63,10 +61,12 @@ class SemanticScholarAPI:
     def __init__(self, api_key: str = None, rate_limit_delay: float = 1.1):
         if not api_key:
             api_key = os.getenv("SEMANTIC_SCHOLAR_API_KEY")
-        
+
         if not api_key:
-            logger.warning("No Semantic Scholar API key provided. Using unauthenticated requests (lower rate limits).")
-            
+            logger.warning(
+                "No Semantic Scholar API key provided. Using unauthenticated requests (lower rate limits)."
+            )
+
         self.api_key = api_key
         self.rate_limit_delay = rate_limit_delay
         self.min_delay = rate_limit_delay
@@ -115,7 +115,9 @@ class SemanticScholarAPI:
                 last_reason = f"network error ({e})"
                 if attempt == max_attempts:
                     break
-                logger.warning(f"Request error ({e}); retry {attempt}/{max_attempts} in {backoff:.0f}s")
+                logger.warning(
+                    f"Request error ({e}); retry {attempt}/{max_attempts} in {backoff:.0f}s"
+                )
                 time.sleep(backoff)
                 backoff = min(20.0, backoff * 2)
                 continue
@@ -151,7 +153,9 @@ class SemanticScholarAPI:
 
         raise TransientS2Error(f"S2 unavailable after {max_attempts} attempts: {last_reason}")
 
-    _S2_FIELDS = "title,abstract,paperId,publicationDate,venue,year,citationCount,authors,externalIds"
+    _S2_FIELDS = (
+        "title,abstract,paperId,publicationDate,venue,year,citationCount,authors,externalIds"
+    )
 
     @staticmethod
     def _title_variants(title: str) -> List[str]:
@@ -232,29 +236,31 @@ class SemanticScholarAPI:
             qn = re.sub(r"[^a-z0-9]", "", q.lower())
             tn = re.sub(r"[^a-z0-9]", "", (paper.title or "").lower())
             if qn and tn and fuzz.ratio(tn[: len(qn)], qn) >= 85:
-                logger.info(f"✅ matched via cleaned title '{q[:50]}…' -> '{paper.title[:55]}' ({paper.year})")
+                logger.info(
+                    f"✅ matched via cleaned title '{q[:50]}…' -> '{paper.title[:55]}' ({paper.year})"
+                )
                 return paper
-            logger.info(
-                f"rejected non-prefix match for cleaned '{q[:50]}' -> '{paper.title[:50]}'"
-            )
+            logger.info(f"rejected non-prefix match for cleaned '{q[:50]}' -> '{paper.title[:50]}'")
 
         if transient is not None:
             raise transient
         return None
 
 
-def process_for_pipeline(data_dir: str, submission_id: str, api_key: str = None, rate_limit_delay: float = 1.1):
+def process_for_pipeline(
+    data_dir: str, submission_id: str, api_key: str = None, rate_limit_delay: float = 1.1
+):
     """Process a single submission for pipeline integration."""
     input_file = Path(data_dir) / submission_id / f"{submission_id}.json"
-    
+
     if not input_file.exists():
         raise FileNotFoundError(f"Input file not found: {input_file}")
-    
+
     with open(input_file, "r", encoding="utf-8") as f:
         submission_data = json.load(f)
-    
+
     api_client = SemanticScholarAPI(api_key, rate_limit_delay)
-    
+
     cited_papers = submission_data.get("cited_papers", [])
     n_cited = len(cited_papers)
     logger.info(f"Processing {n_cited} cited papers")
@@ -291,7 +297,9 @@ def process_for_pipeline(data_dir: str, submission_id: str, api_key: str = None,
                 _progress.report(paper_idx + 1, n_cited)
 
         if transient_failures:
-            logger.info(f"Retry pass for {len(transient_failures)} references that hit transient S2 errors")
+            logger.info(
+                f"Retry pass for {len(transient_failures)} references that hit transient S2 errors"
+            )
             if _progress:
                 _progress.start_phase("Re-fetching rate-limited refs", len(transient_failures))
             for i, paper in enumerate(transient_failures):
@@ -326,48 +334,36 @@ if __name__ == "__main__":
         description="Enrich cited papers with Semantic Scholar data - single submission mode only"
     )
     parser.add_argument(
-        "--data-dir",
-        type=str,
-        required=True,
-        help="Data directory containing submission data"
+        "--data-dir", type=str, required=True, help="Data directory containing submission data"
     )
-    parser.add_argument(
-        "--submission-id",
-        type=str,
-        required=True,
-        help="Submission ID to process"
-    )
+    parser.add_argument("--submission-id", type=str, required=True, help="Submission ID to process")
     parser.add_argument(
         "--api-key",
         type=str,
-        help="Semantic Scholar API key (or set SEMANTIC_SCHOLAR_API_KEY env var)"
+        help="Semantic Scholar API key (or set SEMANTIC_SCHOLAR_API_KEY env var)",
     )
     parser.add_argument(
         "--rate-limit",
         type=float,
         default=1.1,
-        help="Rate limit delay in seconds between requests (S2 limit is 1 req/sec; stay above 1.0)"
+        help="Rate limit delay in seconds between requests (S2 limit is 1 req/sec; stay above 1.0)",
     )
-    parser.add_argument(
-        "--verbose", "-v",
-        action="store_true",
-        help="Verbose logging"
-    )
-    
+    parser.add_argument("--verbose", "-v", action="store_true", help="Verbose logging")
+
     args = parser.parse_args()
-    
+
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
-    
+
     logger.info(f"Processing submission {args.submission_id}")
     logger.info(f"API key: {args.api_key}")
     success = process_for_pipeline(
         data_dir=args.data_dir,
         submission_id=args.submission_id,
         api_key=args.api_key,
-        rate_limit_delay=args.rate_limit
+        rate_limit_delay=args.rate_limit,
     )
-    
+
     if success:
         logger.info(f"✅ Successfully enriched submission {args.submission_id}")
         print(f"✅ Successfully processed submission {args.submission_id}")

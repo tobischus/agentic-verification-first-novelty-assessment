@@ -4,6 +4,7 @@ Sections are cut at the PDF outline when it is reliable, otherwise at headings d
 from font size, weight and numbering. The output has the form "## Section\ntext" and is
 both what the agent reads and the text every quote is verified against.
 """
+
 import re
 from collections import Counter
 
@@ -15,8 +16,10 @@ _IEEE_NUM = re.compile(r"^([IVX]+|\d+(\.\d+)*|[A-Z])[.)]\s+(\S.*)$")
 _OUTLINE_MAX_LEVEL = 2
 _ANCHOR_TOL = 3.0
 _ANCHOR_MIN_OK = 0.5
-_HEAD_NUM = re.compile(r"^\s*(?:\d+(?:\.\d+)*[.)]?|[A-Z]\.?\d+(?:\.\d+)*[.)]?"
-                       r"|[IVXLC]+[.)]|[A-Z][.)]?(?=\s+[A-Z]))\s+")
+_HEAD_NUM = re.compile(
+    r"^\s*(?:\d+(?:\.\d+)*[.)]?|[A-Z]\.?\d+(?:\.\d+)*[.)]?"
+    r"|[IVXLC]+[.)]|[A-Z][.)]?(?=\s+[A-Z]))\s+"
+)
 
 
 def _clean(text: str) -> str:
@@ -75,9 +78,13 @@ def _is_heading(text: str, size: float, bold: float, body: float) -> bool:
     m = _IEEE_NUM.match(text)
     if m:
         rest = m.group(3)
-        if (len(text) < 80 and "," not in rest and len(rest.split()) <= 8
-                and (rest.isupper() or rest[:1].isupper())
-                and not rest.rstrip().endswith(".")):
+        if (
+            len(text) < 80
+            and "," not in rest
+            and len(rest.split()) <= 8
+            and (rest.isupper() or rest[:1].isupper())
+            and not rest.rstrip().endswith(".")
+        ):
             return True
     return False
 
@@ -135,8 +142,13 @@ def _outline_marks(doc, max_level: int = _OUTLINE_MAX_LEVEL):
         page = doc[pno]
         pt = dest["to"]
         ytop = page.rect.height - pt.y
-        marks.append((_reading_key(pno, pt.x, ytop, page.rect.width),
-                      " > ".join(path[k] for k in sorted(path)), leaf))
+        marks.append(
+            (
+                _reading_key(pno, pt.x, ytop, page.rect.width),
+                " > ".join(path[k] for k in sorted(path)),
+                leaf,
+            )
+        )
     marks.sort(key=lambda m: m[0])
     return marks, n_top
 
@@ -154,11 +166,13 @@ def _sections_from_outline(doc, seq):
 
     ok = 0
     for key, _path, leaf in marks:
-        i = next((j for j, (k, _t) in enumerate(seq)
-                  if k >= (key[0], key[1], key[2] - _ANCHOR_TOL)), None)
+        i = next(
+            (j for j, (k, _t) in enumerate(seq) if k >= (key[0], key[1], key[2] - _ANCHOR_TOL)),
+            None,
+        )
         if i is None:
             continue
-        window = _norm_head(" ".join(t for _k, t in seq[max(0, i - 1): i + 3]))
+        window = _norm_head(" ".join(t for _k, t in seq[max(0, i - 1) : i + 3]))
         n = _norm_head(leaf)
         if n and (n in window or (len(n) > 8 and n[: len(n) * 2 // 3] in window)):
             ok += 1
@@ -167,8 +181,10 @@ def _sections_from_outline(doc, seq):
 
     bounds = []
     for key, path_title, leaf in marks:
-        i = next((j for j, (k, _t) in enumerate(seq)
-                  if k >= (key[0], key[1], key[2] - _ANCHOR_TOL)), None)
+        i = next(
+            (j for j, (k, _t) in enumerate(seq) if k >= (key[0], key[1], key[2] - _ANCHOR_TOL)),
+            None,
+        )
         if i is not None:
             bounds.append((i, path_title, leaf))
     if not bounds:
@@ -180,8 +196,12 @@ def _sections_from_outline(doc, seq):
     for n, (i, path_title, leaf) in enumerate(bounds):
         j = bounds[n + 1][0] if n + 1 < len(bounds) else len(seq)
         body = [t for _k, t in seq[i:j]]
-        while body and len(body[0]) < 90 and _norm_head(body[0]) \
-                and _norm_head(body[0]) in _norm_head(leaf):
+        while (
+            body
+            and len(body[0]) < 90
+            and _norm_head(body[0])
+            and _norm_head(body[0]) in _norm_head(leaf)
+        ):
             body.pop(0)
         sections.append((path_title, body))
     return sections
@@ -249,11 +269,14 @@ def pdf_to_sectioned_text(pdf_path) -> str:
         pages = sorted(per_page)
         out, step = [], 2
         for i in range(0, len(pages), step):
-            chunk_pages = pages[i:i + step]
+            chunk_pages = pages[i : i + step]
             txt = _clean("\n".join("\n".join(per_page[p]) for p in chunk_pages))
             if txt:
-                label = (f"Pages {chunk_pages[0] + 1}-{chunk_pages[-1] + 1}"
-                         if len(chunk_pages) > 1 else f"Page {chunk_pages[0] + 1}")
+                label = (
+                    f"Pages {chunk_pages[0] + 1}-{chunk_pages[-1] + 1}"
+                    if len(chunk_pages) > 1
+                    else f"Page {chunk_pages[0] + 1}"
+                )
                 out.append(f"## {label}\n{txt}")
         return "\n\n".join(out)
 

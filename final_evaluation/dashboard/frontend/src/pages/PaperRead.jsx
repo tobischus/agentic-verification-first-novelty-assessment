@@ -12,13 +12,21 @@ export default function PaperRead({ paperId, onDone, onBack, onError }) {
 
   useEffect(() => {
     let alive = true
-    api.openReading(paperId).then((v) => {
-      if (!alive) return
-      setView(v)
-      if (v.familiarity) { setFam(v.familiarity); setFamSaved(true) }
-      if (v.reading?.confirmed_at) setChecked(true)
-    }).catch((e) => onError(String(e.message || e)))
-    return () => { alive = false }
+    api
+      .openReading(paperId)
+      .then((v) => {
+        if (!alive) return
+        setView(v)
+        if (v.familiarity) {
+          setFam(v.familiarity)
+          setFamSaved(true)
+        }
+        if (v.reading?.confirmed_at) setChecked(true)
+      })
+      .catch((e) => onError(String(e.message || e)))
+    return () => {
+      alive = false
+    }
   }, [paperId])
 
   useEffect(() => {
@@ -61,7 +69,9 @@ export default function PaperRead({ paperId, onDone, onBack, onError }) {
   return (
     <div className="fe-read">
       <div className="fe-topbar">
-        <button className="link" onClick={onBack}>‹ Task list</button>
+        <button className="link" onClick={onBack}>
+          ‹ Task list
+        </button>
         <div className="fe-read-title">{view.paper.title}</div>
         <div />
       </div>
@@ -69,9 +79,9 @@ export default function PaperRead({ paperId, onDone, onBack, onError }) {
       <div className="fe-card fe-read-intro">
         <h1>Before the comparisons: the submission</h1>
         <p className="muted">
-          Both comparison tasks for this paper open after this step. Answer the two
-          background questions, then read or skim the submission. You can open it again at
-          any time from within a task.
+          Both comparison tasks for this paper open after this step. Answer the two background
+          questions, then read or skim the submission. You can open it again at any time from within
+          a task.
         </p>
 
         <div className="fe-fam">
@@ -79,8 +89,12 @@ export default function PaperRead({ paperId, onDone, onBack, onError }) {
             <label htmlFor="read-fam-area">
               Before starting this study, how familiar were you with this paper’s research area?
             </label>
-            <select id="read-fam-area" value={fam.familiarity} disabled={famSaved}
-                    onChange={(e) => answer({ familiarity: e.target.value })}>
+            <select
+              id="read-fam-area"
+              value={fam.familiarity}
+              disabled={famSaved}
+              onChange={(e) => answer({ familiarity: e.target.value })}
+            >
               <option value="">Select…</option>
               <option value="low">Low</option>
               <option value="moderate">Moderate</option>
@@ -88,24 +102,36 @@ export default function PaperRead({ paperId, onDone, onBack, onError }) {
             </select>
           </div>
           <div className="fe-field">
-            <label htmlFor="read-fam-read">Had you read this submission before starting this study?</label>
-            <select id="read-fam-read" disabled={famSaved}
-                    value={fam.read_before === null ? '' : String(fam.read_before)}
-                    onChange={(e) => answer({ read_before: e.target.value === 'true' })}>
+            <label htmlFor="read-fam-read">
+              Had you read this submission before starting this study?
+            </label>
+            <select
+              id="read-fam-read"
+              disabled={famSaved}
+              value={fam.read_before === null ? '' : String(fam.read_before)}
+              onChange={(e) => answer({ read_before: e.target.value === 'true' })}
+            >
               <option value="">Select…</option>
               <option value="true">Yes</option>
               <option value="false">No</option>
             </select>
           </div>
-          {famSaved && <div className="fe-fam-intro muted">Recorded — you will not be asked again for this paper.</div>}
+          {famSaved && (
+            <div className="fe-fam-intro muted">
+              Recorded — you will not be asked again for this paper.
+            </div>
+          )}
         </div>
       </div>
 
       {famSaved ? (
         <>
           <div className="fe-read-pdf">
-            <StudyPdfPane url={api.assetUrl(view.paper.submission_pdf_asset_id)} highlights={[]}
-                          title="Submission" />
+            <StudyPdfPane
+              url={api.assetUrl(view.paper.submission_pdf_asset_id)}
+              highlights={[]}
+              title="Submission"
+            />
           </div>
           <div className="fe-card fe-read-confirm">
             {confirmed ? (
@@ -116,7 +142,11 @@ export default function PaperRead({ paperId, onDone, onBack, onError }) {
             ) : (
               <>
                 <label className="fe-checkbox">
-                  <input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} />
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={(e) => setChecked(e.target.checked)}
+                  />
                   <span>I have read or skimmed the submission.</span>
                 </label>
                 <button disabled={!checked || busy} onClick={confirm}>

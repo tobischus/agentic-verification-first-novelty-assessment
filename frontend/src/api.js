@@ -31,14 +31,18 @@ export const api = {
   state: (id) => j('GET', `/submissions/${id}/state`),
   claims: (id) => j('GET', `/submissions/${id}/claims`),
   editClaims: (id, operations) => j('PATCH', `/submissions/${id}/claims`, { operations }),
-  setDate: (id, publicationDate) => j('PATCH', `/submissions/${id}/date`, { publication_date: publicationDate }),
+  setDate: (id, publicationDate) =>
+    j('PATCH', `/submissions/${id}/date`, { publication_date: publicationDate }),
   papers: (id) => j('GET', `/submissions/${id}/papers`),
   editPapers: (id, edit) => j('PATCH', `/submissions/${id}/papers`, edit),
 
   async uploadPaperPdf(id, paperId, file) {
     const fd = new FormData()
     fd.append('file', file)
-    const r = await fetch(`${BASE}/submissions/${id}/papers/${paperId}/pdf`, { method: 'POST', body: fd })
+    const r = await fetch(`${BASE}/submissions/${id}/papers/${paperId}/pdf`, {
+      method: 'POST',
+      body: fd,
+    })
     if (!r.ok) throw new Error((await r.text()) || r.statusText)
     return r.json()
   },
@@ -54,7 +58,8 @@ export const api = {
   approve: (id, cp) => j('POST', `/submissions/${id}/checkpoints/${cp}/approve`),
   reviewClaims: (id) => j('GET', `/submissions/${id}/review/claims`),
   computeClaim: (id, claimId) => j('POST', `/submissions/${id}/review/claim/${claimId}`),
-  claimLive: (id, claimId) => j('GET', `/submissions/${id}/review/claim/${claimId}/live`, undefined, 8000),
+  claimLive: (id, claimId) =>
+    j('GET', `/submissions/${id}/review/claim/${claimId}/live`, undefined, 8000),
   ensureClaimAssessment: (id, claimId) =>
     j('POST', `/submissions/${id}/review/claim/${claimId}/assessment`, undefined, 120000),
   finalizeReview: (id) => j('POST', `/submissions/${id}/review/finalize`, undefined, 300000),

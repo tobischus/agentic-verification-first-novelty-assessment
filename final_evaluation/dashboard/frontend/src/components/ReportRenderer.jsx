@@ -1,7 +1,18 @@
 // Renders one system's frozen Markdown report.
 import {
-  ASSESSMENT_LINE, CLAIM_HEADING, DETAIL_HEADING, OPEN_POINT_LINE, VERDICT_LINE, anchorId,
-  assessment, claimOfPassages, groupReport, isGroupedLayout, jumpToId, resolveAnchor, subBlock,
+  ASSESSMENT_LINE,
+  CLAIM_HEADING,
+  DETAIL_HEADING,
+  OPEN_POINT_LINE,
+  VERDICT_LINE,
+  anchorId,
+  assessment,
+  claimOfPassages,
+  groupReport,
+  isGroupedLayout,
+  jumpToId,
+  resolveAnchor,
+  subBlock,
 } from './assessmentStyle.js'
 import { colorFor } from '../vendor/pdf/PdfViewer.jsx'
 
@@ -16,7 +27,9 @@ const UNVERIFIED_MARKER = /^not confirmed verbatim:?$/i
 function inline(text, keyPrefix, ctx) {
   const out = []
   const re = /\*\*(.+?)\*\*|\[([^\]]+)\]\(<?([^()>]+)>?\)/g
-  let last = 0, m, i = 0
+  let last = 0,
+    m,
+    i = 0
   while ((m = re.exec(text))) {
     if (m.index > last) out.push(text.slice(last, m.index))
     if (m[1] !== undefined) {
@@ -25,11 +38,24 @@ function inline(text, keyPrefix, ctx) {
       const target = ctx ? resolveAnchor(ctx.idPrefix, m[3]) : null
       if (target) {
         out.push(
-          <a key={`${keyPrefix}-j${i++}`} className="as-jump" href={`#${target}`}
-             onClick={(e) => { e.preventDefault(); jumpToId(target) }}>{m[2]}</a>,
+          <a
+            key={`${keyPrefix}-j${i++}`}
+            className="as-jump"
+            href={`#${target}`}
+            onClick={(e) => {
+              e.preventDefault()
+              jumpToId(target)
+            }}
+          >
+            {m[2]}
+          </a>,
         )
       } else {
-        out.push(<span key={`${keyPrefix}-a${i++}`} className="rr-extlink">{m[2]}</span>)
+        out.push(
+          <span key={`${keyPrefix}-a${i++}`} className="rr-extlink">
+            {m[2]}
+          </span>,
+        )
       }
     }
     last = re.lastIndex
@@ -43,19 +69,35 @@ function Quote({ text, verified, target, activeId, onPick, claim }) {
   const active = clickable && activeId === target.id
   return (
     <blockquote
-      className={'rz-quote' + (clickable ? ' qjump' : '') + (active ? ' active' : '')
-                + (verified ? ' verified' : ' unverified')}
+      className={
+        'rz-quote' +
+        (clickable ? ' qjump' : '') +
+        (active ? ' active' : '') +
+        (verified ? ' verified' : ' unverified')
+      }
       onClick={clickable ? () => onPick(target) : undefined}
     >
       {clickable && claim ? (
-        <span className="qswatch" style={{ background: claimColor(claim) }}
-              title={`Highlighted in this colour in the submission PDF (claim ${claim})`} />
+        <span
+          className="qswatch"
+          style={{ background: claimColor(claim) }}
+          title={`Highlighted in this colour in the submission PDF (claim ${claim})`}
+        />
       ) : null}
       {verified ? (
-        <span className="rz-qmark" title="A stored verbatim check matched this quote in its source document">✓</span>
+        <span
+          className="rz-qmark"
+          title="A stored verbatim check matched this quote in its source document"
+        >
+          ✓
+        </span>
       ) : (
-        <span className="rz-qmark rz-qmark-none"
-             title="No stored verbatim check for this quote (not confirmed, or this report carries no check)">–</span>
+        <span
+          className="rz-qmark rz-qmark-none"
+          title="No stored verbatim check for this quote (not confirmed, or this report carries no check)"
+        >
+          –
+        </span>
       )}
       <span className="rz-qtext">{text}</span>
       {clickable && (
@@ -63,7 +105,10 @@ function Quote({ text, verified, target, activeId, onPick, claim }) {
           type="button"
           className="rz-qjump"
           title="Show this passage in the submission PDF"
-          onClick={(e) => { e.stopPropagation(); onPick(target) }}
+          onClick={(e) => {
+            e.stopPropagation()
+            onPick(target)
+          }}
         >
           ⤴ PDF
         </button>
@@ -73,15 +118,25 @@ function Quote({ text, verified, target, activeId, onPick, claim }) {
 }
 
 function Table({ rows, keyPrefix, ctx }) {
-  const cells = (line) => line.replace(/^\|/, '').replace(/\|$/, '').split('|')
-    .map((c) => c.trim().replace(/&#124;/g, '|'))
+  const cells = (line) =>
+    line
+      .replace(/^\|/, '')
+      .replace(/\|$/, '')
+      .split('|')
+      .map((c) => c.trim().replace(/&#124;/g, '|'))
   const bare = (c) => c.replace(/^\[([^\]]+)\]\(#[^)]*\)$/, '$1')
   const head = cells(rows[0])
   const body = rows.slice(2).map(cells)
   return (
     <div className="rr-table-wrap">
       <table className="rr-table">
-        <thead><tr>{head.map((h, i) => <th key={i}>{inline(h, `${keyPrefix}-h${i}`, ctx)}</th>)}</tr></thead>
+        <thead>
+          <tr>
+            {head.map((h, i) => (
+              <th key={i}>{inline(h, `${keyPrefix}-h${i}`, ctx)}</th>
+            ))}
+          </tr>
+        </thead>
         <tbody>
           {body.map((r, ri) => {
             const marks = r.map((c) => assessment(bare(c), { whole: true }))
@@ -116,7 +171,9 @@ export function parseReport(text, quoteIndex, { idPrefix = 'r', activeId, onPick
   const items = []
   const toc = []
   const grouped = isGroupedLayout(text)
-  let i = 0, key = 0, headingNo = 0
+  let i = 0,
+    key = 0,
+    headingNo = 0
   let prevNonEmpty = ''
   let claimNo = 0
   let claimTextFor = 0
@@ -124,19 +181,31 @@ export function parseReport(text, quoteIndex, { idPrefix = 'r', activeId, onPick
   while (i < lines.length) {
     const line = lines[i]
     const t = line.trim()
-    if (!t) { i++; continue }
+    if (!t) {
+      i++
+      continue
+    }
 
     if (t === '---' && grouped) {
       items.push({ type: 'node', hr: true, node: <hr key={key++} className="rr-hr" /> })
-      prevNonEmpty = t; i++; continue
+      prevNonEmpty = t
+      i++
+      continue
     }
 
     if (t === '---') {
-      const nextNonEmpty = lines.slice(i + 1).find((l) => l.trim())?.trim() || ''
-      const nextIsDetail = /^#{2,4}\s+/.test(nextNonEmpty)
-        && DETAIL_HEADING.test(nextNonEmpty.replace(/^#{2,4}\s+/, ''))
+      const nextNonEmpty =
+        lines
+          .slice(i + 1)
+          .find((l) => l.trim())
+          ?.trim() || ''
+      const nextIsDetail =
+        /^#{2,4}\s+/.test(nextNonEmpty) &&
+        DETAIL_HEADING.test(nextNonEmpty.replace(/^#{2,4}\s+/, ''))
       if (!nextIsDetail) items.push({ type: 'node', node: <hr key={key++} className="rr-hr" /> })
-      prevNonEmpty = t; i++; continue
+      prevNonEmpty = t
+      i++
+      continue
     }
 
     const heading = t.match(/^(#{1,5})\s+(.*)$/)
@@ -150,21 +219,36 @@ export function parseReport(text, quoteIndex, { idPrefix = 'r', activeId, onPick
       claimTextFor = grouped && claim ? claimNo : 0
       const ref = DETAIL_HEADING.exec(body)
       items.push({
-        type: 'heading', level, text: body, id: hid, raw: t,
+        type: 'heading',
+        level,
+        text: body,
+        id: hid,
+        raw: t,
         cmpId: ref && claimNo ? anchorId(idPrefix, claimNo, ref[1]) : null,
-        node: <Tag key={key++} id={hid} className={'rr-h rr-h' + level}>{inline(body, `h${key}`, ctx)}</Tag>,
+        node: (
+          <Tag key={key++} id={hid} className={'rr-h rr-h' + level}>
+            {inline(body, `h${key}`, ctx)}
+          </Tag>
+        ),
       })
-      if (grouped
-        ? (level === 1 && body !== 'Novelty Assessment') || (level === 2 && body === 'Novelty summary')
-        : level <= 2) toc.push({ id: hid, level, text: body })
-      prevNonEmpty = t; i++; continue
+      if (
+        grouped
+          ? (level === 1 && body !== 'Novelty Assessment') ||
+            (level === 2 && body === 'Novelty summary')
+          : level <= 2
+      )
+        toc.push({ id: hid, level, text: body })
+      prevNonEmpty = t
+      i++
+      continue
     }
 
     const verdictLine = grouped && VERDICT_LINE.exec(t)
     const verdictMark = verdictLine && assessment(verdictLine[1])
     if (verdictMark) {
       items.push({
-        type: 'node', raw: t,
+        type: 'node',
+        raw: t,
         node: (
           <p key={key++} className="rr-p lay-verdict">
             <strong>Verdict:</strong>{' '}
@@ -172,27 +256,35 @@ export function parseReport(text, quoteIndex, { idPrefix = 'r', activeId, onPick
           </p>
         ),
       })
-      prevNonEmpty = t; i++; continue
+      prevNonEmpty = t
+      i++
+      continue
     }
     const openLine = grouped && OPEN_POINT_LINE.exec(t)
     if (openLine) {
       items.push({
-        type: 'node', raw: t,
+        type: 'node',
+        raw: t,
         node: (
           <p key={key++} className="rr-p lay-open">
-            <span className="lay-open-mark" aria-hidden="true">!</span>
+            <span className="lay-open-mark" aria-hidden="true">
+              !
+            </span>
             <span>{inline(t, `o${key}`, ctx)}</span>
           </p>
         ),
       })
-      prevNonEmpty = t; i++; continue
+      prevNonEmpty = t
+      i++
+      continue
     }
 
     const labelled = ASSESSMENT_LINE.exec(t)
     const marked = labelled && assessment(labelled[2])
     if (marked) {
       items.push({
-        type: 'node', raw: t,
+        type: 'node',
+        raw: t,
         node: (
           <p key={key++} className="rr-p as-assess">
             <strong>{labelled[1]}:</strong>{' '}
@@ -201,14 +293,23 @@ export function parseReport(text, quoteIndex, { idPrefix = 'r', activeId, onPick
           </p>
         ),
       })
-      prevNonEmpty = t; i++; continue
+      prevNonEmpty = t
+      i++
+      continue
     }
 
     if (t.startsWith('|')) {
       const rows = []
-      while (i < lines.length && lines[i].trim().startsWith('|')) { rows.push(lines[i].trim()); i++ }
-      items.push({ type: 'node', node: <Table key={key++} rows={rows} keyPrefix={`t${key}`} ctx={ctx} /> })
-      prevNonEmpty = '|'; continue
+      while (i < lines.length && lines[i].trim().startsWith('|')) {
+        rows.push(lines[i].trim())
+        i++
+      }
+      items.push({
+        type: 'node',
+        node: <Table key={key++} rows={rows} keyPrefix={`t${key}`} ctx={ctx} />,
+      })
+      prevNonEmpty = '|'
+      continue
     }
 
     if (t.startsWith('> ')) {
@@ -216,11 +317,21 @@ export function parseReport(text, quoteIndex, { idPrefix = 'r', activeId, onPick
       const declaredUnverified = UNVERIFIED_MARKER.test(prevNonEmpty.replace(/\*\*/g, '').trim())
       items.push({
         type: 'node',
-        node: <Quote key={key++} text={quoteText} verified={!declaredUnverified && isVerified(quoteText)}
-                    target={resolve(quoteText)} activeId={activeId} onPick={onPick}
-                    claim={subMap.has(quoteText) ? claimOf.get(subMap.get(quoteText)) : undefined} />,
+        node: (
+          <Quote
+            key={key++}
+            text={quoteText}
+            verified={!declaredUnverified && isVerified(quoteText)}
+            target={resolve(quoteText)}
+            activeId={activeId}
+            onPick={onPick}
+            claim={subMap.has(quoteText) ? claimOf.get(subMap.get(quoteText)) : undefined}
+          />
+        ),
       })
-      prevNonEmpty = t; i++; continue
+      prevNonEmpty = t
+      i++
+      continue
     }
 
     if (/^-\s/.test(t)) {
@@ -235,7 +346,9 @@ export function parseReport(text, quoteIndex, { idPrefix = 'r', activeId, onPick
         node: (
           <ul key={key++} className="rr-list">
             {bullets.map((it, ii) => (
-              <li key={ii} className={it.nested ? 'rr-nested' : undefined}>{inline(it.text, `l${key}-${ii}`, ctx)}</li>
+              <li key={ii} className={it.nested ? 'rr-nested' : undefined}>
+                {inline(it.text, `l${key}-${ii}`, ctx)}
+              </li>
             ))}
           </ul>
         ),
@@ -249,24 +362,46 @@ export function parseReport(text, quoteIndex, { idPrefix = 'r', activeId, onPick
     claimTextFor = 0
     if (anchor && onPick) {
       items.push({
-        type: 'node', raw: t,
+        type: 'node',
+        raw: t,
         node: (
           <p key={key++} className="rr-p lay-claimtext">
-            <a href="#" className={'claim-jump claim-colored' + (activeId === anchor.id ? ' active' : '')}
-               style={{ '--claim-color': claimColor(anchorClaim) }}
-               title={`Show where the submission states this claim:
+            <a
+              href="#"
+              className={'claim-jump claim-colored' + (activeId === anchor.id ? ' active' : '')}
+              style={{ '--claim-color': claimColor(anchorClaim) }}
+              title={`Show where the submission states this claim:
 “${anchor.text}”`}
-               onClick={(e) => { e.preventDefault(); e.stopPropagation(); onPick({ id: anchor.id }) }}>
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                onPick({ id: anchor.id })
+              }}
+            >
               {inline(t, `p${key}`, ctx)}
-              <span className="claim-jump-mark" aria-hidden="true"> ⤴ PDF</span>
+              <span className="claim-jump-mark" aria-hidden="true">
+                {' '}
+                ⤴ PDF
+              </span>
             </a>
           </p>
         ),
       })
-      prevNonEmpty = t; i++; continue
+      prevNonEmpty = t
+      i++
+      continue
     }
-    items.push({ type: 'node', raw: t, node: <p key={key++} className="rr-p">{inline(t, `p${key}`, ctx)}</p> })
-    prevNonEmpty = t; i++
+    items.push({
+      type: 'node',
+      raw: t,
+      node: (
+        <p key={key++} className="rr-p">
+          {inline(t, `p${key}`, ctx)}
+        </p>
+      ),
+    })
+    prevNonEmpty = t
+    i++
   }
 
   if (grouped) return { nodes: renderGrouped(groupReport(items), 'g'), toc }
@@ -277,15 +412,24 @@ export function parseReport(text, quoteIndex, { idPrefix = 'r', activeId, onPick
     while (j < list.length) {
       const it = list[j]
       const spec = it.type === 'heading' && it.level === 4 ? subBlock(it.text) : null
-      if (!spec) { acc.push(it.node); j++; continue }
+      if (!spec) {
+        acc.push(it.node)
+        j++
+        continue
+      }
       const body = []
       let k = j + 1
       while (k < list.length && !(list[k].type === 'heading' && list[k].level <= 4)) {
-        body.push(list[k].node); k++
+        body.push(list[k].node)
+        k++
       }
       acc.push(
-        <details key={`${keyBase}-s${j}`} id={it.id} open={spec.open}
-                 className={`rr-sub blk blk-${spec.kind}`}>
+        <details
+          key={`${keyBase}-s${j}`}
+          id={it.id}
+          open={spec.open}
+          className={`rr-sub blk blk-${spec.kind}`}
+        >
           <summary className="rr-sub-summary">{it.text}</summary>
           <div className="rr-sub-body">{body}</div>
         </details>,
@@ -303,7 +447,8 @@ export function parseReport(text, quoteIndex, { idPrefix = 'r', activeId, onPick
       const bodyItems = []
       let k = j + 1
       while (k < items.length && !(items[k].type === 'heading' && items[k].level <= it.level)) {
-        bodyItems.push(items[k]); k++
+        bodyItems.push(items[k])
+        k++
       }
       const line = bodyItems.map((b) => ASSESSMENT_LINE.exec(b.raw || '')).find(Boolean)
       const mark = line && assessment(line[2])
@@ -358,8 +503,14 @@ function renderGrouped(nodes, keyBase) {
   })
 }
 
-export default function ReportRenderer({ text, quoteIndex, activeId, onPick, idPrefix = 'r',
-                                        showToc = true }) {
+export default function ReportRenderer({
+  text,
+  quoteIndex,
+  activeId,
+  onPick,
+  idPrefix = 'r',
+  showToc = true,
+}) {
   const { nodes, toc } = parseReport(text, quoteIndex, { idPrefix, activeId, onPick })
   return (
     <div className="rr-doc">
@@ -369,7 +520,9 @@ export default function ReportRenderer({ text, quoteIndex, activeId, onPick, idP
           <ul>
             {toc.map((h) => (
               <li key={h.id} className={'rr-toc-l' + h.level}>
-                <button type="button" className="link" onClick={() => jumpToId(h.id)}>{h.text}</button>
+                <button type="button" className="link" onClick={() => jumpToId(h.id)}>
+                  {h.text}
+                </button>
               </li>
             ))}
           </ul>

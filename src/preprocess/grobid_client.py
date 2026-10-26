@@ -1,4 +1,5 @@
 """GROBID client: PDF to TEI XML, then the pipeline's {id}.json via EnhancedGrobidParser."""
+
 import argparse
 import json
 import logging
@@ -55,9 +56,7 @@ class GrobidClient:
             resp = requests.post(url, files=files, data=data, timeout=self.timeout)
 
         if resp.status_code != 200:
-            raise RuntimeError(
-                f"GROBID returned HTTP {resp.status_code}: {resp.text[:300]}"
-            )
+            raise RuntimeError(f"GROBID returned HTTP {resp.status_code}: {resp.text[:300]}")
         return resp.text
 
     def process_for_pipeline(
@@ -120,9 +119,7 @@ class GrobidClient:
         metadata = json.loads(json_path.read_text(encoding="utf-8"))
         report = compute_quality_gates(metadata, sections)
         quality_path = sub_dir / f"{submission_id}_quality.json"
-        quality_path.write_text(
-            json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        quality_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
 
         logging.info(f"Saved metadata JSON -> {json_path}")
         logging.info(
@@ -130,9 +127,7 @@ class GrobidClient:
             f"({report['counts']['full_text_chars']} chars, {len(sections)} sections)"
         )
         gate_status = (
-            "ALL PASSED"
-            if report["all_passed"]
-            else "FAILED: " + ", ".join(report["failed_gates"])
+            "ALL PASSED" if report["all_passed"] else "FAILED: " + ", ".join(report["failed_gates"])
         )
         logging.info(f"Quality gates: {gate_status}")
 
@@ -186,12 +181,8 @@ class GrobidClient:
         data["publication_date"] = pub_date
         data["date_source"] = source
         data["date_needs_review"] = source == "today_fallback"
-        json_path.write_text(
-            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-        logging.info(
-            f"Resolved submission date ({source}): year={year}, date={pub_date}"
-        )
+        json_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        logging.info(f"Resolved submission date ({source}): year={year}, date={pub_date}")
 
     @staticmethod
     def _norm_title(s: str) -> str:
@@ -379,7 +370,9 @@ class GrobidClient:
             if items and GrobidClient._title_close(title, items[0].get("title", "")):
                 return items[0]
 
-        r = GrobidClient._s2_get(search_url, {"query": title, "limit": 5, "fields": fields}, headers)
+        r = GrobidClient._s2_get(
+            search_url, {"query": title, "limit": 5, "fields": fields}, headers
+        )
         if r is not None and r.status_code == 200:
             for it in (r.json() or {}).get("data") or []:
                 if GrobidClient._title_close(title, it.get("title", "")):
@@ -396,16 +389,12 @@ class GrobidClient:
         data["title"] = title
         data["title_source"] = source
         data["title_needs_review"] = source != "grobid"
-        json_path.write_text(
-            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        json_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         logging.info(f"Resolved title ({source}): {title!r}")
 
 
 def main():
-    ap = argparse.ArgumentParser(
-        description="PDF -> GROBID TEI -> pipeline {id}.json"
-    )
+    ap = argparse.ArgumentParser(description="PDF -> GROBID TEI -> pipeline {id}.json")
     ap.add_argument("--pdf", required=True, help="Path to the submission PDF")
     ap.add_argument("--data-dir", required=True, help="Base data directory")
     ap.add_argument("--submission-id", required=True, help="Submission ID")
@@ -419,16 +408,10 @@ def main():
     )
 
     client = GrobidClient(args.server)
-    result = client.process_for_pipeline(
-        args.pdf, args.data_dir, args.submission_id
-    )
+    result = client.process_for_pipeline(args.pdf, args.data_dir, args.submission_id)
     q = result["quality"]
     c = q["counts"]
-    status = (
-        "ALL PASSED"
-        if q["all_passed"]
-        else "FAILED: " + ", ".join(q["failed_gates"])
-    )
+    status = "ALL PASSED" if q["all_passed"] else "FAILED: " + ", ".join(q["failed_gates"])
     print(f"OK -> {result['metadata_json']}")
     print(f"   full text : {c['full_text_chars']} chars in {c['sections']} sections")
     print(f"   references: {c['cited_papers']} | citation contexts: {c['citation_contexts']}")

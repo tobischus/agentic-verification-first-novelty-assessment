@@ -1,4 +1,5 @@
 """Agent, linear and Afzal et al. on the ten E1-only papers, with the same steps and settings as for the human-study papers."""
+
 import json
 import os
 import shutil
@@ -15,7 +16,11 @@ sys.path.insert(0, str(REPO / "src" / "novelty_assessment"))
 ENV = {**os.environ, "PYTHONUTF8": "1"}
 MODEL_CA = "gpt-5.6-luna"
 
-keys = list(yaml.safe_load((REPO / "final_evaluation/config/e1_extra.yaml").read_text(encoding="utf-8"))["papers"])
+keys = list(
+    yaml.safe_load((REPO / "final_evaluation/config/e1_extra.yaml").read_text(encoding="utf-8"))[
+        "papers"
+    ]
+)
 if len(sys.argv) > 1:
     keys = [k for k in keys if k in sys.argv[1].split(",")]
 
@@ -23,7 +28,8 @@ if len(sys.argv) > 1:
 def run(cmd, log):
     t = time.time()
     with open(log, "a", encoding="utf-8") as fh:
-        fh.write(f"\n$ {' '.join(cmd)}\n"); fh.flush()
+        fh.write(f"\n$ {' '.join(cmd)}\n")
+        fh.flush()
         rc = subprocess.run(cmd, cwd=REPO, env=ENV, stdout=fh, stderr=subprocess.STDOUT).returncode
     return rc, round(time.time() - t)
 
@@ -34,7 +40,9 @@ def artifacts_done(k):
         b = REPO / "data" / k / f"{k}_artifact_b_{v}.json"
         if not (p.is_file() and b.is_file()):
             return False
-        if not (json.loads(b.read_text(encoding="utf-8")).get("paper_summary") or {}).get("main_novelty_concern"):
+        if not (json.loads(b.read_text(encoding="utf-8")).get("paper_summary") or {}).get(
+            "main_novelty_concern"
+        ):
             return False
     return True
 
@@ -61,9 +69,15 @@ for k in keys:
         if artifacts_done(k):
             print("  agent/linear: already done", flush=True)
         else:
-            rc, s = run([sys.executable, "eval/run_pilot.py", "--submission", k, "--variant", "both"],
-                        OUT / f"{k}__pilot.log")
-            meta["pilot"] = {"rc": rc, "seconds": s, "finished_at": time.strftime("%Y-%m-%dT%H:%M:%S")}
+            rc, s = run(
+                [sys.executable, "eval/run_pilot.py", "--submission", k, "--variant", "both"],
+                OUT / f"{k}__pilot.log",
+            )
+            meta["pilot"] = {
+                "rc": rc,
+                "seconds": s,
+                "finished_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            }
             print(f"  agent/linear: rc={rc} {s}s", flush=True)
             if rc != 0 or not artifacts_done(k):
                 raise RuntimeError(f"run_pilot rc={rc}")
@@ -73,6 +87,7 @@ for k in keys:
         else:
             import claim_assessment as ca
             from agent.claim_agent import _usd
+
             rows = []
             for v in ("agent", "linear"):
                 src = REPO / "data" / k / f"{k}_artifact_b_{v}.json"
@@ -84,22 +99,56 @@ for k in keys:
                 res = ca.build("data", k, v, model_name=MODEL_CA)
                 pt = sum(r["usage"]["prompt_tokens"] or 0 for r in res)
                 ct = sum(r["usage"]["completion_tokens"] or 0 for r in res)
-                rows.append({"variant": v, "claims": len(res), "seconds": round(time.time() - t, 1),
-                             "prompt_tokens": pt, "completion_tokens": ct,
-                             "usd_upper_bound": round(_usd(MODEL_CA, pt, ct), 4),
-                             "prompt_version": ca.PROMPT_VERSION, "prompt_sha256": ca.prompt_sha256()})
+                rows.append(
+                    {
+                        "variant": v,
+                        "claims": len(res),
+                        "seconds": round(time.time() - t, 1),
+                        "prompt_tokens": pt,
+                        "completion_tokens": ct,
+                        "usd_upper_bound": round(_usd(MODEL_CA, pt, ct), 4),
+                        "prompt_version": ca.PROMPT_VERSION,
+                        "prompt_sha256": ca.prompt_sha256(),
+                    }
+                )
             meta["claim_assessment"] = rows
-            print(f"  claim assessments: {[(r['variant'], r['claims'], r['usd_upper_bound']) for r in rows]}", flush=True)
+            print(
+                f"  claim assessments: {[(r['variant'], r['claims'], r['usd_upper_bound']) for r in rows]}",
+                flush=True,
+            )
 
         if afzal_done(k):
             print("  afzal: already done", flush=True)
         else:
-            rc1, s1 = run([sys.executable, "eval/afzal_adapter.py", "--data-dir", "data", "--submission-id", k],
-                          OUT / f"{k}__afzal_adapter.log")
-            rc2, s2 = run([sys.executable, "src/novelty_assessment/pipeline.py", "--data-dir", "data",
-                           "--submission-id", k, "--model", "gpt-4.1"], OUT / f"{k}__afzal_pipeline.log")
-            meta["afzal"] = {"rc": [rc1, rc2], "seconds": s1 + s2,
-                             "finished_at": time.strftime("%Y-%m-%dT%H:%M:%S")}
+            rc1, s1 = run(
+                [
+                    sys.executable,
+                    "eval/afzal_adapter.py",
+                    "--data-dir",
+                    "data",
+                    "--submission-id",
+                    k,
+                ],
+                OUT / f"{k}__afzal_adapter.log",
+            )
+            rc2, s2 = run(
+                [
+                    sys.executable,
+                    "src/novelty_assessment/pipeline.py",
+                    "--data-dir",
+                    "data",
+                    "--submission-id",
+                    k,
+                    "--model",
+                    "gpt-4.1",
+                ],
+                OUT / f"{k}__afzal_pipeline.log",
+            )
+            meta["afzal"] = {
+                "rc": [rc1, rc2],
+                "seconds": s1 + s2,
+                "finished_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            }
             print(f"  afzal: rc={rc1}/{rc2} {s1 + s2}s", flush=True)
             if rc1 or rc2 or not afzal_done(k):
                 raise RuntimeError(f"afzal rc={rc1}/{rc2}")

@@ -1,4 +1,5 @@
 """Nominal Krippendorff's alpha with missing data and exact agreement, without external libraries."""
+
 from __future__ import annotations
 
 from collections import Counter
@@ -37,24 +38,40 @@ def krippendorff_alpha_nominal(units: Dict[str, Dict[str, Optional[Hashable]]]) 
                 n += weight
 
     if n < 2 or n_units_used < 2:
-        return AlphaResult(alpha=None, n_pairable_values=int(n), n_units_used=n_units_used,
-                           reason="fewer than 2 pairable units -- not estimable")
+        return AlphaResult(
+            alpha=None,
+            n_pairable_values=int(n),
+            n_units_used=n_units_used,
+            reason="fewer than 2 pairable units -- not estimable",
+        )
 
     categories = list(marginal.keys())
     if len(categories) < 2:
-        return AlphaResult(alpha=None, n_pairable_values=int(n), n_units_used=n_units_used,
-                           reason="no variation across categories -- not estimable")
+        return AlphaResult(
+            alpha=None,
+            n_pairable_values=int(n),
+            n_units_used=n_units_used,
+            reason="no variation across categories -- not estimable",
+        )
 
     d_o = sum(w for (c, k), w in coincidence.items() if c != k) / n
     sum_nc2 = sum(v * v for v in marginal.values())
     denom = n * (n - 1)
     if denom == 0:
-        return AlphaResult(alpha=None, n_pairable_values=int(n), n_units_used=n_units_used,
-                           reason="degenerate denominator -- not estimable")
+        return AlphaResult(
+            alpha=None,
+            n_pairable_values=int(n),
+            n_units_used=n_units_used,
+            reason="degenerate denominator -- not estimable",
+        )
     d_e = (n * n - sum_nc2) / denom
     if d_e == 0:
-        return AlphaResult(alpha=None, n_pairable_values=int(n), n_units_used=n_units_used,
-                           reason="expected disagreement is 0 (every rating identical) -- not estimable")
+        return AlphaResult(
+            alpha=None,
+            n_pairable_values=int(n),
+            n_units_used=n_units_used,
+            reason="expected disagreement is 0 (every rating identical) -- not estimable",
+        )
 
     alpha = 1 - d_o / d_e
     return AlphaResult(alpha=alpha, n_pairable_values=int(n), n_units_used=n_units_used)
@@ -71,7 +88,4 @@ def exact_agreement(units: Dict[str, Dict[str, Optional[Hashable]]]) -> dict:
         total += 1
         if len(set(values)) == 1:
             agree += 1
-    return {"agree": agree, "total": total,
-           "rate": (agree / total) if total else None}
-
-
+    return {"agree": agree, "total": total, "rate": (agree / total) if total else None}

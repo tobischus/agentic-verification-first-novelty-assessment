@@ -36,18 +36,25 @@ function fmtAuthors(a) {
   const first = list[0].trim().split(/\s+/).slice(-1)[0]
   return list.length > 1 ? `${first} et al.` : list[0]
 }
-const s2Url = (id) => (/^[0-9a-f]{40}$/i.test(id || '') ? `https://www.semanticscholar.org/paper/${id}` : null)
+const s2Url = (id) =>
+  /^[0-9a-f]{40}$/i.test(id || '') ? `https://www.semanticscholar.org/paper/${id}` : null
 
 function groupPapers(papers) {
   const groups = {}
   papers.forEach((p) => {
-    const key = p.added_by ? '_added'
-      : (p.cluster != null && p.cluster >= 0 ? `c${p.cluster}` : '_none')
+    const key = p.added_by
+      ? '_added'
+      : p.cluster != null && p.cluster >= 0
+        ? `c${p.cluster}`
+        : '_none'
     if (!groups[key]) {
       groups[key] = {
-        label: key === '_added' ? 'Added by reviewer'
-          : (p.cluster_label || (key === '_none' ? 'Related work' : `Cluster ${p.cluster + 1}`)),
-        papers: [], best: 0,
+        label:
+          key === '_added'
+            ? 'Added by reviewer'
+            : p.cluster_label || (key === '_none' ? 'Related work' : `Cluster ${p.cluster + 1}`),
+        papers: [],
+        best: 0,
       }
     }
     groups[key].papers.push(p)
@@ -77,7 +84,10 @@ export default function PapersReview({ submissionId, status, onApproved }) {
   const [selected, setSelected] = useState(null)
 
   useEffect(() => {
-    api.papers(submissionId).then((d) => setPapers(d.papers)).catch((e) => setErr(String(e)))
+    api
+      .papers(submissionId)
+      .then((d) => setPapers(d.papers))
+      .catch((e) => setErr(String(e)))
   }, [submissionId, status])
 
   useEffect(() => {
@@ -97,15 +107,24 @@ export default function PapersReview({ submissionId, status, onApproved }) {
     } catch (e) {
       setPdfErr((er) => ({ ...er, [paperId]: String(e) }))
     } finally {
-      setPdfBusy((s) => { const n = new Set(s); n.delete(paperId); return n })
+      setPdfBusy((s) => {
+        const n = new Set(s)
+        n.delete(paperId)
+        return n
+      })
     }
   }
 
   const toggle = (id, setFn) =>
-    setFn((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
+    setFn((s) => {
+      const n = new Set(s)
+      n.has(id) ? n.delete(id) : n.add(id)
+      return n
+    })
 
   const doAdd = async (payload) => {
-    setAdding(true); setAddErr('')
+    setAdding(true)
+    setAddErr('')
     try {
       const r = await api.addPaper(submissionId, payload)
       if (r.papers) setPapers(r.papers)
@@ -119,13 +138,15 @@ export default function PapersReview({ submissionId, status, onApproved }) {
   }
 
   const approve = async () => {
-    setBusy(true); setErr('')
+    setBusy(true)
+    setErr('')
     try {
       if (remove.size) await api.editPapers(submissionId, { remove: [...remove] })
       await api.approve(submissionId, 'papers')
       onApproved()
     } catch (e) {
-      setErr(String(e)); setBusy(false)
+      setErr(String(e))
+      setBusy(false)
     }
   }
 
@@ -139,11 +160,18 @@ export default function PapersReview({ submissionId, status, onApproved }) {
     const url = s2Url(p.paper_id)
     const meta = [fmtAuthors(p.authors), p.year, abbrevVenue(p.venue)].filter(Boolean).join(' · ')
     return (
-      <li key={p.paper_id}
-          className={'pcard' + (removed ? ' removed' : '')
-            + (selected === p.paper_id ? ' selected' : '')}>
-        <input className="pkeep" type="checkbox" checked={!removed}
-          onChange={() => toggle(p.paper_id, setRemove)} />
+      <li
+        key={p.paper_id}
+        className={
+          'pcard' + (removed ? ' removed' : '') + (selected === p.paper_id ? ' selected' : '')
+        }
+      >
+        <input
+          className="pkeep"
+          type="checkbox"
+          checked={!removed}
+          onChange={() => toggle(p.paper_id, setRemove)}
+        />
         <div className="pbody">
           <div
             className={'ptitle-row' + (p.pdf_available ? ' paper-open' : '')}
@@ -153,18 +181,42 @@ export default function PapersReview({ submissionId, status, onApproved }) {
             <span className="ptitle">{p.title}</span>
             {p.cited_paper && <span className="badge">cited</span>}
             {p.added_by && <span className="badge added">added</span>}
-            {p.pdf_available
-              ? <span className="pdfbadge ok" title="A PDF was downloaded for this paper">PDF</span>
-              : <span className="pdfbadge warn" title="No PDF could be downloaded automatically">no PDF</span>}
-            {url && <a className="pext" href={url} target="_blank" rel="noreferrer" title="Open in Semantic Scholar">↗</a>}
+            {p.pdf_available ? (
+              <span className="pdfbadge ok" title="A PDF was downloaded for this paper">
+                PDF
+              </span>
+            ) : (
+              <span className="pdfbadge warn" title="No PDF could be downloaded automatically">
+                no PDF
+              </span>
+            )}
+            {url && (
+              <a
+                className="pext"
+                href={url}
+                target="_blank"
+                rel="noreferrer"
+                title="Open in Semantic Scholar"
+              >
+                ↗
+              </a>
+            )}
           </div>
           {meta && <div className="pmeta muted">{meta}</div>}
           {!p.pdf_available && (
             <div className="pdf-upload">
               <label className="link pdf-upload-btn">
                 {pdfBusy.has(p.paper_id) ? 'Uploading…' : 'Upload PDF'}
-                <input type="file" accept="application/pdf" hidden disabled={pdfBusy.has(p.paper_id)}
-                  onChange={(e) => { uploadPdf(p.paper_id, e.target.files[0]); setSelected(p.paper_id) }} />
+                <input
+                  type="file"
+                  accept="application/pdf"
+                  hidden
+                  disabled={pdfBusy.has(p.paper_id)}
+                  onChange={(e) => {
+                    uploadPdf(p.paper_id, e.target.files[0])
+                    setSelected(p.paper_id)
+                  }}
+                />
               </label>
               {pdfErr[p.paper_id] && <span className="pdf-upload-err">{pdfErr[p.paper_id]}</span>}
             </div>
@@ -172,7 +224,9 @@ export default function PapersReview({ submissionId, status, onApproved }) {
           {pct != null && (
             <div className="prel">
               <span className="prel-label">Relevance</span>
-              <span className="prel-track"><span className={'prel-fill ' + relCls} style={{ width: pct + '%' }} /></span>
+              <span className="prel-track">
+                <span className={'prel-fill ' + relCls} style={{ width: pct + '%' }} />
+              </span>
               <span className="prel-val">{pct}%</span>
             </div>
           )}
@@ -198,12 +252,17 @@ export default function PapersReview({ submissionId, status, onApproved }) {
   const panel = (
     <div className="panel checkpoint">
       <div className="eyebrow">Related work</div>
-      <h2>{papers.length - remove.size} of {papers.length} papers kept</h2>
-      <p className="muted lede">Uncheck papers that are not relevant, and add any that are missing.</p>
+      <h2>
+        {papers.length - remove.size} of {papers.length} papers kept
+      </h2>
+      <p className="muted lede">
+        Uncheck papers that are not relevant, and add any that are missing.
+      </p>
       {nNoPdf > 0 && (
         <p className="muted pdf-summary">
           <strong>{nNoPdf}</strong> paper{nNoPdf === 1 ? '' : 's'} without a downloadable PDF —
-          upload one where a paper is marked <em>no PDF</em>. It is only needed if the review reads that paper.
+          upload one where a paper is marked <em>no PDF</em>. It is only needed if the review reads
+          that paper.
         </p>
       )}
 
@@ -216,23 +275,45 @@ export default function PapersReview({ submissionId, status, onApproved }) {
           <div className="addbox-body">
             <div
               className={'dropzone' + (dragOver ? ' over' : '')}
-              onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+              onDragOver={(e) => {
+                e.preventDefault()
+                setDragOver(true)
+              }}
               onDragLeave={() => setDragOver(false)}
-              onDrop={(e) => { e.preventDefault(); setDragOver(false); doAdd({ file: e.dataTransfer.files?.[0] }) }}
+              onDrop={(e) => {
+                e.preventDefault()
+                setDragOver(false)
+                doAdd({ file: e.dataTransfer.files?.[0] })
+              }}
               onClick={() => document.getElementById('add-pdf').click()}
               role="button"
             >
-              <input id="add-pdf" type="file" accept="application/pdf" hidden
-                onChange={(e) => doAdd({ file: e.target.files[0] })} />
-              <span>Drag &amp; drop a PDF, or <span className="browse">browse</span></span>
+              <input
+                id="add-pdf"
+                type="file"
+                accept="application/pdf"
+                hidden
+                onChange={(e) => doAdd({ file: e.target.files[0] })}
+              />
+              <span>
+                Drag &amp; drop a PDF, or <span className="browse">browse</span>
+              </span>
             </div>
             <div className="addrow">
               <input
-                type="text" placeholder="…or paste a DOI / arXiv id / paper title"
-                value={query} onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && query.trim() && doAdd({ query: query.trim() })}
+                type="text"
+                placeholder="…or paste a DOI / arXiv id / paper title"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) =>
+                  e.key === 'Enter' && query.trim() && doAdd({ query: query.trim() })
+                }
               />
-              <button className="secondary" disabled={adding || !query.trim()} onClick={() => doAdd({ query: query.trim() })}>
+              <button
+                className="secondary"
+                disabled={adding || !query.trim()}
+                onClick={() => doAdd({ query: query.trim() })}
+              >
                 {adding ? 'Adding…' : 'Add'}
               </button>
             </div>
@@ -244,15 +325,17 @@ export default function PapersReview({ submissionId, status, onApproved }) {
 
       {order.map((key) => (
         <div key={key} className="cluster">
-          {(multiCluster || key === '_added') && <h3 className="cluster-head">{groups[key].label}</h3>}
-          <ul className="papers cards">
-            {groups[key].papers.map(renderCard)}
-          </ul>
+          {(multiCluster || key === '_added') && (
+            <h3 className="cluster-head">{groups[key].label}</h3>
+          )}
+          <ul className="papers cards">{groups[key].papers.map(renderCard)}</ul>
         </div>
       ))}
 
       <div className="actions">
-        <button disabled={busy} onClick={approve}>{busy ? 'Starting the review…' : 'Approve and start the review'}</button>
+        <button disabled={busy} onClick={approve}>
+          {busy ? 'Starting the review…' : 'Approve and start the review'}
+        </button>
       </div>
       {err && <div className="error">{err}</div>}
     </div>
@@ -263,16 +346,22 @@ export default function PapersReview({ submissionId, status, onApproved }) {
       <div className="pdfpicker">
         <select value={selected || ''} onChange={(e) => setSelected(e.target.value || null)}>
           <option value="">
-            {withPdf.length ? `Select a paper to read (${withPdf.length} with a PDF)` : 'No PDFs downloaded yet'}
+            {withPdf.length
+              ? `Select a paper to read (${withPdf.length} with a PDF)`
+              : 'No PDFs downloaded yet'}
           </option>
           {withPdf.map((x) => (
-            <option key={x.paper_id} value={x.paper_id}>{x.title}</option>
+            <option key={x.paper_id} value={x.paper_id}>
+              {x.title}
+            </option>
           ))}
         </select>
       </div>
-      {chosen
-        ? <PdfViewer key={chosen.paper_id} url={api.paperPdfUrl(submissionId, chosen.paper_id)} />
-        : <div className="pdfpane empty">Click a paper's title to read it here.</div>}
+      {chosen ? (
+        <PdfViewer key={chosen.paper_id} url={api.paperPdfUrl(submissionId, chosen.paper_id)} />
+      ) : (
+        <div className="pdfpane empty">Click a paper's title to read it here.</div>
+      )}
     </div>
   )
 

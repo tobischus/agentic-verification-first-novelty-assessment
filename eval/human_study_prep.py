@@ -1,4 +1,5 @@
 """Prepare the human-study papers for the review runs and list what needs manual work."""
+
 from __future__ import annotations
 
 import argparse
@@ -57,10 +58,10 @@ def plan() -> list[dict]:
     index = opennovelty_index()
     for pdf in sorted(PAPERS.glob("*.pdf")):
         report, note = match_opennovelty(pdf, index)
-        rows.append({"key": slug(pdf.stem), "pdf": pdf, "opennovelty": report,
-                     "opennovelty_note": note})
+        rows.append(
+            {"key": slug(pdf.stem), "pdf": pdf, "opennovelty": report, "opennovelty_note": note}
+        )
     return rows
-
 
 
 def _load(p: Path):
@@ -109,16 +110,19 @@ def status_of(key: str) -> dict:
 
 
 def print_table(rows: list[dict]) -> None:
-    print(f"{'paper_key':<46} {'ON':<3} {'prep':<5} {'date':<12} {'cl':>3} {'pool':>5} "
-          f"{'A':<2}{'L':<2}{'Az':<3} flags")
+    print(
+        f"{'paper_key':<46} {'ON':<3} {'prep':<5} {'date':<12} {'cl':>3} {'pool':>5} "
+        f"{'A':<2}{'L':<2}{'Az':<3} flags"
+    )
     print("-" * 118)
     todo_prep, needs_human = [], []
     for r in rows:
         st = status_of(r["key"])
         flags = []
         if r["opennovelty"] is None:
-            flags.append("NO-OPENNOVELTY" if not r["opennovelty_note"].startswith("AMB")
-                         else "ON-AMBIGUOUS")
+            flags.append(
+                "NO-OPENNOVELTY" if not r["opennovelty_note"].startswith("AMB") else "ON-AMBIGUOUS"
+            )
         if st["processed"]:
             if st["date_needs_review"] or st["date_source"] == "today_fallback":
                 flags.append("DATE?")
@@ -134,28 +138,37 @@ def print_table(rows: list[dict]) -> None:
                 flags.append("PARTIAL:" + "+".join(x[:5] for x in st["stages_done"]))
             if st["last_error"]:
                 flags.append("err(" + st["last_error"].split(":")[0] + ")")
-        if any(f in flags for f in ("DATE?", "TITLE?", "NO-CLAIMS")) or \
-                any(f.startswith("GATES") for f in flags):
+        if any(f in flags for f in ("DATE?", "TITLE?", "NO-CLAIMS")) or any(
+            f.startswith("GATES") for f in flags
+        ):
             needs_human.append(r["key"])
-        print(f"{r['key']:<46} {'ok' if r['opennovelty'] else '--':<3} "
-              f"{('ok' if st['processed'] else (str(len(st['stages_done'])) + '/4' if st['partial'] else '--')):<5} "
-              f"{(st['date'] or '-'):<12} {st['n_claims']:>3} {st['pool']:>5} "
-              f"{'A' if st['agent'] else '.':<2}{'L' if st['linear'] else '.':<2}"
-              f"{'Az' if st['afzal'] else '.':<3} {' '.join(flags)}")
+        print(
+            f"{r['key']:<46} {'ok' if r['opennovelty'] else '--':<3} "
+            f"{('ok' if st['processed'] else (str(len(st['stages_done'])) + '/4' if st['partial'] else '--')):<5} "
+            f"{(st['date'] or '-'):<12} {st['n_claims']:>3} {st['pool']:>5} "
+            f"{'A' if st['agent'] else '.':<2}{'L' if st['linear'] else '.':<2}"
+            f"{'Az' if st['afzal'] else '.':<3} {' '.join(flags)}"
+        )
     print("-" * 118)
-    print(f"{len(rows)} papers | prep outstanding: {len(todo_prep)} | "
-          f"needs a look before the agent runs: {len(needs_human)}")
+    print(
+        f"{len(rows)} papers | prep outstanding: {len(todo_prep)} | "
+        f"needs a look before the agent runs: {len(needs_human)}"
+    )
     if needs_human:
         print("  ->", ", ".join(needs_human))
-    print("\nLegend: ON=OpenNovelty report found, prep=stages 1-4 done, cl=claims, "
-          "A/L/Az=agent/linear/afzal artifacts present.")
-    print("DATE? means retrieval's prior-work cutoff is unreliable for that paper -- fix "
-          "the date before running the agent, or its comparisons are not trustworthy.")
-
+    print(
+        "\nLegend: ON=OpenNovelty report found, prep=stages 1-4 done, cl=claims, "
+        "A/L/Az=agent/linear/afzal artifacts present."
+    )
+    print(
+        "DATE? means retrieval's prior-work cutoff is unreliable for that paper -- fix "
+        "the date before running the agent, or its comparisons are not trustworthy."
+    )
 
 
 def grobid_alive(url: str, timeout: float = 4.0) -> bool:
     import urllib.request
+
     try:
         urllib.request.urlopen(url.rstrip("/") + "/api/isalive", timeout=timeout).read()
         return True
@@ -166,6 +179,7 @@ def grobid_alive(url: str, timeout: float = 4.0) -> bool:
 def wait_for_grobid(url: str, seconds: int) -> bool:
     """Wait until GROBID responds."""
     import time
+
     if grobid_alive(url):
         return True
     print(f"  GROBID is down -- waiting up to {seconds}s for it to come back", flush=True)
@@ -180,15 +194,29 @@ def wait_for_grobid(url: str, seconds: int) -> bool:
 
 def prepare(row: dict, model: str, grobid: str, k: int, wait: int = 0) -> bool:
     key, pdf = row["key"], row["pdf"]
-    cmd = [sys.executable, str(REPO / "src" / "novelty_assessment" / "orchestrator.py"),
-           "--data-dir", str(DATA), "--submission-id", key, "--pdf", str(pdf),
-           "--model", model, "--grobid-server", grobid, "--no-hitl"]
+    cmd = [
+        sys.executable,
+        str(REPO / "src" / "novelty_assessment" / "orchestrator.py"),
+        "--data-dir",
+        str(DATA),
+        "--submission-id",
+        key,
+        "--pdf",
+        str(pdf),
+        "--model",
+        model,
+        "--grobid-server",
+        grobid,
+        "--no-hitl",
+    ]
     for attempt in (1, 2):
         if not wait_for_grobid(grobid, wait if attempt == 1 else max(wait, 60)):
             print(f"\n=== {key} === SKIPPED: GROBID unreachable at {grobid}", flush=True)
             return False
-        print(f"\n=== {key} ==={'  (retry)' if attempt == 2 else ''}\n"
-              f"{' '.join(cmd[-12:])}", flush=True)
+        print(
+            f"\n=== {key} ==={'  (retry)' if attempt == 2 else ''}\n{' '.join(cmd[-12:])}",
+            flush=True,
+        )
         if subprocess.run(cmd, cwd=str(REPO)).returncode == 0:
             return True
         if attempt == 1 and not grobid_alive(grobid):
@@ -210,44 +238,49 @@ def write_sources(rows: list[dict], out_path: Path) -> None:
     for r in rows:
         key = r["key"]
         lines.append(f"{key}:")
-        lines.append(f"  submission:")
-        lines.append(f"    pdf: \"{r['pdf'].relative_to(REPO).as_posix()}\"")
-        lines.append("    # TODO: text: MinerU markdown of the DeepReviewer job (read by the E1 judge).")
+        lines.append("  submission:")
+        lines.append(f'    pdf: "{r["pdf"].relative_to(REPO).as_posix()}"')
+        lines.append(
+            "    # TODO: text: MinerU markdown of the DeepReviewer job (read by the E1 judge)."
+        )
         for variant in ("agent", "linear"):
             lines.append(f"  {variant}:")
-            lines.append(f"    kind: rendered")
-            lines.append(f"    renderer: battle_export.build")
+            lines.append("    kind: rendered")
+            lines.append("    renderer: battle_export.build")
             lines.append(f"    variant: {variant}")
             lines.append(f"    artifact_a: data/{key}/{key}_artifact_a_{variant}.json")
             lines.append(f"    artifact_b: data/{key}/{key}_artifact_b_{variant}.json")
-        lines.append(f"  opennovelty:")
+        lines.append("  opennovelty:")
         if r["opennovelty"]:
-            lines.append(f"    kind: native_pdf")
-            lines.append(f"    path: \"{r['opennovelty'].relative_to(REPO).as_posix()}\"")
-            lines.append(f"    resolution_note: matched by title against the authors' filename")
+            lines.append("    kind: native_pdf")
+            lines.append(f'    path: "{r["opennovelty"].relative_to(REPO).as_posix()}"')
+            lines.append("    resolution_note: matched by title against the authors' filename")
         else:
             lines.append(f"    # TODO: {r['opennovelty_note']}")
-        lines.append(f"  deepreviewer:")
-        lines.append(f"    kind: deepreviewer_job")
-        lines.append(f"    # TODO: job_dir: DeepReviewer-v2/data/jobs/<id>")
-        lines.append(f"    file: final_report_review_only.pdf")
-        lines.append(f"  afzal:")
-        lines.append(f"    kind: concat_text")
-        lines.append(f"    parts:")
+        lines.append("  deepreviewer:")
+        lines.append("    kind: deepreviewer_job")
+        lines.append("    # TODO: job_dir: DeepReviewer-v2/data/jobs/<id>")
+        lines.append("    file: final_report_review_only.pdf")
+        lines.append("  afzal:")
+        lines.append("    kind: concat_text")
+        lines.append("    parts:")
         lines.append(f"      - data/{key}/summary.txt")
-        lines.append(f"      - \"---\"")
+        lines.append('      - "---"')
         lines.append(f"      - data/{key}/novelty_delta_analysis.txt")
         lines.append("")
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_bytes("\n".join(lines).encode("utf-8"))
-    print(f"written: {out_path.relative_to(REPO)}  ({len(rows)} papers, "
-          f"{sum(1 for r in rows if not r['opennovelty'])} OpenNovelty TODOs, "
-          f"{len(rows)} DeepReviewer TODOs)")
+    print(
+        f"written: {out_path.relative_to(REPO)}  ({len(rows)} papers, "
+        f"{sum(1 for r in rows if not r['opennovelty'])} OpenNovelty TODOs, "
+        f"{len(rows)} DeepReviewer TODOs)"
+    )
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     ap.add_argument("--status", action="store_true", help="print the table and exit")
     ap.add_argument("--run", action="store_true", help="prepare every paper not yet processed")
     ap.add_argument("--only", default="", help="comma-separated paper_keys")
@@ -256,8 +289,11 @@ def main() -> int:
     ap.add_argument("--k", type=int, default=10)
     ap.add_argument("--write-sources", default="", help="write a sources.yaml skeleton here")
     ap.add_argument("--papers-dir", default="", help="submission PDFs (default human_study/paper)")
-    ap.add_argument("--opennovelty-dir", default="",
-                    help="OpenNovelty reports (default human_study/OpenNovelty)")
+    ap.add_argument(
+        "--opennovelty-dir",
+        default="",
+        help="OpenNovelty reports (default human_study/OpenNovelty)",
+    )
     args = ap.parse_args()
     global PAPERS, OPENNOVELTY
     if args.papers_dir:
@@ -287,9 +323,11 @@ def main() -> int:
         return 0
 
     if not grobid_alive(args.grobid_server):
-        print(f"GROBID is not answering at {args.grobid_server}.\n"
-              "  docker run -d --init --ulimit core=0 -p 8070:8070 "
-              "--restart unless-stopped --name grobid grobid/grobid:0.9.0-crf")
+        print(
+            f"GROBID is not answering at {args.grobid_server}.\n"
+            "  docker run -d --init --ulimit core=0 -p 8070:8070 "
+            "--restart unless-stopped --name grobid grobid/grobid:0.9.0-crf"
+        )
         return 2
 
     failed = []

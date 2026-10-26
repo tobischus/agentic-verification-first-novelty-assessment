@@ -4,6 +4,7 @@ The map proposes passage pairs between the submission and a prior paper. Both sp
 verified against the full documents, the prior-paper span is checked for ownership, and
 the evidence check decides whether the remaining pairs support the proposed overlap.
 """
+
 import re
 from typing import Callable, List, Optional
 
@@ -12,18 +13,20 @@ from pydantic import BaseModel, Field
 from . import evidence as ev
 
 _ABBR = re.compile(r"(?:et al|e\.g|i\.e|cf|vs|Fig|Sec|Tab|Eq|approx|resp|Dr|No|al|[A-Z])\.$")
-_STOP = frozenset("a an the of to in for and or is are was were be been with on at by that this "
-                  "it its as from we our their they can may not but which".split())
+_STOP = frozenset(
+    "a an the of to in for and or is are was were be been with on at by that this "
+    "it its as from we our their they can may not but which".split()
+)
 
 
 def _sentences(span: str) -> List[str]:
     """Split a span into sentences, keeping abbreviations and initials intact."""
     out, start = [], 0
     for m in re.finditer(r"[.!?]\s+(?=[A-Z(])", span):
-        head = span[start:m.start() + 1]
+        head = span[start : m.start() + 1]
         if _ABBR.search(head.strip()):
             continue
-        out.append(span[start:m.end()].strip())
+        out.append(span[start : m.end()].strip())
         start = m.end()
     tail = span[start:].strip()
     if tail:
@@ -43,7 +46,7 @@ def _strip_structure(span: str) -> str:
         return t
     head = _HEADING.search(t)
     if head and head.start() > 80:
-        t = t[:head.start()].strip()
+        t = t[: head.start()].strip()
     return _TAIL_NOISE.sub("", t).strip()
 
 
@@ -65,17 +68,17 @@ def _clauses(sentence: str, min_words: int = 8) -> List[str]:
     """Split a sentence at ', and' where both sides are clauses of at least `min_words` words."""
     out, last = [], 0
     for mt in re.finditer(r",\s+and\s+", sentence):
-        nxt = re.split(r",\s+and\s+", sentence[mt.end():])[0]
-        if (len(nxt.split()) >= min_words
-                and len(sentence[last:mt.start()].split()) >= min_words):
-            out.append(sentence[last:mt.start()].strip())
+        nxt = re.split(r",\s+and\s+", sentence[mt.end() :])[0]
+        if len(nxt.split()) >= min_words and len(sentence[last : mt.start()].split()) >= min_words:
+            out.append(sentence[last : mt.start()].strip())
             last = mt.end()
     out.append(sentence[last:].strip())
     return [x for x in out if x]
 
 
-def trim_to_sentence(span: str, rationale: str, claim: str, min_tokens: int,
-                     counterpart: str = "") -> str:
+def trim_to_sentence(
+    span: str, rationale: str, claim: str, min_tokens: int, counterpart: str = ""
+) -> str:
     """Reduce a verified span to the sentence, or clause, that carries the correspondence.
 
     The sentence is chosen by word overlap with the pair's rationale and the claim. The
@@ -147,8 +150,7 @@ class Correspondence(BaseModel):
 
     relation: str = Field(
         description=(
-            "One concise sentence naming the substantive component "
-            "instantiated by both spans."
+            "One concise sentence naming the substantive component instantiated by both spans."
         )
     )
 
@@ -159,6 +161,7 @@ class Correspondence(BaseModel):
         )
     )
 
+
 class EvidenceMap(BaseModel):
     correspondences: List[Correspondence] = Field(
         default_factory=list,
@@ -167,6 +170,7 @@ class EvidenceMap(BaseModel):
             "the submission and this prior paper state something they themselves contribute."
         ),
     )
+
 
 MAP_PROMPT = """Identify every substantive component-level correspondence between ONE claimed contribution and ONE prior paper.
 
@@ -242,7 +246,8 @@ Do not assign an overall overlap degree in this step.
 class _OwnItem(BaseModel):
     index: int = Field(description="the pair's number, as given")
     own_contribution: bool = Field(
-        description="true only if the span states what THIS paper does or delivers")
+        description="true only if the span states what THIS paper does or delivers"
+    )
     why: str = Field(default="", description="one clause")
 
 
@@ -287,8 +292,9 @@ def _context_of(span: str, document: str, window: int = 320) -> str:
     return "..." + " ".join(doc[lo:hi].split()) + "..."
 
 
-def check_ownership(struct_call: Callable, pairs: List[dict], title: str,
-                    verify_paper: str) -> List[dict]:
+def check_ownership(
+    struct_call: Callable, pairs: List[dict], title: str, verify_paper: str
+) -> List[dict]:
     """Ownership check of the prior-paper spans in one batched call.
 
     Pairs whose span describes cited work are dropped. If the call fails or a verdict
@@ -300,7 +306,8 @@ def check_ownership(struct_call: Callable, pairs: List[dict], title: str,
     spans = "\n\n".join(
         f"[{i + 1}] SPAN: {p.get('paper_quote', '')}\n"
         f"    CONTEXT: {_context_of(p.get('paper_quote', ''), verify_paper)}"
-        for i, p in enumerate(need))
+        for i, p in enumerate(need)
+    )
     parsed = struct_call(_Ownership, OWNERSHIP_PROMPT.format(title=title, spans=spans))
     if parsed is None:
         for p in need:
@@ -321,10 +328,18 @@ def check_ownership(struct_call: Callable, pairs: List[dict], title: str,
     return kept
 
 
-def build_map(struct_call: Callable, claim_str: str, submission_text: str,
-              title: str, paper_text: str, verify_submission: str, verify_paper: str,
-              min_quote_tokens: int = 10, fuzzy_threshold: float = 90.0,
-              comparison: Optional[dict] = None) -> dict:
+def build_map(
+    struct_call: Callable,
+    claim_str: str,
+    submission_text: str,
+    title: str,
+    paper_text: str,
+    verify_submission: str,
+    verify_paper: str,
+    min_quote_tokens: int = 10,
+    fuzzy_threshold: float = 90.0,
+    comparison: Optional[dict] = None,
+) -> dict:
     """Evidence map for one claim-paper pair, with verified and owned pairs only.
 
     The model quotes from `submission_text` and `paper_text`. Both spans are verified
@@ -341,27 +356,38 @@ def build_map(struct_call: Callable, claim_str: str, submission_text: str,
         ),
     )
     if parsed is None:
-        return {"pairs": [], "dropped": 0, "returned": 0, "not_owned": 0,
-                "ownership_unchecked": 0, "failed": True}
+        return {
+            "pairs": [],
+            "dropped": 0,
+            "returned": 0,
+            "not_owned": 0,
+            "ownership_unchecked": 0,
+            "failed": True,
+        }
 
     pairs, dropped = [], 0
     for c in parsed.correspondences:
         s_chk, s_span = ev.verify_contiguous(
-            c.submission_quote, verify_submission, min_quote_tokens, fuzzy_threshold)
+            c.submission_quote, verify_submission, min_quote_tokens, fuzzy_threshold
+        )
         p_chk, p_span = ev.verify_contiguous(
-            c.paper_quote, verify_paper, min_quote_tokens, fuzzy_threshold)
+            c.paper_quote, verify_paper, min_quote_tokens, fuzzy_threshold
+        )
         if not (s_chk.verified and p_chk.verified):
             dropped += 1
             continue
         rel = (c.relation or "").strip()
-        pairs.append({
-            "claim_quote": trim_to_sentence(s_span, rel, claim_str, min_quote_tokens, p_span),
-            "paper_quote": trim_to_sentence(p_span, rel, claim_str, min_quote_tokens, s_span),
-            "rationale": rel,
-            "strength": (c.strength or "").strip().lower(),
-            "claim_quote_verified": True, "paper_quote_verified": True,
-            "exact": True,
-        })
+        pairs.append(
+            {
+                "claim_quote": trim_to_sentence(s_span, rel, claim_str, min_quote_tokens, p_span),
+                "paper_quote": trim_to_sentence(p_span, rel, claim_str, min_quote_tokens, s_span),
+                "rationale": rel,
+                "strength": (c.strength or "").strip().lower(),
+                "claim_quote_verified": True,
+                "paper_quote_verified": True,
+                "exact": True,
+            }
+        )
     verified = len(pairs)
     ownership_result = check_ownership(struct_call, pairs, title, verify_paper)
     unchecked = [p for p in ownership_result if p.get("ownership") == "unchecked"]
@@ -378,13 +404,15 @@ def build_map(struct_call: Callable, claim_str: str, submission_text: str,
 
 def _list_pairs(pairs: List[dict], start: int = 1) -> str:
     return "\n\n".join(
-        "[{}] ({}) {}\n"
-        "    SUBMISSION: “{}”\n"
-        "    THIS PAPER: “{}”".format(
-            i, p.get("strength", "?"), p.get("rationale", ""),
+        "[{}] ({}) {}\n    SUBMISSION: “{}”\n    THIS PAPER: “{}”".format(
+            i,
+            p.get("strength", "?"),
+            p.get("rationale", ""),
             " ".join(p["claim_quote"].split()),
-            " ".join(p["paper_quote"].split()))
-        for i, p in enumerate(pairs, start))
+            " ".join(p["paper_quote"].split()),
+        )
+        for i, p in enumerate(pairs, start)
+    )
 
 
 def _fmt_comparison(comparison: dict) -> str:
@@ -402,9 +430,7 @@ def _fmt_comparison(comparison: dict) -> str:
 
 
 class EvidenceCheck(BaseModel):
-    status: str = Field(
-        description="material | nonmaterial | insufficient"
-    )
+    status: str = Field(description="material | nonmaterial | insufficient")
 
     supporting_pair_indices: List[int] = Field(
         default_factory=list,
@@ -669,10 +695,13 @@ def check_evidence(
     status = (parsed.status or "").strip().lower()
     if status not in {"material", "nonmaterial", "insufficient"}:
         status = "insufficient"
-    indices = sorted({
-        i for i in (parsed.supporting_pair_indices or [])
-        if type(i) is int and 1 <= i <= len(pairs)
-    })
+    indices = sorted(
+        {
+            i
+            for i in (parsed.supporting_pair_indices or [])
+            if type(i) is int and 1 <= i <= len(pairs)
+        }
+    )
     if status == "material" and not indices:
         status = "insufficient"
     if status != "material":

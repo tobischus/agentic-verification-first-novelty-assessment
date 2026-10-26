@@ -6,8 +6,16 @@ import { locateQuotes, pageTokens } from './locate'
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl
 
 export const HIGHLIGHT_COLORS = [
-  '#ffe066', '#a5d8ff', '#b2f2bb', '#ffc9c9', '#e5dbff',
-  '#ffd8a8', '#99e9f2', '#fcc2d7', '#d8f5a2', '#bac8ff',
+  '#ffe066',
+  '#a5d8ff',
+  '#b2f2bb',
+  '#ffc9c9',
+  '#e5dbff',
+  '#ffd8a8',
+  '#99e9f2',
+  '#fcc2d7',
+  '#d8f5a2',
+  '#bac8ff',
 ]
 export const colorFor = (i) => HIGHLIGHT_COLORS[i % HIGHLIGHT_COLORS.length]
 
@@ -24,16 +32,26 @@ export default function PdfViewer({ url, highlights = [], focusId = null, onLoca
   const docRef = useRef(null)
 
   useEffect(() => {
-    if (!url) { setDoc(null); setPages([]); setError(''); return }
+    if (!url) {
+      setDoc(null)
+      setPages([])
+      setError('')
+      return
+    }
     let cancelled = false
     let task = null
-    setLoading(true); setError(''); setDoc(null); setPages([])
-
+    setLoading(true)
+    setError('')
+    setDoc(null)
+    setPages([])
     ;(async () => {
       try {
         task = pdfjsLib.getDocument({ url, isEvalSupported: false })
         const d = await task.promise
-        if (cancelled) { d.destroy(); return }
+        if (cancelled) {
+          d.destroy()
+          return
+        }
         const metas = []
         for (let i = 1; i <= d.numPages; i++) {
           const page = await d.getPage(i)
@@ -58,8 +76,12 @@ export default function PdfViewer({ url, highlights = [], focusId = null, onLoca
 
     return () => {
       cancelled = true
-      try { task?.destroy() } catch {  }
-      try { docRef.current?.destroy() } catch {  }
+      try {
+        task?.destroy()
+      } catch {}
+      try {
+        docRef.current?.destroy()
+      } catch {}
       docRef.current = null
     }
   }, [url])
@@ -132,30 +154,36 @@ export default function PdfViewer({ url, highlights = [], focusId = null, onLoca
   return (
     <div className="pdfpane" ref={paneRef}>
       <div className="pdftools">
-        <button className="link" onClick={() => zoom(-0.15)}>−</button>
+        <button className="link" onClick={() => zoom(-0.15)}>
+          −
+        </button>
         <span className="pdfzoom">{Math.round(scale * 100)}%</span>
-        <button className="link" onClick={() => zoom(0.15)}>+</button>
+        <button className="link" onClick={() => zoom(0.15)}>
+          +
+        </button>
         {!!highlights.length && (
           <span className="pdfhits muted">
             {located.length}/{highlights.length} quote{highlights.length === 1 ? '' : 's'} located
           </span>
         )}
-        <a className="link pdfopen" href={url} target="_blank" rel="noreferrer">open ↗</a>
+        <a className="link pdfopen" href={url} target="_blank" rel="noreferrer">
+          open ↗
+        </a>
       </div>
       <div className="pdfscroll" ref={scrollRef}>
         {loading && <div className="pdfloading muted">Loading document…</div>}
         <div className="pdfpages">
-        {pages.map((pg, i) => (
-          <PdfPage
-            key={i}
-            doc={doc}
-            index={i}
-            meta={pg}
-            scale={scale}
-            highlights={byPage.get(i) || []}
-            pageRefs={pageRefs}
-          />
-        ))}
+          {pages.map((pg, i) => (
+            <PdfPage
+              key={i}
+              doc={doc}
+              index={i}
+              meta={pg}
+              scale={scale}
+              highlights={byPage.get(i) || []}
+              pageRefs={pageRefs}
+            />
+          ))}
         </div>
       </div>
     </div>
@@ -168,16 +196,21 @@ function PdfPage({ doc, index, meta, scale, highlights, pageRefs }) {
   const [visible, setVisible] = useState(index < 2)
   const renderedAt = useRef(null)
 
-  const setRefs = useCallback((el) => {
-    holder.current = el
-    pageRefs.current[index] = el
-  }, [pageRefs, index])
+  const setRefs = useCallback(
+    (el) => {
+      holder.current = el
+      pageRefs.current[index] = el
+    },
+    [pageRefs, index],
+  )
 
   useEffect(() => {
     const el = holder.current
     if (!el || visible) return
     const io = new IntersectionObserver(
-      (entries) => { if (entries.some((e) => e.isIntersecting)) setVisible(true) },
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) setVisible(true)
+      },
       { rootMargin: '600px 0px' },
     )
     io.observe(el)
@@ -206,9 +239,14 @@ function PdfPage({ doc, index, meta, scale, highlights, pageRefs }) {
       try {
         await task.promise
         if (!cancelled) renderedAt.current = scale
-      } catch {  }
+      } catch {}
     })()
-    return () => { cancelled = true; try { task?.cancel() } catch {  } }
+    return () => {
+      cancelled = true
+      try {
+        task?.cancel()
+      } catch {}
+    }
   }, [visible, doc, index, scale])
 
   const w = meta.viewportAt1.width * scale
@@ -240,8 +278,10 @@ function PdfPage({ doc, index, meta, scale, highlights, pageRefs }) {
           className="pdfhl"
           title={box.labels.length ? box.labels.join(' · ') : undefined}
           style={{
-            left: box.rect.left * scale, top: box.rect.top * scale,
-            width: box.rect.width * scale, height: box.rect.height * scale,
+            left: box.rect.left * scale,
+            top: box.rect.top * scale,
+            width: box.rect.width * scale,
+            height: box.rect.height * scale,
             background: box.color || HIGHLIGHT_COLORS[0],
           }}
         />

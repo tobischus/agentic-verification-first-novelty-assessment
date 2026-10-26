@@ -3,6 +3,7 @@
 New candidates pass the same admissibility rule as the main retrieval and are ranked by
 embedding similarity to the claim.
 """
+
 import logging
 import os
 import re
@@ -24,8 +25,13 @@ _S2_SEARCH = "https://api.semanticscholar.org/graph/v1/paper/search"
 _FIELDS = "title,abstract,paperId,publicationDate,year,venue,authors,citationCount,externalIds"
 
 
-def _same_paper(candidate_abstract: str, submission_abstract: str,
-                n: int = 10, min_shared: int = 2, token_ratio: float = 95.0) -> bool:
+def _same_paper(
+    candidate_abstract: str,
+    submission_abstract: str,
+    n: int = 10,
+    min_shared: int = 2,
+    token_ratio: float = 95.0,
+) -> bool:
     """Same rule as retrieval.is_same_paper: shared ten-word sequences in the abstracts."""
     ca = (candidate_abstract or "").strip()
     sa = (submission_abstract or "").strip()
@@ -34,7 +40,7 @@ def _same_paper(candidate_abstract: str, submission_abstract: str,
 
     def shingles(t):
         w = re.findall(r"[a-z0-9]+", t.lower())
-        return {" ".join(w[i:i + n]) for i in range(len(w) - n + 1)} if len(w) >= n else set()
+        return {" ".join(w[i : i + n]) for i in range(len(w) - n + 1)} if len(w) >= n else set()
 
     if len(shingles(ca) & shingles(sa)) >= min_shared:
         return True
@@ -101,7 +107,11 @@ def is_valid_prior_work(
     if verdict != "ok":
         logger.info(
             "retrieve_more: not prior work (%s): %r vs submission %r | %s",
-            verdict, stated, source_stated, (paper.get("title") or "")[:60])
+            verdict,
+            stated,
+            source_stated,
+            (paper.get("title") or "")[:60],
+        )
     return verdict == "ok"
 
 
@@ -143,12 +153,14 @@ def retrieve(
     if not fresh:
         return []
 
-    claim_doc = f"{claim.get('name','')}. {claim.get('description','')} {claim.get('claim_text','')}".strip()
+    claim_doc = f"{claim.get('name', '')}. {claim.get('description', '')} {claim.get('claim_text', '')}".strip()
     cand_docs = [f"{p['title']}. {p['abstract']}" for p in fresh]
     embs = embedder.encode([claim_doc] + cand_docs, convert_to_numpy=True)
     claim_emb, cand_embs = embs[0], embs[1:]
-    sims = cand_embs @ claim_emb / (
-        np.linalg.norm(cand_embs, axis=1) * np.linalg.norm(claim_emb) + 1e-9
+    sims = (
+        cand_embs
+        @ claim_emb
+        / (np.linalg.norm(cand_embs, axis=1) * np.linalg.norm(claim_emb) + 1e-9)
     )
     order = np.argsort(-sims)[:k]
     out = []

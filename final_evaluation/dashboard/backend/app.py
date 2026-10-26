@@ -1,4 +1,5 @@
 """The study app: FastAPI serving the study API and the built frontend from one origin."""
+
 from __future__ import annotations
 
 import sys
@@ -24,7 +25,8 @@ def create_app() -> FastAPI:
         raise RuntimeError(
             f"final_evaluation cannot start in APP_ENV={settings.app_env!r}:\n  - {joined}\n"
             "Fix these in final_evaluation/.env (copy from .env.example) and retry. "
-            "See final_evaluation/README.md.")
+            "See final_evaluation/README.md."
+        )
 
     app = FastAPI(title="Novelty Report Evaluation Dashboard", docs_url=None, redoc_url=None)
 
@@ -39,7 +41,11 @@ def create_app() -> FastAPI:
 
     @app.get("/api/health")
     def health():
-        return {"ok": True, "app_env": settings.app_env, "storage_backend": settings.storage_backend}
+        return {
+            "ok": True,
+            "app_env": settings.app_env,
+            "storage_backend": settings.storage_backend,
+        }
 
     @app.exception_handler(Exception)
     async def unhandled(request: Request, exc: Exception):
@@ -61,11 +67,15 @@ def create_app() -> FastAPI:
                 return FileResponse(candidate, headers=revalidate)
             return FileResponse(FRONTEND_DIST / "index.html", headers=revalidate)
     else:
+
         @app.get("/")
         def no_frontend():
-            return JSONResponse(status_code=503, content={
-                "error": "frontend_not_built",
-                "hint": "run: python -m final_evaluation.cli build-frontend",
-            })
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "error": "frontend_not_built",
+                    "hint": "run: python -m final_evaluation.cli build-frontend",
+                },
+            )
 
     return app

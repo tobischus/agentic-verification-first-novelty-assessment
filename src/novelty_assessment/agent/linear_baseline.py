@@ -4,6 +4,7 @@ Only the per-paper loop is replaced: sections are selected once, the paper is co
 once and checked once. There is no further reading, no setting aside and no re-entry.
 Everything else is inherited from `ClaimNoveltyAgent`.
 """
+
 from typing import List
 
 from .claim_agent import (
@@ -31,8 +32,7 @@ class LinearBaselineAgent(ClaimNoveltyAgent):
         log.config["adaptivity_removed"] = ["read_more", "early_dismissal", "evidence_reentry"]
         return log
 
-    def _select_sections(self, tb, claim: dict, pid: str, claim_ctx: str,
-                         trace: List[str]):
+    def _select_sections(self, tb, claim: dict, pid: str, claim_ctx: str, trace: List[str]):
         """The single section selection. Returns (context, names, pt, ct)."""
         pt = ct = 0
         menu = tb.section_menu(pid) or []
@@ -46,24 +46,36 @@ class LinearBaselineAgent(ClaimNoveltyAgent):
 
         parsed, a, b = self._struct(
             _SectionPick,
-            _fill(_PAPER_SECTION_PICK, claim=claim_s, realization=claim_ctx,
-                  title=title, sections=_fmt_sections_menu(menu, ids=sec_ids)),
+            _fill(
+                _PAPER_SECTION_PICK,
+                claim=claim_s,
+                realization=claim_ctx,
+                title=title,
+                sections=_fmt_sections_menu(menu, ids=sec_ids),
+            ),
             role="reading",
         )
-        pt += a; ct += b
+        pt += a
+        ct += b
 
         asked = [s for s in (getattr(parsed, "sections", None) or []) if s] if parsed else []
         wanted, unresolved = _resolve_sections(asked, menu, sec_ids)
         why = (getattr(parsed, "why", "") or "").strip() if parsed else ""
 
-        got = tb.read_sections(pid, wanted[:_LINEAR_MAX_SECTIONS],
-                               max_total=_READ_CAP, exact=True).get("sections", []) or []
+        got = (
+            tb.read_sections(
+                pid, wanted[:_LINEAR_MAX_SECTIONS], max_total=_READ_CAP, exact=True
+            ).get("sections", [])
+            or []
+        )
         fallback = ""
         if not got:
             fallback = "no named section could be read"
             wanted = [m["name"] for m in sorted(menu, key=lambda m: -m.get("chars", 0))[:4]]
-            got = tb.read_sections(pid, wanted, max_total=_READ_CAP,
-                                   exact=True).get("sections", []) or []
+            got = (
+                tb.read_sections(pid, wanted, max_total=_READ_CAP, exact=True).get("sections", [])
+                or []
+            )
 
         names = [s["name"] for s in got]
         used = sum(len(s.get("text", "")) for s in got)
@@ -93,14 +105,17 @@ class LinearBaselineAgent(ClaimNoveltyAgent):
         ]
 
         context, names, a, b = self._select_sections(tb, claim, pid, claim_ctx, trace)
-        pt += a; ct += b
+        pt += a
+        ct += b
 
         comp, a, b = self._section_compare(tb, claim, pid, claim_ctx, context, turn=0)
-        pt += a; ct += b
+        pt += a
+        ct += b
         self._trace_raw(trace, 0, comp)
 
         comp, a, b = self._map_evidence(tb, claim, pid, comp, context, turn=0)
-        pt += a; ct += b
+        pt += a
+        ct += b
         self._trace_grounding(trace, 0, comp)
 
         deficit = self._evidence_deficit(comp) or ""

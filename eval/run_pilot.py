@@ -1,4 +1,5 @@
 """Run the agent and the linear baseline over the same claims, from one entry point."""
+
 import argparse
 import json
 import os
@@ -9,21 +10,27 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "src" / "novelty_assessment"))
 
-from dotenv import load_dotenv                                          # noqa: E402
+from dotenv import load_dotenv  # noqa: E402
 
 load_dotenv()
 
 VARIANTS = ("agent", "linear")
 
-ROLE_EFFORT = {"NOVELTY_READING_EFFORT": "low", "NOVELTY_COMPARE_EFFORT": "low",
-               "NOVELTY_EVIDENCE_EFFORT": "low"}
+ROLE_EFFORT = {
+    "NOVELTY_READING_EFFORT": "low",
+    "NOVELTY_COMPARE_EFFORT": "low",
+    "NOVELTY_EVIDENCE_EFFORT": "low",
+}
 ROLE_MODEL_VARS = ("NOVELTY_READING_MODEL", "NOVELTY_COMPARE_MODEL", "NOVELTY_EVIDENCE_MODEL")
 
 
 def _pool_size(sub: Path) -> int:
     try:
-        return len(json.loads(
-            (sub / "related_work_data" / "ranked_papers.json").read_text(encoding="utf-8")))
+        return len(
+            json.loads(
+                (sub / "related_work_data" / "ranked_papers.json").read_text(encoding="utf-8")
+            )
+        )
     except Exception:
         return 0
 
@@ -31,11 +38,13 @@ def _pool_size(sub: Path) -> int:
 def _agent_class(variant: str):
     from agent.claim_agent import ClaimNoveltyAgent
     from agent.linear_baseline import LinearBaselineAgent
+
     return LinearBaselineAgent if variant == "linear" else ClaimNoveltyAgent
 
 
-def run_variant(data_dir: str, sid: str, variant: str, claims: list, model: str,
-                max_retrievals: int, workers) -> dict:
+def run_variant(
+    data_dir: str, sid: str, variant: str, claims: list, model: str, max_retrievals: int, workers
+) -> dict:
     """One variant over all claims. Returns the artifact it wrote."""
     from agent.claim_agent import _usd
 
@@ -44,8 +53,13 @@ def run_variant(data_dir: str, sid: str, variant: str, claims: list, model: str,
     entries, per_claim_b, costs = [], [], []
 
     for claim in claims:
-        ag = cls(data_dir, sid, model_name=model,
-                 max_retrievals=max_retrievals, deep_dive_workers=workers)
+        ag = cls(
+            data_dir,
+            sid,
+            model_name=model,
+            max_retrievals=max_retrievals,
+            deep_dive_workers=workers,
+        )
         t0 = time.perf_counter()
         res = ag.run(claim)
         secs = round(time.perf_counter() - t0, 1)
@@ -57,38 +71,49 @@ def run_variant(data_dir: str, sid: str, variant: str, claims: list, model: str,
         cache = cost.get("cache") or {}
         comps = res.get("comparisons") or []
 
-        entries.append({
-            "claim_id": claim["id"],
-            "claim_name": claim.get("name", ""),
-            "claim_text": claim.get("claim_text", ""),
-            "claim_realization": res.get("claim_realization") or claim.get("realization") or [],
-            "candidates_examined": len(comps),
-            "comparisons": comps,
-            "submission_basis": res.get("submission_basis") or {},
-            "run_log": res.get("run_log") or {},
-            "evidence_sufficient": res.get("evidence_sufficient"),
-            "review_complete": res.get("review_complete"),
-            "unresolved_count": res.get("unresolved_count"),
-            "unresolved_papers": res.get("unresolved_papers") or [],
-            "timings": res.get("timings") or {},
-            "run_cost": {"prompt_tokens": pt, "completion_tokens": ct,
-                         "cached_prompt_tokens": cache.get("total_cached_tokens", 0),
-                         "cache_hit_rate": cache.get("hit_rate", 0.0),
-                         "cache_by_role": cache.get("by_role") or {},
-                         "usd": round(usd, 4), "usd_is_upper_bound": True,
-                         "seconds": secs},
-            "stop_reason": res.get("stop_reason", ""),
-        })
-        per_claim_b.append({
-            "claim_id": claim["id"],
-            "claim_name": claim.get("name", ""),
-            "verdict": res.get("agent_verdict"),
-            "rationale": res.get("agent_rationale", "") or "",
-            "challenging_papers": [],
-        })
+        entries.append(
+            {
+                "claim_id": claim["id"],
+                "claim_name": claim.get("name", ""),
+                "claim_text": claim.get("claim_text", ""),
+                "claim_realization": res.get("claim_realization") or claim.get("realization") or [],
+                "candidates_examined": len(comps),
+                "comparisons": comps,
+                "submission_basis": res.get("submission_basis") or {},
+                "run_log": res.get("run_log") or {},
+                "evidence_sufficient": res.get("evidence_sufficient"),
+                "review_complete": res.get("review_complete"),
+                "unresolved_count": res.get("unresolved_count"),
+                "unresolved_papers": res.get("unresolved_papers") or [],
+                "timings": res.get("timings") or {},
+                "run_cost": {
+                    "prompt_tokens": pt,
+                    "completion_tokens": ct,
+                    "cached_prompt_tokens": cache.get("total_cached_tokens", 0),
+                    "cache_hit_rate": cache.get("hit_rate", 0.0),
+                    "cache_by_role": cache.get("by_role") or {},
+                    "usd": round(usd, 4),
+                    "usd_is_upper_bound": True,
+                    "seconds": secs,
+                },
+                "stop_reason": res.get("stop_reason", ""),
+            }
+        )
+        per_claim_b.append(
+            {
+                "claim_id": claim["id"],
+                "claim_name": claim.get("name", ""),
+                "verdict": res.get("agent_verdict"),
+                "rationale": res.get("agent_rationale", "") or "",
+                "challenging_papers": [],
+            }
+        )
         costs.append((claim["id"], usd, secs, len(comps)))
-        print(f"  [{variant}] {claim['id']}: {len(comps)} comparisons, "
-              f"<=${usd:.4f}, {secs}s, cache {cache.get('hit_rate', 0.0):.0%}", flush=True)
+        print(
+            f"  [{variant}] {claim['id']}: {len(comps)} comparisons, "
+            f"<=${usd:.4f}, {secs}s, cache {cache.get('hit_rate', 0.0):.0%}",
+            flush=True,
+        )
 
     a = {
         "submission_id": sid,
@@ -111,12 +136,15 @@ def run_variant(data_dir: str, sid: str, variant: str, claims: list, model: str,
         "overall_assessment": "",
     }
     (sub / f"{sid}_artifact_a_{variant}.json").write_text(
-        json.dumps(a, ensure_ascii=False, indent=1), encoding="utf-8")
+        json.dumps(a, ensure_ascii=False, indent=1), encoding="utf-8"
+    )
     (sub / f"{sid}_artifact_b_{variant}.json").write_text(
-        json.dumps(b, ensure_ascii=False, indent=1), encoding="utf-8")
+        json.dumps(b, ensure_ascii=False, indent=1), encoding="utf-8"
+    )
 
     try:
         import paper_synthesis
+
         s = paper_synthesis.build(data_dir, sid, variant=variant, model_name=model)
         print(f"  [{variant}] paper summary: {s['word_count']} words", flush=True)
     except Exception as e:
@@ -150,13 +178,16 @@ def main():
     ap.add_argument("--claims", default="", help="comma-separated claim ids (default: all)")
     ap.add_argument("--model", default="gpt-5.6-luna")
     ap.add_argument("--max-retrievals", type=int, default=1)
-    ap.add_argument("--workers", type=int, default=None,
-                    help="concurrent papers; decision flow is unaffected either way")
+    ap.add_argument(
+        "--workers",
+        type=int,
+        default=None,
+        help="concurrent papers; decision flow is unaffected either way",
+    )
     args = ap.parse_args()
 
     sub = Path(args.data_dir) / args.submission
-    claims_doc = json.loads(
-        (sub / f"{args.submission}_claims.json").read_text(encoding="utf-8"))
+    claims_doc = json.loads((sub / f"{args.submission}_claims.json").read_text(encoding="utf-8"))
     claims = [c for c in claims_doc.get("claims", []) if c.get("status") != "rejected"]
     if args.claims:
         want = {x.strip() for x in args.claims.split(",") if x.strip()}
@@ -168,24 +199,29 @@ def main():
         os.environ.setdefault(var, args.model)
     for var, eff in ROLE_EFFORT.items():
         os.environ.setdefault(var, eff)
-    print(f"config: model={args.model}, roles="
-          + ", ".join(f"{v.split('_')[1].lower()}={os.environ[v]}" for v in ROLE_MODEL_VARS)
-          + f", effort={os.environ['NOVELTY_READING_EFFORT']}/"
-            f"{os.environ['NOVELTY_COMPARE_EFFORT']}/{os.environ['NOVELTY_EVIDENCE_EFFORT']}"
-          + f", pool={_pool_size(sub)}")
+    print(
+        f"config: model={args.model}, roles="
+        + ", ".join(f"{v.split('_')[1].lower()}={os.environ[v]}" for v in ROLE_MODEL_VARS)
+        + f", effort={os.environ['NOVELTY_READING_EFFORT']}/"
+        f"{os.environ['NOVELTY_COMPARE_EFFORT']}/{os.environ['NOVELTY_EVIDENCE_EFFORT']}"
+        + f", pool={_pool_size(sub)}"
+    )
 
     variants = VARIANTS if args.variant == "both" else (args.variant,)
     results = {}
     for v in variants:
         print(f"\n=== {v} ===", flush=True)
-        results[v] = run_variant(args.data_dir, args.submission, v, claims, args.model,
-                                 args.max_retrievals, args.workers)
+        results[v] = run_variant(
+            args.data_dir, args.submission, v, claims, args.model, args.max_retrievals, args.workers
+        )
 
     print("\n=== summary ===")
     for v, art in results.items():
         tot = art["run_cost_total"]
-        print(f"{v:>7}: ${tot['usd']:.4f}, {tot['seconds']}s, "
-              f"degrees={_degree_counts(art)}, evidence={_status_counts(art)}")
+        print(
+            f"{v:>7}: ${tot['usd']:.4f}, {tot['seconds']}s, "
+            f"degrees={_degree_counts(art)}, evidence={_status_counts(art)}"
+        )
 
 
 if __name__ == "__main__":

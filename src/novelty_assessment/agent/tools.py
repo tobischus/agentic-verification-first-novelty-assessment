@@ -3,6 +3,7 @@
 Loads the submission and the version-pinned prior-work pool, serves section menus and
 section text, parses prior papers on demand, verifies quotes and records comparisons.
 """
+
 import hashlib
 import json
 import sys
@@ -70,11 +71,15 @@ class ClaimToolbox:
         self._meta = self._load_json(self.sub_dir / f"{submission_id}.json") or {}
         self.cutoff_year = self._cutoff_year()
         self.sub_title = (self._meta.get("title") or "").strip()
-        self.sub_pub_date = self._meta.get("publication_date") or datetime.now().strftime("%Y-%m-%d")
+        self.sub_pub_date = self._meta.get("publication_date") or datetime.now().strftime(
+            "%Y-%m-%d"
+        )
 
         ft = self._load_json(self.sub_dir / f"{submission_id}_fulltext.json") or {}
         sub_sections = ft.get("sections", [])
-        self._submission_index = PassageIndex(chunks_from_sections(sub_sections, "submission"), embedder)
+        self._submission_index = PassageIndex(
+            chunks_from_sections(sub_sections, "submission"), embedder
+        )
         # D(S): submission quotes are verified against the body and the abstract only.
         self._submission_text = "\n\n".join(
             [s.get("text", "") for s in sub_sections] + [self._meta.get("abstract", "")]
@@ -138,24 +143,27 @@ class ClaimToolbox:
         self._versions_cache = None
         e = self._versions_manifest().get(pid) or {}
         if e:
-            p.update({
-                "version_status": e.get("status", p.get("version_status", "")),
-                "pinned_version": e.get("version", p.get("pinned_version", "")),
-                "pinned_version_date": e.get("version_date", p.get("pinned_version_date", "")),
-                "pinned_url": e.get("url", p.get("pinned_url", "")),
-                "doc_sha256": e.get("doc_sha256", p.get("doc_sha256", "")),
-                "parsed_text_path": e.get("parsed_text_path", ""),
-                "parsed_text_sha256": e.get("parsed_text_sha256", ""),
-                "history_complete": e.get("history_complete", None),
-                "missing_versions": e.get("missing_versions", []),
-            })
+            p.update(
+                {
+                    "version_status": e.get("status", p.get("version_status", "")),
+                    "pinned_version": e.get("version", p.get("pinned_version", "")),
+                    "pinned_version_date": e.get("version_date", p.get("pinned_version_date", "")),
+                    "pinned_url": e.get("url", p.get("pinned_url", "")),
+                    "doc_sha256": e.get("doc_sha256", p.get("doc_sha256", "")),
+                    "parsed_text_path": e.get("parsed_text_path", ""),
+                    "parsed_text_sha256": e.get("parsed_text_sha256", ""),
+                    "history_complete": e.get("history_complete", None),
+                    "missing_versions": e.get("missing_versions", []),
+                }
+            )
         return p
 
     def _versions_manifest(self) -> dict:
         """related_work_data/versions.json, cached until a pin changes."""
         if getattr(self, "_versions_cache", None) is None:
-            self._versions_cache = self._load_json(
-                self.sub_dir / "related_work_data" / "versions.json") or {}
+            self._versions_cache = (
+                self._load_json(self.sub_dir / "related_work_data" / "versions.json") or {}
+            )
         return self._versions_cache
 
     def _cutoff_date(self) -> str:
@@ -166,8 +174,10 @@ class ClaimToolbox:
         """True if a pin was computed for a different submission date or gap."""
         if not entry:
             return True
-        return (entry.get("submission_date") != self._cutoff_date()
-                or int(entry.get("min_gap_days") or -1) != pv.DEFAULT_MIN_GAP_DAYS)
+        return (
+            entry.get("submission_date") != self._cutoff_date()
+            or int(entry.get("min_gap_days") or -1) != pv.DEFAULT_MIN_GAP_DAYS
+        )
 
     @staticmethod
     def _version_abstract(entry: dict, record: dict) -> tuple:
@@ -185,20 +195,26 @@ class ClaimToolbox:
             from fetch_fulltext import FullTextFetcher
 
             fetcher = FullTextFetcher(self.grobid_server)
-            entry = fetcher.pin_for_record(self.data_dir, self.submission_id, {
-                "paper_id": pid,
-                "title": record.get("title", ""),
-                "externalIds": record.get("externalIds", {}),
-                "doi": record.get("doi"),
-                "publication_date": record.get("publication_date", ""),
-                "year": record.get("year", ""),
-                "abstract": record.get("abstract", ""),
-            }) or {}
+            entry = (
+                fetcher.pin_for_record(
+                    self.data_dir,
+                    self.submission_id,
+                    {
+                        "paper_id": pid,
+                        "title": record.get("title", ""),
+                        "externalIds": record.get("externalIds", {}),
+                        "doi": record.get("doi"),
+                        "publication_date": record.get("publication_date", ""),
+                        "year": record.get("year", ""),
+                        "abstract": record.get("abstract", ""),
+                    },
+                )
+                or {}
+            )
             self._versions_cache = None
             return entry
         except Exception as e:
-            self._note_version_gate(f"{pid}: could not resolve a version "
-                                    f"({type(e).__name__})")
+            self._note_version_gate(f"{pid}: could not resolve a version ({type(e).__name__})")
             return {}
 
     def _note_version_gate(self, message: str) -> None:
@@ -247,8 +263,9 @@ class ClaimToolbox:
             entry = self._resolve_missing_pin(pid, p)
             status = entry.get("status") or ""
         if status not in _USABLE_VERSION_STATUSES:
-            self._note_version_gate(f"{pid}: not usable as evidence "
-                                    f"({status or 'unresolved'}) | {title[:50]}")
+            self._note_version_gate(
+                f"{pid}: not usable as evidence ({status or 'unresolved'}) | {title[:50]}"
+            )
             return
 
         abstract, abstract_source = self._version_abstract(entry, p)
@@ -279,9 +296,10 @@ class ClaimToolbox:
         ranked = self._load_json(self.sub_dir / "related_work_data" / "ranked_papers.json") or []
         for p in ranked:
             self._add_pool_paper(p, "reviewer" if p.get("added_by") == "reviewer" else "initial")
-        agent_papers = self._load_json(
-            self.sub_dir / "related_work_data" / "agent_retrieved_papers.json"
-        ) or []
+        agent_papers = (
+            self._load_json(self.sub_dir / "related_work_data" / "agent_retrieved_papers.json")
+            or []
+        )
         for p in agent_papers:
             self._add_pool_paper(p, "agent")
 
@@ -290,15 +308,17 @@ class ClaimToolbox:
         if not self.pool:
             return
         claim_doc = (
-            f"{self.claim.get('name','')}. {self.claim.get('description','')} "
-            f"{self.claim.get('claim_text','')}"
+            f"{self.claim.get('name', '')}. {self.claim.get('description', '')} "
+            f"{self.claim.get('claim_text', '')}"
         ).strip()
         pids = list(self.pool)
         docs = [f"{self.pool[pid]['title']}. {self.pool[pid]['abstract']}" for pid in pids]
         embs = self.embedder.encode([claim_doc] + docs, convert_to_numpy=True)
         claim_emb, cand_embs = embs[0], embs[1:]
-        sims = cand_embs @ claim_emb / (
-            np.linalg.norm(cand_embs, axis=1) * np.linalg.norm(claim_emb) + 1e-9
+        sims = (
+            cand_embs
+            @ claim_emb
+            / (np.linalg.norm(cand_embs, axis=1) * np.linalg.norm(claim_emb) + 1e-9)
         )
         for pid, s in zip(pids, sims):
             self.pool[pid]["sim"] = float(s)
@@ -333,8 +353,9 @@ class ClaimToolbox:
             text = self._load_fulltext_file(pid)
             if not text:
                 self._fulltext_status[pid] = "parse_unverified"
-                self._log("ensure_fulltext",
-                          f"{pid} -> parsed text failed its own provenance check")
+                self._log(
+                    "ensure_fulltext", f"{pid} -> parsed text failed its own provenance check"
+                )
                 return "parse_unverified"
             self.pool[pid]["fulltext"] = text
             self._paper_index.pop(pid, None)
@@ -356,9 +377,15 @@ class ClaimToolbox:
             return ""
         p = self.pool.get(pid, {})
         ok = fetcher.ensure_pdf(
-            {"paper_id": pid, "title": p.get("title", ""), "doi": p.get("doi"),
-             "externalIds": p.get("externalIds", {})},
-            pdf_path.parent, pin=pin)
+            {
+                "paper_id": pid,
+                "title": p.get("title", ""),
+                "doi": p.get("doi"),
+                "externalIds": p.get("externalIds", {}),
+            },
+            pdf_path.parent,
+            pin=pin,
+        )
         if not ok:
             return "no_pdf"
         fetcher.record_pdf_hash(self.data_dir, self.submission_id, pid, pdf_path)
@@ -389,10 +416,12 @@ class ClaimToolbox:
                             chunks = chunks_from_plain(p["fulltext"], pid)
                     else:
                         blob = "\n\n".join(
-                            x for x in (
+                            x
+                            for x in (
                                 ("Abstract: " + p.get("abstract", "")) if p.get("abstract") else "",
                                 ("Introduction: " + p.get("intro", "")) if p.get("intro") else "",
-                            ) if x
+                            )
+                            if x
                         )
                         chunks = chunks_from_plain(blob, pid)
                     self._paper_index[pid] = PassageIndex(chunks, self.embedder)
@@ -408,8 +437,12 @@ class ClaimToolbox:
         with self._lock:
             e = self.ledger["examined"].setdefault(
                 pid,
-                {"depth": "abstract_only", "source": self.pool.get(pid, {}).get("source", "?"),
-                 "similarity": round(self.pool.get(pid, {}).get("sim", 0.0), 4), "has_comparison": False},
+                {
+                    "depth": "abstract_only",
+                    "source": self.pool.get(pid, {}).get("source", "?"),
+                    "similarity": round(self.pool.get(pid, {}).get("sim", 0.0), 4),
+                    "has_comparison": False,
+                },
             )
             if _DEPTH_RANK.get(depth, 0) > _DEPTH_RANK.get(e["depth"], 0):
                 e["depth"] = depth
@@ -427,8 +460,9 @@ class ClaimToolbox:
         """Section names with previews and sizes."""
         return self._index_for(paper_id).section_previews()
 
-    def read_sections(self, paper_id: str, names: List[str], max_total: int = 40000,
-                      exact: bool = False) -> dict:
+    def read_sections(
+        self, paper_id: str, names: List[str], max_total: int = 40000, exact: bool = False
+    ) -> dict:
         """Complete text of the named sections; records which sections were read."""
         idx = self._index_for(paper_id)
         got = idx.get_sections(names, max_total=max_total, exact=exact)
@@ -439,7 +473,10 @@ class ClaimToolbox:
             nm = s.get("name")
             if nm and nm not in lst:
                 lst.append(nm)
-        self._log("read_sections", f"{paper_id}: {len(got)} sections ({sum(len(s['text']) for s in got)} chars)")
+        self._log(
+            "read_sections",
+            f"{paper_id}: {len(got)} sections ({sum(len(s['text']) for s in got)} chars)",
+        )
         return {"paper_id": paper_id, "sections": got}
 
     def verify_segments(self, segments: List[dict], source: str) -> List[dict]:
@@ -457,10 +494,16 @@ class ClaimToolbox:
                 continue
             if kind == "quote":
                 chk, span = evidence.verify_contiguous(
-                    content, src, self.min_quote_tokens, self.fuzzy_threshold)
+                    content, src, self.min_quote_tokens, self.fuzzy_threshold
+                )
                 if chk.verified:
-                    out.append({"kind": "quote", "verified": True,
-                                "content": evidence_map.trim_display_span(span)})
+                    out.append(
+                        {
+                            "kind": "quote",
+                            "verified": True,
+                            "content": evidence_map.trim_display_span(span),
+                        }
+                    )
                 else:
                     out.append({"kind": "text", "verified": False, "content": content})
             else:
@@ -482,10 +525,15 @@ class ClaimToolbox:
         """Search for new admissible candidates and add them to the pool."""
         k = k or self.retrieve_k
         new = rm.retrieve(
-            query, self.claim, self.embedder,
+            query,
+            self.claim,
+            self.embedder,
             exclude_ids=set(self.pool),
-            source_title=self.sub_title, source_pub_date=self.sub_pub_date,
-            source_year=self.cutoff_year, source_abstract=self._meta.get("abstract", ""), k=k,
+            source_title=self.sub_title,
+            source_pub_date=self.sub_pub_date,
+            source_year=self.cutoff_year,
+            source_abstract=self._meta.get("abstract", ""),
+            k=k,
         )
         added = []
         for p in new:
@@ -504,9 +552,12 @@ class ClaimToolbox:
             "query": query,
             "n_new": len(added),
             "papers": [
-                {"paper_id": p["paper_id"], "title": p["title"],
-                 "similarity": round(p.get("similarity", 0.0), 4),
-                 "has_fulltext": self._has_fulltext(p["paper_id"])}
+                {
+                    "paper_id": p["paper_id"],
+                    "title": p["title"],
+                    "similarity": round(p.get("similarity", 0.0), 4),
+                    "has_fulltext": self._has_fulltext(p["paper_id"]),
+                }
                 for p in new
             ],
         }
@@ -533,25 +584,39 @@ class ClaimToolbox:
             return
         paper_text = self._paper_source_text(paper_id)
         verified_pairs = []
-        for ep in (evidence_pairs or []):
+        for ep in evidence_pairs or []:
             v = evidence.verify_pair(
-                ep.get("claim_quote", ""), ep.get("paper_quote", ""),
-                self._submission_text, paper_text,
-                self.min_quote_tokens, self.fuzzy_threshold,
+                ep.get("claim_quote", ""),
+                ep.get("paper_quote", ""),
+                self._submission_text,
+                paper_text,
+                self.min_quote_tokens,
+                self.fuzzy_threshold,
             )
-            carried = {k: val for k, val in ep.items()
-                       if k not in ("claim_quote", "paper_quote", "rationale",
-                                    "claim_quote_verified", "paper_quote_verified",
-                                    "fully_verified")}
-            verified_pairs.append({
-                **carried,
-                "claim_quote": ep.get("claim_quote", ""),
-                "paper_quote": ep.get("paper_quote", ""),
-                "rationale": ep.get("rationale", ""),
-                "claim_quote_verified": v["claim_quote_verified"],
-                "paper_quote_verified": v["paper_quote_verified"],
-                "fully_verified": v["fully_verified"],
-            })
+            carried = {
+                k: val
+                for k, val in ep.items()
+                if k
+                not in (
+                    "claim_quote",
+                    "paper_quote",
+                    "rationale",
+                    "claim_quote_verified",
+                    "paper_quote_verified",
+                    "fully_verified",
+                )
+            }
+            verified_pairs.append(
+                {
+                    **carried,
+                    "claim_quote": ep.get("claim_quote", ""),
+                    "paper_quote": ep.get("paper_quote", ""),
+                    "rationale": ep.get("rationale", ""),
+                    "claim_quote_verified": v["claim_quote_verified"],
+                    "paper_quote_verified": v["paper_quote_verified"],
+                    "fully_verified": v["fully_verified"],
+                }
+            )
 
         status = refutation_status
         note = brief_note
@@ -569,7 +634,9 @@ class ClaimToolbox:
             "cited_by_submission": p["cited_paper"],
             "similarity": round(p.get("sim", 0.0), 4),
             "source": p["source"],
-            "content_source": "full text" if self._has_fulltext(paper_id) else "abstract + introduction",
+            "content_source": "full text"
+            if self._has_fulltext(paper_id)
+            else "abstract + introduction",
             "depth": depth,
             "sections_used": list(self._sections_read.get(paper_id, [])),
             "relevance_reason": "",
@@ -579,14 +646,18 @@ class ClaimToolbox:
             "what_is_shared": what_is_shared,
             "submission_delta": submission_delta,
             "evidence_pairs": verified_pairs,
-            "paper_realization": self.verify_segments(paper_realization, paper_id) if paper_realization else [],
+            "paper_realization": self.verify_segments(paper_realization, paper_id)
+            if paper_realization
+            else [],
             "assessment": assessment,
             "fulltext_fetch_status": fulltext_fetch_status,
             "brief_note": note,
             **(extra or {}),
         }
         with self._lock:
-            self.ledger["comparisons"] = [c for c in self.ledger["comparisons"] if c["paper_id"] != paper_id]
+            self.ledger["comparisons"] = [
+                c for c in self.ledger["comparisons"] if c["paper_id"] != paper_id
+            ]
             self.ledger["comparisons"].append(comp)
             self.ledger["examined"].setdefault(
                 paper_id,
@@ -602,17 +673,31 @@ class ClaimToolbox:
         for p in papers:
             if p["paper_id"] in have:
                 continue
-            existing.append({
-                **{k: p.get(k) for k in ("paper_id", "title", "abstract", "year",
-                                         "publication_date", "venue", "authors",
-                                         "citation_count", "externalIds", "doi")},
-                "cited_paper": False,
-                "source": "agent",
-                "retrieval_query": query,
-                "for_claim": self.claim.get("id"),
-                "retrieved_at": stamp,
-                "similarity": round(p.get("similarity", 0.0), 4),
-            })
+            existing.append(
+                {
+                    **{
+                        k: p.get(k)
+                        for k in (
+                            "paper_id",
+                            "title",
+                            "abstract",
+                            "year",
+                            "publication_date",
+                            "venue",
+                            "authors",
+                            "citation_count",
+                            "externalIds",
+                            "doi",
+                        )
+                    },
+                    "cited_paper": False,
+                    "source": "agent",
+                    "retrieval_query": query,
+                    "for_claim": self.claim.get("id"),
+                    "retrieved_at": stamp,
+                    "similarity": round(p.get("similarity", 0.0), 4),
+                }
+            )
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(existing, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -631,17 +716,22 @@ class ClaimToolbox:
                 if not p or (ft_dir / f"{pid}.txt").exists():
                     continue
                 try:
-                    record = {"paper_id": pid, "title": p["title"], "doi": p.get("doi"),
-                              "externalIds": p.get("externalIds", {}),
-                              "publication_date": p.get("publication_date", ""),
-                              "year": p.get("year", ""),
-                              "abstract": p.get("abstract", "")}
+                    record = {
+                        "paper_id": pid,
+                        "title": p["title"],
+                        "doi": p.get("doi"),
+                        "externalIds": p.get("externalIds", {}),
+                        "publication_date": p.get("publication_date", ""),
+                        "year": p.get("year", ""),
+                        "abstract": p.get("abstract", ""),
+                    }
                     pin = fetcher.pin_for_record(self.data_dir, self.submission_id, record)
                     if pin and pin.get("status") not in _USABLE_VERSION_STATUSES:
                         continue
                     if fetcher.ensure_pdf(record, pdfs_dir, pin=pin or None):
-                        fetcher.record_pdf_hash(self.data_dir, self.submission_id, pid,
-                                                pdfs_dir / f"{pid}.pdf")
+                        fetcher.record_pdf_hash(
+                            self.data_dir, self.submission_id, pid, pdfs_dir / f"{pid}.pdf"
+                        )
                         self._versions_cache = None
                         if fetcher.parse_one(self.data_dir, self.submission_id, pid) == "ok":
                             p["fulltext"] = (ft_dir / f"{pid}.txt").read_text(encoding="utf-8")
@@ -673,9 +763,13 @@ class ClaimToolbox:
         frontier = self._ranked()[:20]
         frontier_out = [
             {
-                "paper_id": p["paper_id"], "title": p["title"], "authors": p.get("authors", ""),
-                "year": p.get("year", ""), "venue": p.get("venue", ""),
-                "similarity": round(p.get("sim", 0.0), 4), "source": p["source"],
+                "paper_id": p["paper_id"],
+                "title": p["title"],
+                "authors": p.get("authors", ""),
+                "year": p.get("year", ""),
+                "venue": p.get("venue", ""),
+                "similarity": round(p.get("sim", 0.0), 4),
+                "source": p["source"],
                 "has_fulltext": bool(p.get("fulltext")),
                 "cited_by_submission": bool(p.get("cited_paper")),
                 "examined": p["paper_id"] in examined,

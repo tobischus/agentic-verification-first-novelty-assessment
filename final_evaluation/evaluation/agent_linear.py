@@ -1,4 +1,5 @@
 """Agent vs linear from the run records, offline."""
+
 from __future__ import annotations
 
 import hashlib
@@ -64,6 +65,7 @@ def _run_metrics():
     if str(ROOT / "eval") not in sys.path:
         sys.path.insert(0, str(ROOT / "eval"))
     import run_metrics
+
     return run_metrics
 
 
@@ -76,8 +78,10 @@ def _checked(path: str, sha: str, base: Path = ROOT) -> Path:
     p = base / Path(path.replace("\\", "/"))
     got = _sha(p) if p.exists() else "missing"
     if got != sha:
-        raise SystemExit(f"{path}: sha256 {got[:12]} != recorded {sha[:12]} -- not the "
-                         f"file the frozen report was rendered from")
+        raise SystemExit(
+            f"{path}: sha256 {got[:12]} != recorded {sha[:12]} -- not the "
+            f"file the frozen report was rendered from"
+        )
     return p
 
 
@@ -87,8 +91,9 @@ def paper_entries(config: Path = E1_CONFIG) -> list:
     out = []
     for ps in cfg["paper_sets"]:
         sub = yaml.safe_load((ROOT / ps["config"]).read_text(encoding="utf-8"))
-        man = json.loads((FE / "manifests" / sub["inputs_dir"] / "reports.json")
-                         .read_text(encoding="utf-8"))
+        man = json.loads(
+            (FE / "manifests" / sub["inputs_dir"] / "reports.json").read_text(encoding="utf-8")
+        )
         out += [(ps["role"], paper, e) for paper, e in man["papers"].items()]
     return out
 
@@ -145,11 +150,20 @@ def reentry_outcomes(artifact_a: dict, overlap_degrees) -> Counter:
             first, last = min(deg), max(deg)
             overlap = deg[last] in overlap_degrees
             material = st[last] == "material"
-            outcome = ("overlap_confirmed" if overlap and material else
-                       "overlap_rejected" if not overlap and not material else "disagreement")
+            outcome = (
+                "overlap_confirmed"
+                if overlap and material
+                else "overlap_rejected"
+                if not overlap and not material
+                else "disagreement"
+            )
             moved = (deg[first] != deg[last], st[first] != st[last])
-            changed = {(True, False): "degree", (False, True): "evidence",
-                       (True, True): "both", (False, False): "neither"}[moved]
+            changed = {
+                (True, False): "degree",
+                (False, True): "evidence",
+                (True, True): "both",
+                (False, False): "neither",
+            }[moved]
             end = "resolved" if pw.get("final_state") == "checked" else "unresolved"
             c[(end, outcome, changed)] += 1
     return c
@@ -205,8 +219,11 @@ def matched_values(ends: dict, rows: list, keys: set, vd) -> dict:
         "evidence_insufficient": ev.get("insufficient", 0),
         "conflicts": sum(1 for r in rs if r["conflict"]),
         "partial_or_stronger": sum(1 for r in rs if r["overlap_degree"] in vd.OVERLAP_DEGREES),
-        "degree_confirmed": sum(1 for r in rs if r["evidence_status"] == "material"
-                                and r["proposed_degree_supported"] is True),
+        "degree_confirmed": sum(
+            1
+            for r in rs
+            if r["evidence_status"] == "material" and r["proposed_degree_supported"] is True
+        ),
         "pairs_returned": sum(r["pairs_returned"] for r in rs),
         "pairs_unverified": sum(r["pairs_unverified"] for r in rs),
     }
@@ -223,8 +240,11 @@ def paired(per_paper: dict, key: str, block: str = "") -> dict:
     agg = (lambda xs: round(statistics.mean(xs), 4)) if share else (lambda xs: round(sum(xs), 4))
     return {
         "aggregate": "mean of per-paper shares" if share else "sum over papers",
-        "agent": agg(a), "linear": agg(b),
-        "agent_lower": lower, "agent_higher": higher, "equal": len(a) - lower - higher,
+        "agent": agg(a),
+        "linear": agg(b),
+        "agent_lower": lower,
+        "agent_higher": higher,
+        "equal": len(a) - lower - higher,
         "median_difference": round(statistics.median(x - y for x, y in zip(a, b)), 4),
         "p": an.sign_test(lower, higher),
     }
@@ -279,13 +299,18 @@ def analyze(config: Path = E1_CONFIG) -> dict:
             if any(k.startswith("other_after") or k == "not_compared" for k in ends):
                 flags.append({"paper": paper, "variant": v, "endings": ends})
             vals[v] = variant_values(
-                vms[v], ends, sens.detailed_comparisons(report.read_text(encoding="utf-8")))
+                vms[v], ends, sens.detailed_comparisons(report.read_text(encoding="utf-8"))
+            )
 
-        both = set.intersection(*({k for k, end in pends[v].items()
-                                   if end not in ("dismissed", "not_compared")}
-                                  for v in VARIANTS))
+        both = set.intersection(
+            *(
+                {k for k, end in pends[v].items() if end not in ("dismissed", "not_compared")}
+                for v in VARIANTS
+            )
+        )
         per_paper[paper] = {
-            "paper_set": role, **vals,
+            "paper_set": role,
+            **vals,
             "matched": {v: matched_values(pends[v], vms[v]["_rows"], both, vd) for v in VARIANTS},
         }
 
@@ -295,43 +320,68 @@ def analyze(config: Path = E1_CONFIG) -> dict:
         dismissed += _dismissed_vs_linear(arts["agent"], vms["linear"]["_rows"], vd)
         reentries += reentry_outcomes(arts["agent"], vd.OVERLAP_DEGREES)
 
-    tests ={k: paired(per_paper, k) for k, _, _ in METRICS}
+    tests = {k: paired(per_paper, k) for k, _, _ in METRICS}
     matched = {k: paired(per_paper, k, "matched") for k, _, _ in MATCHED}
-    tested = {**{("all", k): tests[k]["p"] for k, _, t in METRICS if t},
-              **{("matched", k): matched[k]["p"] for k, _, t in MATCHED if t}}
+    tested = {
+        **{("all", k): tests[k]["p"] for k, _, t in METRICS if t},
+        **{("matched", k): matched[k]["p"] for k, _, t in MATCHED if t},
+    }
     adj = holm(tested)
     for block, res in (("all", tests), ("matched", matched)):
         for k in res:
             res[k]["p_holm"] = adj.get((block, k))
             res[k]["tested"] = (block, k) in adj
 
-    tot = {v: {k: sum(p[v][k] for p in per_paper.values())
-               for k in ("compared", "first_check_failed", "resolved_by_reentry", "unresolved",
-                         "dismissed")} for v in VARIANTS}
+    tot = {
+        v: {
+            k: sum(p[v][k] for p in per_paper.values())
+            for k in (
+                "compared",
+                "first_check_failed",
+                "resolved_by_reentry",
+                "unresolved",
+                "dismissed",
+            )
+        }
+        for v in VARIANTS
+    }
     diff = [x for x in verdicts if not x["agree"]]
-    by_linear_only = sum(1 for x in diff if x["linear"] == "challenged" and x["agent"] != "challenged")
+    by_linear_only = sum(
+        1 for x in diff if x["linear"] == "challenged" and x["agent"] != "challenged"
+    )
     return {
         "post_hoc": "test chosen 2026-09-25 after an ad-hoc look at these numbers; "
-                    "metrics as named in PROTOCOL 5 (2026-09-23)",
+        "metrics as named in PROTOCOL 5 (2026-09-23)",
         "papers": len(per_paper),
         "tests": tests,
         "matched": matched,
         "tested_metrics": len(tested),
         "reentry": {
-            v: {**tot[v], "first_check_failed_rate": _share(tot[v]["first_check_failed"],
-                                                            tot[v]["compared"])}
-            for v in VARIANTS},
-        "reentry_outcomes": [{"end": e, "outcome": o, "changed": ch, "n": n}
-                             for (e, o, ch), n in sorted(reentries.items(),
-                                                         key=lambda t: (t[0][0], -t[1]))],
-        "verdicts":{"claims": len(verdicts), "agree": len(verdicts) - len(diff),
-                     "differ": diff, "linear_challenges_agent_does_not": by_linear_only},
+            v: {
+                **tot[v],
+                "first_check_failed_rate": _share(tot[v]["first_check_failed"], tot[v]["compared"]),
+            }
+            for v in VARIANTS
+        },
+        "reentry_outcomes": [
+            {"end": e, "outcome": o, "changed": ch, "n": n}
+            for (e, o, ch), n in sorted(reentries.items(), key=lambda t: (t[0][0], -t[1]))
+        ],
+        "verdicts": {
+            "claims": len(verdicts),
+            "agree": len(verdicts) - len(diff),
+            "differ": diff,
+            "linear_challenges_agent_does_not": by_linear_only,
+        },
         "agent_dismissed_vs_linear": {
             "pairs": sum(n for k, n in dismissed.items() if not k.startswith("_")),
-            "linear_partial_or_stronger_material": dismissed.get("_partial_or_stronger_material", 0),
+            "linear_partial_or_stronger_material": dismissed.get(
+                "_partial_or_stronger_material", 0
+            ),
             "linear_refutes": dismissed.get("_linear_refutes", 0),
-            "breakdown": dict(Counter({k: n for k, n in dismissed.items()
-                                       if not k.startswith("_")}).most_common()),
+            "breakdown": dict(
+                Counter({k: n for k, n in dismissed.items() if not k.startswith("_")}).most_common()
+            ),
         },
         "unexpected_endings": flags,
         "per_paper": per_paper,
@@ -353,29 +403,40 @@ def _print_block(title: str, metrics: list, res: dict) -> None:
         t = res[k]
         ps = f"{t['p']:.2g}" if t["tested"] else "(design)"
         ph = f"{t['p_holm']:.2g}" if t["tested"] else ""
-        print(f"{label:48s} {_fmt(t['agent']):>11s} {_fmt(t['linear']):>11s}  "
-              f"{t['agent_lower']:>5d}/{t['agent_higher']:<5d}/{t['equal']:<5d}  {ps:8s} {ph}")
+        print(
+            f"{label:48s} {_fmt(t['agent']):>11s} {_fmt(t['linear']):>11s}  "
+            f"{t['agent_lower']:>5d}/{t['agent_higher']:<5d}/{t['equal']:<5d}  {ps:8s} {ph}"
+        )
 
 
 def print_report(res: dict) -> None:
     print(f"Agent vs linear from the run records -- {res['papers']} papers, paired by paper")
     print(f"({res['post_hoc']})")
-    print("Exact two-sided sign test over papers, equal values left out; "
-          f"Holm across all {res['tested_metrics']} tested metrics of both blocks.")
-    print("'lower/higher' = papers on which the agent's value is lower/higher than linear's;"
-          " shares are means of per-paper shares.")
+    print(
+        "Exact two-sided sign test over papers, equal values left out; "
+        f"Holm across all {res['tested_metrics']} tested metrics of both blocks."
+    )
+    print(
+        "'lower/higher' = papers on which the agent's value is lower/higher than linear's;"
+        " shares are means of per-paper shares."
+    )
     print()
     _print_block("ALL PAIRS -- what each flow did with the whole pool", METRICS, res["tests"])
     print()
-    _print_block("MATCHED PAIRS -- only the (claim, paper) pairs both flows compared",
-                 MATCHED, res["matched"])
+    _print_block(
+        "MATCHED PAIRS -- only the (claim, paper) pairs both flows compared",
+        MATCHED,
+        res["matched"],
+    )
     print()
     print("Re-entry mechanism (totals over papers):")
     for v in VARIANTS:
         r = res["reentry"][v]
-        print(f"  {v:6s}: dismissed {r['dismissed']}, compared {r['compared']}, first check "
-              f"failed {r['first_check_failed']} ({r['first_check_failed_rate']:.1%}), "
-              f"resolved by re-entry {r['resolved_by_reentry']}, unresolved {r['unresolved']}")
+        print(
+            f"  {v:6s}: dismissed {r['dismissed']}, compared {r['compared']}, first check "
+            f"failed {r['first_check_failed']} ({r['first_check_failed_rate']:.1%}), "
+            f"resolved by re-entry {r['resolved_by_reentry']}, unresolved {r['unresolved']}"
+        )
     print()
     print("Agent pairs compared twice, first turn vs last (from the decision trace):")
     print(f"  {'end':11s} {'outcome':18s} {'what changed':13s} n")
@@ -383,15 +444,19 @@ def print_report(res: dict) -> None:
         print(f"  {r['end']:11s} {r['outcome']:18s} {r['changed']:13s} {r['n']}")
     print()
     vv = res["verdicts"]
-    print(f"Claim verdicts: agree on {vv['agree']}/{vv['claims']}; "
-          f"linear challenges where the agent does not: {vv['linear_challenges_agent_does_not']}")
+    print(
+        f"Claim verdicts: agree on {vv['agree']}/{vv['claims']}; "
+        f"linear challenges where the agent does not: {vv['linear_challenges_agent_does_not']}"
+    )
     for d in vv["differ"]:
         print(f"  {d['paper']} {d['claim_id']}: agent {d['agent']}, linear {d['linear']}")
     print()
     dd = res["agent_dismissed_vs_linear"]
-    print(f"Pairs the agent dismissed ({dd['pairs']}), as linear's single pass assessed them: "
-          f"partial-or-stronger with material evidence {dd['linear_partial_or_stronger_material']}, "
-          f"refuting {dd['linear_refutes']}")
+    print(
+        f"Pairs the agent dismissed ({dd['pairs']}), as linear's single pass assessed them: "
+        f"partial-or-stronger with material evidence {dd['linear_partial_or_stronger_material']}, "
+        f"refuting {dd['linear_refutes']}"
+    )
     for k, n in dd["breakdown"].items():
         print(f"  {k:32s} {n}")
     if res["unexpected_endings"]:

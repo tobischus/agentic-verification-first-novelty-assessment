@@ -4,7 +4,8 @@ const LONG_STAGES = new Set(['retrieval', 'fetch_pdfs'])
 
 function fmtDur(s) {
   s = Math.max(0, Math.round(s || 0))
-  const m = Math.floor(s / 60), sec = s % 60
+  const m = Math.floor(s / 60),
+    sec = s % 60
   return m ? `${m}m ${String(sec).padStart(2, '0')}s` : `${sec}s`
 }
 
@@ -23,12 +24,18 @@ export default function StatusBar({ state, stageLabels }) {
 
   const p = state?.progress
   let phase = stageLabels?.[curName] || 'Working…'
-  let determinate = false, pct = null, eta = null, done = 0, total = 0, elapsed = 0
+  let determinate = false,
+    pct = null,
+    eta = null,
+    done = 0,
+    total = 0,
+    elapsed = 0
   if (p && now - (p.updated_epoch || 0) < 120) {
     phase = p.phase || phase
     elapsed = Math.max(0, now - (p.started_epoch || now))
     determinate = !p.indeterminate && p.total > 0
-    done = p.done; total = p.total
+    done = p.done
+    total = p.total
     if (determinate) {
       const frac = Math.min(1, p.done / p.total)
       pct = Math.round(frac * 100)
@@ -43,7 +50,11 @@ export default function StatusBar({ state, stageLabels }) {
     <div className="panel progress">
       <div className="progress-label">
         <span>{phase}</span>
-        {determinate && <span>{done}/{total}</span>}
+        {determinate && (
+          <span>
+            {done}/{total}
+          </span>
+        )}
       </div>
       <div className="progress-track">
         <div
@@ -53,9 +64,11 @@ export default function StatusBar({ state, stageLabels }) {
       </div>
       <div className="progress-meta">
         <span>{determinate ? `${pct}%` : 'estimating…'}</span>
-        {eta != null
-          ? <span>≈ {fmtDur(eta)} remaining</span>
-          : <span>{fmtDur(elapsed)} elapsed</span>}
+        {eta != null ? (
+          <span>≈ {fmtDur(eta)} remaining</span>
+        ) : (
+          <span>{fmtDur(elapsed)} elapsed</span>
+        )}
       </div>
     </div>
   )

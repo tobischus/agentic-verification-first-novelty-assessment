@@ -1,4 +1,5 @@
 """Title recovery / cleaning for the document-processing stage."""
+
 import re
 
 _WATERMARK_PATTERNS = [
@@ -21,7 +22,7 @@ def clean_title(title: str) -> str:
         for pat in _WATERMARK_PATTERNS:
             m = re.match(pat, t, flags=re.IGNORECASE)
             if m and m.end() > 0:
-                t = t[m.end():].strip()
+                t = t[m.end() :].strip()
                 changed = True
     return t.strip()
 
@@ -35,9 +36,7 @@ def page1_text(pdf_path: str, max_chars: int = 2500) -> str:
         return ""
     raw = doc[0].get_text("text")
     lines = [
-        ln
-        for ln in raw.splitlines()
-        if ln.strip() and not re.fullmatch(r"\d{1,4}", ln.strip())
+        ln for ln in raw.splitlines() if ln.strip() and not re.fullmatch(r"\d{1,4}", ln.strip())
     ]
     return "\n".join(lines)[:max_chars]
 
@@ -62,8 +61,7 @@ def recover_title(pdf_path: str, model: str = "gpt-4.1") -> str:
     return resp.content.strip().strip('"').strip()
 
 
-def resolve_title(raw_title: str, pdf_path: str, model: str = "gpt-4.1",
-                  min_len: int = 8):
+def resolve_title(raw_title: str, pdf_path: str, model: str = "gpt-4.1", min_len: int = 8):
     """(title, source) with source 'grobid', 'grobid_cleaned' or 'pdf_llm_fallback'."""
     raw = (raw_title or "").strip()
     cleaned = clean_title(raw)

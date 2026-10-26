@@ -5,6 +5,7 @@ version pinning, and PDF download (checkpoint "papers"). The comparison is then 
 claim from the API. State, per-stage time and cost are kept in {id}_pipeline_state.json.
 With hitl=False both checkpoints are approved automatically.
 """
+
 import argparse
 import json
 import logging
@@ -42,6 +43,7 @@ STAGES = [
 
 def _price_usd(model: str, prompt_tokens: int, completion_tokens: int) -> float:
     from claim_extraction import _usd
+
     return _usd(model, prompt_tokens, completion_tokens)
 
 
@@ -52,8 +54,15 @@ def _fmt_dur(seconds) -> str:
 
 
 class NoveltyPipeline:
-    def __init__(self, data_dir, submission_id, pdf_path=None, model="gpt-4.1",
-                 grobid_server="http://localhost:8070", hitl=True):
+    def __init__(
+        self,
+        data_dir,
+        submission_id,
+        pdf_path=None,
+        model="gpt-4.1",
+        grobid_server="http://localhost:8070",
+        hitl=True,
+    ):
         self.data_dir = data_dir
         self.submission_id = submission_id
         self.pdf_path = pdf_path
@@ -79,7 +88,9 @@ class NoveltyPipeline:
 
     def _save_state(self, state):
         state["updated"] = time.strftime("%Y-%m-%d %H:%M:%S")
-        self.state_path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+        self.state_path.write_text(
+            json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
 
     def _output_exists(self, output_rel):
         return (self.sub_dir / output_rel.format(id=self.submission_id)).exists()
@@ -88,24 +99,31 @@ class NoveltyPipeline:
         if name == "document_processing":
             sys.path.insert(0, _PREPROCESS)
             from grobid_client import GrobidClient
+
             pdf = state.get("pdf_path") or str(self.sub_dir / f"{self.submission_id}.pdf")
-            GrobidClient(self.grobid_server).process_for_pipeline(pdf, self.data_dir, self.submission_id)
+            GrobidClient(self.grobid_server).process_for_pipeline(
+                pdf, self.data_dir, self.submission_id
+            )
 
         elif name == "claim_extraction":
             from claim_extraction import DEFAULT_EXTRACTION_MODEL, ClaimExtractor
+
             ClaimExtractor(model_name=DEFAULT_EXTRACTION_MODEL).extract(
-                self.data_dir, self.submission_id)
+                self.data_dir, self.submission_id
+            )
 
         elif name == "retrieval":
             sys.path.insert(0, _RETRIEVAL)
             import match_papers_to_s2
             import retrieval as retrieval_mod
+
             match_papers_to_s2.process_for_pipeline(self.data_dir, self.submission_id)
             retrieval_mod.process_for_pipeline(self.data_dir, self.submission_id)
 
         elif name == "fetch_pdfs":
             # Download only; prior papers are parsed when the comparison first reads them.
             from fetch_fulltext import FullTextFetcher
+
             try:
                 FullTextFetcher(self.grobid_server).download_pdfs(self.data_dir, self.submission_id)
             except Exception as e:
@@ -128,15 +146,19 @@ class NoveltyPipeline:
             pdf_path = rwd / "pdfs" / f"{pid}.pdf"
             has_pdf = pdf_path.exists() and pdf_path.stat().st_size > 0
             item = {
-                "paper_id": pid, "title": p.get("title", ""),
-                "authors": p.get("authors", ""), "year": p.get("year", ""),
+                "paper_id": pid,
+                "title": p.get("title", ""),
+                "authors": p.get("authors", ""),
+                "year": p.get("year", ""),
                 "venue": p.get("venue", ""),
             }
             (with_pdf if has_pdf else no_pdf).append(item)
         status = {
             "submission_id": self.submission_id,
-            "n_total": len(ranked), "n_with_pdf": len(with_pdf),
-            "with_pdf": with_pdf, "no_pdf": no_pdf,
+            "n_total": len(ranked),
+            "n_with_pdf": len(with_pdf),
+            "with_pdf": with_pdf,
+            "no_pdf": no_pdf,
         }
         (self.sub_dir / f"{self.submission_id}_pdf_status.json").write_text(
             json.dumps(status, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -158,6 +180,7 @@ class NoveltyPipeline:
     def _stage_model(self, name: str) -> str:
         if name == "claim_extraction":
             from claim_extraction import DEFAULT_EXTRACTION_MODEL
+
             return DEFAULT_EXTRACTION_MODEL
         return self.model
 
@@ -218,7 +241,10 @@ class NoveltyPipeline:
                 except Exception as e:
                     if _progress:
                         _progress.clear()
-                    state["metrics"][name] = {"seconds": round(time.time() - t0, 1), "status": "failed"}
+                    state["metrics"][name] = {
+                        "seconds": round(time.time() - t0, 1),
+                        "status": "failed",
+                    }
                     state["current_stage"] = None
                     state["status"] = "failed"
                     state["last_error"] = f"{name}: {repr(e)[:300]}"
@@ -251,7 +277,9 @@ class NoveltyPipeline:
                     state["checkpoints"][checkpoint] = "awaiting"
                     state["status"] = f"awaiting_review:{checkpoint}"
                     self._save_state(state)
-                    logger.info(f"[{self.submission_id}] paused for reviewer at checkpoint '{checkpoint}'")
+                    logger.info(
+                        f"[{self.submission_id}] paused for reviewer at checkpoint '{checkpoint}'"
+                    )
                     return state
                 state["checkpoints"][checkpoint] = "approved"
                 self._save_state(state)
@@ -272,13 +300,19 @@ def main():
     ap.add_argument("--model", default="gpt-4.1")
     ap.add_argument("--grobid-server", default="http://localhost:8070")
     ap.add_argument("--no-hitl", action="store_true", help="approve both checkpoints automatically")
-    ap.add_argument("--approve", default=None, help="approve a checkpoint (claims|papers) then continue")
+    ap.add_argument(
+        "--approve", default=None, help="approve a checkpoint (claims|papers) then continue"
+    )
     ap.add_argument("--status", action="store_true", help="print pipeline state and exit")
     args = ap.parse_args()
 
     pipe = NoveltyPipeline(
-        args.data_dir, args.submission_id, pdf_path=args.pdf, model=args.model,
-        grobid_server=args.grobid_server, hitl=not args.no_hitl,
+        args.data_dir,
+        args.submission_id,
+        pdf_path=args.pdf,
+        model=args.model,
+        grobid_server=args.grobid_server,
+        hitl=not args.no_hitl,
     )
     if args.status:
         print(json.dumps(pipe._load_state(), indent=2, ensure_ascii=False))

@@ -1,5 +1,5 @@
 // Locates verified quotes in the text layer of a PDF.
-const LIGATURES = { 'ﬀ': 'ff', 'ﬁ': 'fi', 'ﬂ': 'fl', 'ﬃ': 'ffi', 'ﬄ': 'ffl', 'ﬅ': 'st' }
+const LIGATURES = { ﬀ: 'ff', ﬁ: 'fi', ﬂ: 'fl', ﬃ: 'ffi', ﬄ: 'ffl', ﬅ: 'st' }
 
 export const MIN_SCORE = 0.6
 
@@ -8,7 +8,11 @@ function expand(s) {
 }
 
 export function words(text) {
-  return expand(text).toLowerCase().match(/[a-z0-9]+/g) || []
+  return (
+    expand(text)
+      .toLowerCase()
+      .match(/[a-z0-9]+/g) || []
+  )
 }
 
 export function pageTokens(textContent) {
@@ -108,7 +112,11 @@ export function findWindow(tokens, quoteWords) {
 let measureCtx = null
 function measurer() {
   if (measureCtx === null) {
-    try { measureCtx = document.createElement('canvas').getContext('2d') || false } catch { measureCtx = false }
+    try {
+      measureCtx = document.createElement('canvas').getContext('2d') || false
+    } catch {
+      measureCtx = false
+    }
   }
   return measureCtx
 }
@@ -189,8 +197,14 @@ export function locateQuotes(pages, quotes, Util) {
     })
     if (!best) continue
     const pg = pages[best.pageIndex]
-    const rects = rectsForRange(pg.textContent, pg.tokens, best.hit.start, best.hit.end,
-                                pg.viewportAt1, Util)
+    const rects = rectsForRange(
+      pg.textContent,
+      pg.tokens,
+      best.hit.start,
+      best.hit.end,
+      pg.viewportAt1,
+      Util,
+    )
     if (rects.length) {
       found.push({ ...q, pageIndex: best.pageIndex, score: best.hit.score, rects })
     }

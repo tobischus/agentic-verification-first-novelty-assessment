@@ -1,4 +1,5 @@
 """Paper-level novelty summary."""
+
 import argparse
 import hashlib
 import json
@@ -101,15 +102,14 @@ def _schema():
     class PaperSummary(BaseModel):
         main_novelty_concern: str = Field(
             description="Which claims are materially touched by which prior work, or the "
-                        "no-supported-overlap sentence. Plain prose."
+            "no-supported-overlap sentence. Plain prose."
         )
         remaining_contribution: str = Field(
             description="What remains distinguishable according to the comparisons made, "
-                        "without asserting significance or sufficiency. Plain prose."
+            "without asserting significance or sufficiency. Plain prose."
         )
 
     return PaperSummary
-
 
 
 def _txt(x) -> str:
@@ -125,16 +125,22 @@ def _evidence_phrase(c: dict) -> str:
     supporting = [i for i in (check.get("supporting_pair_indices") or []) if str(i).isdigit()]
     if status == "material":
         return f"material evidence (supporting pairs: {len(supporting)})"
-    return {"nonmaterial": "examined passages did not support it",
-            "insufficient": "evidence check inconclusive"}.get(status, status)
+    return {
+        "nonmaterial": "examined passages did not support it",
+        "insufficient": "evidence check inconclusive",
+    }.get(status, status)
 
 
 def _comparison_block(c: dict, ref: str, claim_label: str) -> List[str]:
-    out = [f"- {ref} — {_txt(c.get('title')) or 'Untitled prior work'} [{claim_label}]",
-           f"  Assessed overlap: {vd.degree(c) or 'not recorded'}",
-           f"  Evidence check: {_evidence_phrase(c)}"]
-    for label, key in (("Shared contribution", "what_is_shared"),
-                       ("Reported difference", "submission_delta")):
+    out = [
+        f"- {ref} — {_txt(c.get('title')) or 'Untitled prior work'} [{claim_label}]",
+        f"  Assessed overlap: {vd.degree(c) or 'not recorded'}",
+        f"  Evidence check: {_evidence_phrase(c)}",
+    ]
+    for label, key in (
+        ("Shared contribution", "what_is_shared"),
+        ("Reported difference", "submission_delta"),
+    ):
         if c.get(key):
             out.append(f"  {label}: {_txt(c[key])}")
     note = c.get("assessment") or c.get("brief_note")
@@ -143,8 +149,9 @@ def _comparison_block(c: dict, ref: str, claim_label: str) -> List[str]:
     return out
 
 
-def build_findings(artifact_a: dict, artifact_b: dict, claim_order: List[str],
-                   claim_names: dict, refs: dict) -> str:
+def build_findings(
+    artifact_a: dict, artifact_b: dict, claim_order: List[str], claim_names: dict, refs: dict
+) -> str:
     """What the model sees: recorded results, no traces and no quotes."""
     b_by = {v.get("claim_id"): v for v in (artifact_b or {}).get("per_claim", []) or []}
     a_by = {e.get("claim_id"): e for e in (artifact_a or {}).get("claims", []) or []}
@@ -178,32 +185,41 @@ def build_findings(artifact_a: dict, artifact_b: dict, claim_order: List[str],
         for block in strong:
             out += block + [""]
     else:
-        out += ["None. No comparison reached substantial-or-stronger overlap with material "
-                "evidence.", ""]
+        out += [
+            "None. No comparison reached substantial-or-stronger overlap with material evidence.",
+            "",
+        ]
 
-    out += ["## SUBSTANTIAL-OR-STRONGER OVERLAP, PROPOSED BUT NOT SUPPORTED BY THE "
-            "EVIDENCE CHECK", "",
-            "These are proposals that the evidence check did not confirm. They are NOT "
-            "established overlaps.", ""]
+    out += [
+        "## SUBSTANTIAL-OR-STRONGER OVERLAP, PROPOSED BUT NOT SUPPORTED BY THE EVIDENCE CHECK",
+        "",
+        "These are proposals that the evidence check did not confirm. They are NOT "
+        "established overlaps.",
+        "",
+    ]
     if proposed:
         for block in proposed:
             out += block + [""]
     else:
         out += ["None.", ""]
 
-    out += ["## CONFIRMED SHARED ELEMENTS BELOW SUBSTANTIAL", "",
-            "Shared elements the evidence check confirmed at `partial` degree. They are "
-            "NOT anticipation of the claim, but they are real commonalities: a summary "
-            "must not describe these claims as having no overlap with prior work.", ""]
+    out += [
+        "## CONFIRMED SHARED ELEMENTS BELOW SUBSTANTIAL",
+        "",
+        "Shared elements the evidence check confirmed at `partial` degree. They are "
+        "NOT anticipation of the claim, but they are real commonalities: a summary "
+        "must not describe these claims as having no overlap with prior work.",
+        "",
+    ]
     partial_lines = []
     for cid in claim_order:
         comparisons = (a_by.get(cid) or {}).get("comparisons") or []
-        confirmed = [c for c in comparisons
-                     if vd.degree(c) == "partial" and vd.degree_confirmed(c)]
+        confirmed = [c for c in comparisons if vd.degree(c) == "partial" and vd.degree_confirmed(c)]
         if confirmed:
             ids = ", ".join(refs.get(source_refs.paper_id(c), "R?") for c in confirmed)
-            partial_lines.append(f"- {labels[cid]}: {len(confirmed)} confirmed partial "
-                                 f"overlap(s) ({ids})")
+            partial_lines.append(
+                f"- {labels[cid]}: {len(confirmed)} confirmed partial overlap(s) ({ids})"
+            )
     out += partial_lines or ["None recorded."]
     out.append("")
 
@@ -214,9 +230,13 @@ def build_findings(artifact_a: dict, artifact_b: dict, claim_order: List[str],
         conflicting = [c for c in comparisons if vd.conflicts(c)]
         inconclusive = [c for c in comparisons if vd.evidence_status(c) == "insufficient"]
         unchecked = [c for c in comparisons if not vd.evidence_status(c)]
-        unconfirmed = [c for c in comparisons
-                       if vd.evidence_status(c) == "material" and not vd.degree_confirmed(c)
-                       and vd.degree(c) in vd.OVERLAP_DEGREES]
+        unconfirmed = [
+            c
+            for c in comparisons
+            if vd.evidence_status(c) == "material"
+            and not vd.degree_confirmed(c)
+            and vd.degree(c) in vd.OVERLAP_DEGREES
+        ]
         for label, group, note in (
             ("degree and evidence check disagree", conflicting, True),
             ("shared element found but proposed degree NOT confirmed", unconfirmed, False),
@@ -231,30 +251,35 @@ def build_findings(artifact_a: dict, artifact_b: dict, claim_order: List[str],
                 line += "".join(
                     f"\n    {refs.get(source_refs.paper_id(c), 'R?')}: "
                     f"{vd.degree(c) or 'unspecified degree'} vs. {vd.evidence_status(c)} evidence"
-                    for c in group)
+                    for c in group
+                )
             gaps.append(line)
     out += gaps or ["None recorded."]
     out.append("")
 
     if not strong and not proposed:
-        out += ["## STRONGEST COMPARISONS ACTUALLY FOUND", "",
-                "No substantial-or-stronger overlap was proposed at all. These are the "
-                "strongest comparisons on record, for orientation only.", ""]
+        out += [
+            "## STRONGEST COMPARISONS ACTUALLY FOUND",
+            "",
+            "No substantial-or-stronger overlap was proposed at all. These are the "
+            "strongest comparisons on record, for orientation only.",
+            "",
+        ]
         best = []
         for cid in claim_order:
             comparisons = (a_by.get(cid) or {}).get("comparisons") or []
             ranked = sorted(comparisons, key=vd.sort_key)
             for c in ranked[:2]:
                 if vd.degree(c):
-                    best.append(_comparison_block(
-                        c, refs.get(source_refs.paper_id(c), "R?"), labels[cid]))
+                    best.append(
+                        _comparison_block(c, refs.get(source_refs.paper_id(c), "R?"), labels[cid])
+                    )
         if best:
             for block in best:
                 out += block + [""]
         else:
             out += ["No comparison recorded an overlap degree.", ""]
     return "\n".join(out).rstrip() + "\n"
-
 
 
 def fingerprint(findings: str) -> str:
@@ -271,7 +296,6 @@ def is_stale(summary: Optional[dict], findings: str) -> bool:
     if not summary:
         return False
     return summary.get("inputs_fingerprint") != fingerprint(findings)
-
 
 
 def _load(path: Path):
@@ -295,18 +319,22 @@ class PaperSynthesizer:
     def __init__(self, model_name: str = "gpt-4.1", temperature: float = 0.0):
         from langchain_openai import ChatOpenAI
         from dotenv import load_dotenv
+
         load_dotenv()
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise ValueError("OPENAI_API_KEY environment variable is not set")
-        kw = ({"reasoning_effort": os.getenv("NOVELTY_CONCLUSION_EFFORT", "low")}
-              if model_name.startswith(("gpt-5", "o1", "o3", "o4")) else
-              {"temperature": temperature})
+        kw = (
+            {"reasoning_effort": os.getenv("NOVELTY_CONCLUSION_EFFORT", "low")}
+            if model_name.startswith(("gpt-5", "o1", "o3", "o4"))
+            else {"temperature": temperature}
+        )
         self.model_name = model_name
         self.llm = ChatOpenAI(model_name=model_name, api_key=api_key, **kw)
 
     def _invoke(self, prompt: str):
         import warnings
+
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", message="Pydantic serializer warnings")
             raw = self.llm.with_structured_output(_schema(), include_raw=True).invoke(prompt)
@@ -317,9 +345,11 @@ class PaperSynthesizer:
         return parsed, usage
 
     def summarize(self, findings: str) -> dict:
-        prompt = (PAPER_SYNTHESIS_PROMPT
-                  .replace("{lo}", str(WORDS_LO)).replace("{hi}", str(WORDS_HI))
-                  .replace("{findings}", findings))
+        prompt = (
+            PAPER_SYNTHESIS_PROMPT.replace("{lo}", str(WORDS_LO))
+            .replace("{hi}", str(WORDS_HI))
+            .replace("{findings}", findings)
+        )
         parsed, usage = self._invoke(prompt)
         words = len(f"{parsed.main_novelty_concern} {parsed.remaining_contribution}".split())
         retried = False
@@ -328,9 +358,12 @@ class PaperSynthesizer:
             second, usage2 = self._invoke(
                 prompt + f"\n\n# REVISION\nYour previous answer was {words} words across "
                 f"both fields. Rewrite it within {WORDS_LO}-{WORDS_HI} words in total, "
-                "keeping the same findings and the same sources. Cut detail, not content.")
-            if abs(len(f"{second.main_novelty_concern} {second.remaining_contribution}"
-                       .split()) - (WORDS_LO + WORDS_HI) // 2) < abs(words - (WORDS_LO + WORDS_HI) // 2):
+                "keeping the same findings and the same sources. Cut detail, not content."
+            )
+            if abs(
+                len(f"{second.main_novelty_concern} {second.remaining_contribution}".split())
+                - (WORDS_LO + WORDS_HI) // 2
+            ) < abs(words - (WORDS_LO + WORDS_HI) // 2):
                 parsed = second
             for k in ("input_tokens", "output_tokens"):
                 usage[k] = (usage.get(k) or 0) + ((usage2 or {}).get(k) or 0)
@@ -346,14 +379,17 @@ class PaperSynthesizer:
             "model": self.model_name,
             "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "inputs_fingerprint": fingerprint(findings),
-            "usage": {"prompt_tokens": usage.get("input_tokens"),
-                      "completion_tokens": usage.get("output_tokens")},
+            "usage": {
+                "prompt_tokens": usage.get("input_tokens"),
+                "completion_tokens": usage.get("output_tokens"),
+            },
         }
 
 
 def context_for(data_dir: str, submission_id: str, variant: str = ""):
     """(findings, artifact_b_path, artifact_b) -- everything but the model call."""
     from source_refs import variant_path
+
     sub_dir = Path(data_dir) / submission_id
     a_path = variant_path(sub_dir, submission_id, "artifact_a", variant)
     b_path = variant_path(sub_dir, submission_id, "artifact_b", variant)
@@ -369,8 +405,9 @@ def context_for(data_dir: str, submission_id: str, variant: str = ""):
     return findings, b_path, artifact_b
 
 
-def build(data_dir: str, submission_id: str, variant: str = "",
-          model_name: str = "gpt-4.1") -> dict:
+def build(
+    data_dir: str, submission_id: str, variant: str = "", model_name: str = "gpt-4.1"
+) -> dict:
     """Generate the summary and store it in Artifact B next to the results it describes."""
     findings, b_path, artifact_b = context_for(data_dir, submission_id, variant)
     summary = PaperSynthesizer(model_name=model_name).summarize(findings)
@@ -385,8 +422,11 @@ def main():
     ap.add_argument("--submission-id", required=True)
     ap.add_argument("--variant", default="", help="read/write the {variant}-suffixed artifacts")
     ap.add_argument("--model", default="gpt-4.1")
-    ap.add_argument("--check", action="store_true",
-                    help="build and print the context, report staleness; NO model call")
+    ap.add_argument(
+        "--check",
+        action="store_true",
+        help="build and print the context, report staleness; NO model call",
+    )
     ap.add_argument("--print-context", action="store_true", help="with --check, print it in full")
     args = ap.parse_args()
 
@@ -397,18 +437,24 @@ def main():
         if not stored:
             print("stored summary: none")
         elif is_stale(stored, findings):
-            print(f"stored summary: STALE (was {str(stored.get('inputs_fingerprint'))[:12]}, "
-                  f"generated {stored.get('generated_at')})")
+            print(
+                f"stored summary: STALE (was {str(stored.get('inputs_fingerprint'))[:12]}, "
+                f"generated {stored.get('generated_at')})"
+            )
         else:
-            print(f"stored summary: current ({stored.get('word_count')} words, "
-                  f"{stored.get('prompt_version')}, {stored.get('generated_at')})")
+            print(
+                f"stored summary: current ({stored.get('word_count')} words, "
+                f"{stored.get('prompt_version')}, {stored.get('generated_at')})"
+            )
         if args.print_context:
             print("\n" + findings)
         return
 
     summary = build(args.data_dir, args.submission_id, args.variant, args.model)
-    print(f"[{args.variant or 'default'}] {summary['word_count']} words "
-          f"(budget {WORDS_LO}-{WORDS_HI})")
+    print(
+        f"[{args.variant or 'default'}] {summary['word_count']} words "
+        f"(budget {WORDS_LO}-{WORDS_HI})"
+    )
     print("\nMain novelty concern:\n" + summary["main_novelty_concern"])
     print("\nRemaining contribution:\n" + summary["remaining_contribution"])
     u = summary.get("usage") or {}

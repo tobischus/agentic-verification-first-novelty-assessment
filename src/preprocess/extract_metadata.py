@@ -92,9 +92,7 @@ class EnhancedGrobidParser:
 
     def _extract_title(self, root: etree._ElementTree) -> Optional[str]:
         """Extract the paper title."""
-        title_elems = root.xpath(
-            './/tei:titleStmt/tei:title[@type="main"]', namespaces=self.ns
-        )
+        title_elems = root.xpath('.//tei:titleStmt/tei:title[@type="main"]', namespaces=self.ns)
         if title_elems:
             return self._get_text_content(title_elems[0]).strip()
 
@@ -111,9 +109,7 @@ class EnhancedGrobidParser:
             abstract_elem = abstract_elems[0]
             paragraphs = abstract_elem.xpath(".//tei:p", namespaces=self.ns)
             if paragraphs:
-                abstract_text = " ".join(
-                    self._get_text_content(p).strip() for p in paragraphs
-                )
+                abstract_text = " ".join(self._get_text_content(p).strip() for p in paragraphs)
                 return abstract_text.strip()
             else:
                 return self._get_text_content(abstract_elem).strip()
@@ -135,9 +131,7 @@ class EnhancedGrobidParser:
                 './/tei:analytic/tei:title[@type="main"] | .//tei:monogr/tei:title[@type="main"] | .//tei:title',
                 namespaces=self.ns,
             )
-            title = (
-                self._get_text_content(title_elems[0]).strip() if title_elems else None
-            )
+            title = self._get_text_content(title_elems[0]).strip() if title_elems else None
 
             authors = []
             author_elems = bib.xpath(
@@ -149,32 +143,22 @@ class EnhancedGrobidParser:
                 forename_elems = author_elem.xpath("tei:forename", namespaces=self.ns)
                 surname_elems = author_elem.xpath("tei:surname", namespaces=self.ns)
 
-                forename = (
-                    self._get_text_content(forename_elems[0]) if forename_elems else ""
-                )
-                surname = (
-                    self._get_text_content(surname_elems[0]) if surname_elems else ""
-                )
+                forename = self._get_text_content(forename_elems[0]) if forename_elems else ""
+                surname = self._get_text_content(surname_elems[0]) if surname_elems else ""
 
                 full_name = f"{forename} {surname}".strip()
                 if full_name:
                     authors.append(full_name)
 
             year = None
-            date_elems = bib.xpath(
-                './/tei:imprint/tei:date[@type="published"]', namespaces=self.ns
-            )
+            date_elems = bib.xpath('.//tei:imprint/tei:date[@type="published"]', namespaces=self.ns)
             if date_elems:
                 when_attr = date_elems[0].get("when")
                 if when_attr and len(when_attr) >= 4:
                     year = when_attr[:4]
 
-            venue_elems = bib.xpath(
-                './/tei:monogr/tei:title[@type="main"]', namespaces=self.ns
-            )
-            venue = (
-                self._get_text_content(venue_elems[0]).strip() if venue_elems else None
-            )
+            venue_elems = bib.xpath('.//tei:monogr/tei:title[@type="main"]', namespaces=self.ns)
+            venue = self._get_text_content(venue_elems[0]).strip() if venue_elems else None
 
             doi_elems = bib.xpath('.//tei:idno[@type="DOI"]', namespaces=self.ns)
             doi = self._get_text_content(doi_elems[0]).strip() if doi_elems else None
@@ -217,9 +201,7 @@ class EnhancedGrobidParser:
                     continue
 
                 sentence_text = " ".join(sentence_elem.itertext()).strip()
-                sentence_id = sentence_elem.get(
-                    "{http://www.w3.org/XML/1998/namespace}id", ""
-                )
+                sentence_id = sentence_elem.get("{http://www.w3.org/XML/1998/namespace}id", "")
 
                 section_title = self._find_section_title(sentence_elem)
 
@@ -271,13 +253,11 @@ class EnhancedGrobidParser:
 
             paragraphs = div.xpath(".//tei:p", namespaces=self.ns)
             if paragraphs:
-                text = " ".join(
-                    self._get_text_content(p).strip() for p in paragraphs
-                ).strip()
+                text = " ".join(self._get_text_content(p).strip() for p in paragraphs).strip()
             else:
                 text = self._get_text_content(div).strip()
                 if head and text.startswith(head):
-                    text = text[len(head):].strip()
+                    text = text[len(head) :].strip()
 
             sections.append({"section": head, "text": text})
 
@@ -293,49 +273,40 @@ class EnhancedGrobidParser:
 
         output_path = Path(output_file_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(asdict(parsed_paper), f, indent=2, ensure_ascii=False)
 
         logging.info(f"Processed {tei_path.name} -> {output_path}")
         return parsed_paper
 
-    def process_for_pipeline(self, tei_file_path: str, data_dir: str, submission_id: str) -> ParsedPaper:
+    def process_for_pipeline(
+        self, tei_file_path: str, data_dir: str, submission_id: str
+    ) -> ParsedPaper:
         """Process a single TEI file and save in the expected pipeline directory structure."""
         output_path = Path(data_dir) / submission_id / f"{submission_id}.json"
         return self.process_single_tei_file(tei_file_path, str(output_path))
 
 
-
 def main():
-    parser = argparse.ArgumentParser(description="Enhanced GROBID TEI XML Parser - single submission mode only")
-    parser.add_argument(
-        "--data-dir",
-        type=str,
-        required=True,
-        help="Base data directory"
+    parser = argparse.ArgumentParser(
+        description="Enhanced GROBID TEI XML Parser - single submission mode only"
     )
-    parser.add_argument(
-        "--submission-id",
-        type=str,
-        required=True,
-        help="Submission ID to process"
-    )
+    parser.add_argument("--data-dir", type=str, required=True, help="Base data directory")
+    parser.add_argument("--submission-id", type=str, required=True, help="Submission ID to process")
     parser.add_argument(
         "--tei-file",
         type=str,
-        help="TEI XML file path (default: data_dir/submission_id/submission_id_fulltext.tei.xml)"
+        help="TEI XML file path (default: data_dir/submission_id/submission_id_fulltext.tei.xml)",
     )
-    parser.add_argument(
-        "--verbose", "-v", 
-        action="store_true", 
-        help="Verbose logging"
-    )
+    parser.add_argument("--verbose", "-v", action="store_true", help="Verbose logging")
 
     args = parser.parse_args()
 
     if not args.tei_file:
-        args.tei_file = str(Path(args.data_dir) / args.submission_id / f"{args.submission_id}_fulltext.tei.xml")
+        args.tei_file = str(
+            Path(args.data_dir) / args.submission_id / f"{args.submission_id}_fulltext.tei.xml"
+        )
 
     log_level = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(level=log_level, format="%(asctime)s %(levelname)s %(message)s")
@@ -346,17 +317,19 @@ def main():
         parsed_paper = grobid_parser.process_for_pipeline(
             args.tei_file, args.data_dir, args.submission_id
         )
-        
-        logging.info(f"📊 Processing summary:")
+
+        logging.info("📊 Processing summary:")
         logging.info(f"   Submission ID: {args.submission_id}")
         logging.info(f"   Input: {args.tei_file}")
         logging.info(f"   Output: {args.data_dir}/{args.submission_id}/{args.submission_id}.json")
         logging.info(f"   Title: {parsed_paper.title}")
-        logging.info(f"   Abstract: {len(parsed_paper.abstract) if parsed_paper.abstract else 0} chars")
+        logging.info(
+            f"   Abstract: {len(parsed_paper.abstract) if parsed_paper.abstract else 0} chars"
+        )
         logging.info(f"   Cited papers: {len(parsed_paper.cited_papers)}")
         logging.info(f"   Citation contexts: {len(parsed_paper.citation_contexts)}")
 
-        logging.info(f"✅ Processing completed successfully")
+        logging.info("✅ Processing completed successfully")
         print(f"✅ Successfully processed submission {args.submission_id}")
 
     except Exception as e:

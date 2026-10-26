@@ -1,4 +1,5 @@
 """File-based progress of the long stages, read by the frontend."""
+
 import json
 import os
 import time
@@ -10,8 +11,13 @@ _MIN_INTERVAL = 0.4
 
 def configure(progress_path):
     """Point the reporter at a file (or None to disable). Resets phase timing."""
-    _CTX.update(path=Path(progress_path) if progress_path else None,
-                phase=None, started=0.0, last=0.0, phases={})
+    _CTX.update(
+        path=Path(progress_path) if progress_path else None,
+        phase=None,
+        started=0.0,
+        last=0.0,
+        phases={},
+    )
 
 
 def _finalize_current():
@@ -37,8 +43,9 @@ def durations():
 
 
 def report(done, total, phase=None, indeterminate=False):
-    _write(phase or _CTX.get("phase"), done, total, indeterminate,
-           force=bool(total) and done >= total)
+    _write(
+        phase or _CTX.get("phase"), done, total, indeterminate, force=bool(total) and done >= total
+    )
 
 
 def clear():

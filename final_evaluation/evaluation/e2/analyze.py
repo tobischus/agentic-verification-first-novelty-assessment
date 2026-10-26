@@ -1,4 +1,5 @@
 """E2: tallies and agreement from the ratings.jsonl of an admin export."""
+
 from __future__ import annotations
 
 import hashlib
@@ -11,8 +12,13 @@ from typing import Optional
 
 from .stats import exact_agreement, krippendorff_alpha_nominal
 
-CRITERIA = ("submission_fidelity", "comparison_specificity", "presented_evidence",
-           "conclusion_warrant", "reviewer_usefulness")
+CRITERIA = (
+    "submission_fidelity",
+    "comparison_specificity",
+    "presented_evidence",
+    "conclusion_warrant",
+    "reviewer_usefulness",
+)
 
 
 def _load_ratings(input_path: str) -> list[dict]:
@@ -43,16 +49,25 @@ def _winner_system(criterion_val: dict, rec: dict) -> Optional[str]:
 def run(input_path: str, include_test: bool = False) -> dict:
     """`include_test`: also count responses of test participants."""
     all_records = _load_ratings(input_path)
-    records = [r for r in all_records
-              if r.get("status") == "submitted" and not r.get("is_practice")
-              and (include_test or not r.get("is_test_participant"))]
-    excluded_test = 0 if include_test else sum(
-        1 for r in all_records if r.get("is_test_participant"))
+    records = [
+        r
+        for r in all_records
+        if r.get("status") == "submitted"
+        and not r.get("is_practice")
+        and (include_test or not r.get("is_test_participant"))
+    ]
+    excluded_test = (
+        0 if include_test else sum(1 for r in all_records if r.get("is_test_participant"))
+    )
 
-    tallies = defaultdict(lambda: defaultdict(lambda: {"wins": defaultdict(int), "tie": 0,
-                                                       "unclear": 0, "n": 0}))
-    per_paper_tallies = defaultdict(lambda: defaultdict(lambda: defaultdict(
-        lambda: {"wins": defaultdict(int), "tie": 0, "unclear": 0, "n": 0})))
+    tallies = defaultdict(
+        lambda: defaultdict(lambda: {"wins": defaultdict(int), "tie": 0, "unclear": 0, "n": 0})
+    )
+    per_paper_tallies = defaultdict(
+        lambda: defaultdict(
+            lambda: defaultdict(lambda: {"wins": defaultdict(int), "tie": 0, "unclear": 0, "n": 0})
+        )
+    )
 
     units_by_pair_crit = defaultdict(lambda: defaultdict(dict))
 
@@ -75,7 +90,9 @@ def run(input_path: str, include_test: bool = False) -> dict:
                     target["tie"] += 1
                 else:
                     target["wins"][winner_sys] += 1
-            units_by_pair_crit[pt][crit].setdefault(unit_id, {})[rec["participant_code"]] = winner_sys
+            units_by_pair_crit[pt][crit].setdefault(unit_id, {})[rec["participant_code"]] = (
+                winner_sys
+            )
 
     agreement = {}
     for pt, by_crit in units_by_pair_crit.items():
@@ -86,30 +103,42 @@ def run(input_path: str, include_test: bool = False) -> dict:
             agreement[pt][crit] = {
                 "exact_agreement": exact,
                 "krippendorff_alpha_nominal": {
-                    "alpha": alpha_res.alpha, "n_pairable_values": alpha_res.n_pairable_values,
-                    "n_units_used": alpha_res.n_units_used, "reason": alpha_res.reason,
+                    "alpha": alpha_res.alpha,
+                    "n_pairable_values": alpha_res.n_pairable_values,
+                    "n_units_used": alpha_res.n_units_used,
+                    "reason": alpha_res.reason,
                 },
             }
 
     agent_linear_pair = "agent::linear"
 
     def _dictify(d):
-        return {k: (_dictify(v) if isinstance(v, defaultdict) else
-                   (dict(v) if isinstance(v, dict) else v)) for k, v in d.items()}
+        return {
+            k: (
+                _dictify(v)
+                if isinstance(v, defaultdict)
+                else (dict(v) if isinstance(v, dict) else v)
+            )
+            for k, v in d.items()
+        }
 
     result = {
         "n_responses_analyzed": len(records),
         "n_test_participant_responses_excluded": excluded_test,
         "tallies_by_criterion_and_pair": _dictify(tallies),
         "agent_linear_pair_key": agent_linear_pair,
-        "agent_linear_tallies": {crit: _dictify(tallies[crit]).get(agent_linear_pair)
-                                for crit in CRITERIA if agent_linear_pair in tallies.get(crit, {})},
+        "agent_linear_tallies": {
+            crit: _dictify(tallies[crit]).get(agent_linear_pair)
+            for crit in CRITERIA
+            if agent_linear_pair in tallies.get(crit, {})
+        },
         "per_paper_tallies": _dictify(per_paper_tallies),
         "human_human_agreement": agreement,
         "papers_seen": sorted({r["paper_id"] for r in records}),
         "note_paper_weighting": (
             "Per-pair tallies are counted in responses. per_paper_tallies allows weighting "
-            "papers equally."),
+            "papers equally."
+        ),
     }
     return result
 
@@ -139,8 +168,9 @@ def _export_criteria(export_path: str) -> Optional[str]:
 def _judge_criteria(rubric_version: Optional[str], cache: dict) -> Optional[str]:
     if rubric_version not in cache:
         f = PROMPTS / f"{rubric_version}.txt"
-        cache[rubric_version] = (criteria_text(f.read_text(encoding="utf-8"))
-                                 if rubric_version and f.is_file() else None)
+        cache[rubric_version] = (
+            criteria_text(f.read_text(encoding="utf-8")) if rubric_version and f.is_file() else None
+        )
     return cache[rubric_version]
 
 
@@ -152,22 +182,41 @@ def _judge_system(judge: dict, crit: str) -> Optional[str]:
 def compare_to_e1(export_path: str, e1_jsonl_path: str, include_test: bool = False) -> dict:
     """Each human judgement against the E1 call of the same task and orientation, where the judge read the same criteria and report content."""
     manifest = _load_export_manifest(export_path)
-    versions = {(r["paper_id"], r["system_id"]): r["content_version"]
-                for r in manifest.get("reports") or []}
+    versions = {
+        (r["paper_id"], r["system_id"]): r["content_version"] for r in manifest.get("reports") or []
+    }
     rater_criteria = _export_criteria(export_path)
     criteria_cache = {}
-    calls = [json.loads(ln) for ln in Path(e1_jsonl_path).read_text(encoding="utf-8").splitlines()
-             if ln.strip()]
-    by_key = {(c["paper_id"], c["system_a"], c["system_b"]): c for c in calls if not c.get("failed")}
+    calls = [
+        json.loads(ln)
+        for ln in Path(e1_jsonl_path).read_text(encoding="utf-8").splitlines()
+        if ln.strip()
+    ]
+    by_key = {
+        (c["paper_id"], c["system_a"], c["system_b"]): c for c in calls if not c.get("failed")
+    }
 
-    records = [r for r in _load_ratings(export_path)
-               if r.get("status") == "submitted" and not r.get("is_practice")
-               and (include_test or not r.get("is_test_participant"))]
+    records = [
+        r
+        for r in _load_ratings(export_path)
+        if r.get("status") == "submitted"
+        and not r.get("is_practice")
+        and (include_test or not r.get("is_test_participant"))
+    ]
 
     not_comparable = defaultdict(int)
-    per_crit = {c: {"compared": 0, "agree": 0, "human_unclear": 0, "judge_unclear": 0,
-                    "stable_compared": 0, "stable_agree": 0, "confusion": defaultdict(int)}
-                for c in CRITERIA}
+    per_crit = {
+        c: {
+            "compared": 0,
+            "agree": 0,
+            "human_unclear": 0,
+            "judge_unclear": 0,
+            "stable_compared": 0,
+            "stable_agree": 0,
+            "confusion": defaultdict(int),
+        }
+        for c in CRITERIA
+    }
     n_comparable = 0
     judge_rubrics = set()
     for rec in records:
@@ -184,8 +233,9 @@ def compare_to_e1(export_path: str, e1_jsonl_path: str, include_test: bool = Fal
             not_comparable[f"criteria differ (judge {judge.get('rubric_version')})"] += 1
             continue
         judge_rubrics.add(judge.get("rubric_version"))
-        if (judge["content_version_a"] != versions.get((paper, a))
-                or judge["content_version_b"] != versions.get((paper, b))):
+        if judge["content_version_a"] != versions.get((paper, a)) or judge[
+            "content_version_b"
+        ] != versions.get((paper, b)):
             not_comparable["report content differs from what the raters saw"] += 1
             continue
         n_comparable += 1
@@ -212,27 +262,35 @@ def compare_to_e1(export_path: str, e1_jsonl_path: str, include_test: bool = Fal
 
     for d in per_crit.values():
         d["agreement"] = round(d["agree"] / d["compared"], 3) if d["compared"] else None
-        d["stable_agreement"] = (round(d["stable_agree"] / d["stable_compared"], 3)
-                                 if d["stable_compared"] else None)
+        d["stable_agreement"] = (
+            round(d["stable_agree"] / d["stable_compared"], 3) if d["stable_compared"] else None
+        )
         d["confusion"] = dict(d["confusion"])
     return {
         "export_study": manifest.get("study_id"),
-        "raters_criteria_sha256": (hashlib.sha256(rater_criteria.encode("utf-8")).hexdigest()
-                                   if rater_criteria is not None else None),
+        "raters_criteria_sha256": (
+            hashlib.sha256(rater_criteria.encode("utf-8")).hexdigest()
+            if rater_criteria is not None
+            else None
+        ),
         "judge_rubric_versions": sorted(v for v in judge_rubrics if v),
-        "e1_file": str(e1_jsonl_path), "human_responses": len(records),
-        "comparable_responses": n_comparable, "not_comparable": dict(not_comparable),
+        "e1_file": str(e1_jsonl_path),
+        "human_responses": len(records),
+        "comparable_responses": n_comparable,
+        "not_comparable": dict(not_comparable),
         "by_criterion": per_crit,
         "note": "Per orientation: a rater who saw X as A is compared with the judge call "
-                "that saw X as A. Agreement = same winning system or both tie; unclear on "
-                "either side is missing. Human and judge votes are never pooled.",
+        "that saw X as A. Agreement = same winning system or both tie; unclear on "
+        "either side is missing. Human and judge votes are never pooled.",
     }
 
 
 def print_e1_comparison(result: dict) -> None:
-    print(f"export: {result['export_study']}; "
-          f"{result['comparable_responses']}/{result['human_responses']} human responses "
-          f"comparable with an E1 call")
+    print(
+        f"export: {result['export_study']}; "
+        f"{result['comparable_responses']}/{result['human_responses']} human responses "
+        f"comparable with an E1 call"
+    )
     judged = result.get("judge_rubric_versions") or []
     if judged:
         print(f"  judge rubric: {', '.join(judged)} (same CRITERIA section as the raters')")
@@ -240,14 +298,21 @@ def print_e1_comparison(result: dict) -> None:
         print(f"  not comparable: {n} -- {reason}")
     print(f"\n{'criterion':24} {'n':>4} {'agree':>7} {'stable n':>9} {'agree':>7}")
     for crit, d in result["by_criterion"].items():
-        fmt = lambda x: "  -  " if x is None else f"{x:.2f}"
-        print(f"{crit:24} {d['compared']:4} {fmt(d['agreement']):>7} "
-              f"{d['stable_compared']:9} {fmt(d['stable_agreement']):>7}")
+
+        def fmt(x):
+            return "  -  " if x is None else f"{x:.2f}"
+
+        print(
+            f"{crit:24} {d['compared']:4} {fmt(d['agreement']):>7} "
+            f"{d['stable_compared']:9} {fmt(d['stable_agreement']):>7}"
+        )
 
 
 def print_report(result: dict) -> None:
-    print(f"responses analyzed: {result['n_responses_analyzed']} "
-          f"({result['n_test_participant_responses_excluded']} test-participant responses excluded)")
+    print(
+        f"responses analyzed: {result['n_responses_analyzed']} "
+        f"({result['n_test_participant_responses_excluded']} test-participant responses excluded)"
+    )
     print(f"papers: {result['papers_seen']}")
 
     print("\n=== agent vs linear (highlighted) ===")
@@ -260,14 +325,22 @@ def print_report(result: dict) -> None:
         print(f"  {crit}:")
         for pt, cell in pairs.items():
             wins = ", ".join(f"{k}={v}" for k, v in cell.get("wins", {}).items())
-            print(f"    {pt}: n={cell['n']} | {wins} | tie={cell['tie']} | unclear={cell['unclear']}")
+            print(
+                f"    {pt}: n={cell['n']} | {wins} | tie={cell['tie']} | unclear={cell['unclear']}"
+            )
 
-    print("\n=== human-human agreement (exact + Krippendorff's alpha, nominal, missing=unclear) ===")
+    print(
+        "\n=== human-human agreement (exact + Krippendorff's alpha, nominal, missing=unclear) ==="
+    )
     for pt, by_crit in result["human_human_agreement"].items():
         print(f"  {pt}:")
         for crit, d in by_crit.items():
             ex = d["exact_agreement"]
             al = d["krippendorff_alpha_nominal"]
-            alpha_s = f"{al['alpha']:.3f}" if al["alpha"] is not None else f"not estimable ({al['reason']})"
+            alpha_s = (
+                f"{al['alpha']:.3f}"
+                if al["alpha"] is not None
+                else f"not estimable ({al['reason']})"
+            )
             exact_s = f"{ex['agree']}/{ex['total']} ({ex['rate']:.0%})" if ex["total"] else "0/0"
             print(f"    {crit}: exact={exact_s} | alpha={alpha_s}")

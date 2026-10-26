@@ -10,10 +10,14 @@ import PublicationDate from './components/PublicationDate.jsx'
 
 const TITLE = 'Towards Verification-First Agentic Novelty Assessment of Scientific Papers'
 const STAGE_LABELS = {
-  document_processing: 'Document processing', claim_extraction: 'Claim extraction',
-  retrieval: 'Related-work retrieval', fetch_pdfs: 'Downloading PDFs',
-  artifact_a: 'Evidence (Artifact A)', artifact_b: 'Assessment (Artifact B)',
-  judge: 'Verification (Judge)', export: 'Report',
+  document_processing: 'Document processing',
+  claim_extraction: 'Claim extraction',
+  retrieval: 'Related-work retrieval',
+  fetch_pdfs: 'Downloading PDFs',
+  artifact_a: 'Evidence (Artifact A)',
+  artifact_b: 'Assessment (Artifact B)',
+  judge: 'Verification (Judge)',
+  export: 'Report',
 }
 const TABS = [
   { id: 'document', label: 'Document' },
@@ -29,7 +33,8 @@ function DocumentInfo({ submissionId, state }) {
   const retrievalDone = (state?.stages_done || []).includes('retrieval')
   useEffect(() => {
     if (!claimsReady) return
-    api.claims(submissionId)
+    api
+      .claims(submissionId)
       .then((d) => setMeta({ title: d.title, date: d.publication_date, src: d.date_source }))
       .catch(() => {})
   }, [submissionId, claimsReady])
@@ -68,7 +73,9 @@ export default function App() {
   const prevStatus = useRef('')
 
   const poll = useCallback(async (sid) => {
-    try { setState(await api.state(sid)) } catch {  }
+    try {
+      setState(await api.state(sid))
+    } catch {}
   }, [])
 
   useEffect(() => {
@@ -89,12 +96,25 @@ export default function App() {
   }, [state?.status])
 
   const clear = () => {
-    setState(null); setActive('document'); setReviewRequested(false); prevStatus.current = ''
+    setState(null)
+    setActive('document')
+    setReviewRequested(false)
+    prevStatus.current = ''
   }
-  const onUploaded = (sid) => { setSubmissionId(sid); clear() }
-  const reset = () => { localStorage.removeItem('sid'); setSubmissionId(''); clear() }
+  const onUploaded = (sid) => {
+    setSubmissionId(sid)
+    clear()
+  }
+  const reset = () => {
+    localStorage.removeItem('sid')
+    setSubmissionId('')
+    clear()
+  }
   const refresh = () => poll(submissionId)
-  const startReview = () => { setReviewRequested(true); refresh() }
+  const startReview = () => {
+    setReviewRequested(true)
+    refresh()
+  }
 
   const done = new Set(state?.stages_done || [])
   const status = state?.status || ''
@@ -114,14 +134,20 @@ export default function App() {
           {TABS.map((t) => (
             <button
               key={t.id}
-              className={'tab' + (active === t.id ? ' active' : '') + (avail[t.id] ? '' : ' disabled')}
+              className={
+                'tab' + (active === t.id ? ' active' : '') + (avail[t.id] ? '' : ' disabled')
+              }
               disabled={!avail[t.id]}
               onClick={() => setActive(t.id)}
             >
               {t.label}
             </button>
           ))}
-          {submissionId && <button className="link newsub" onClick={reset}>New submission</button>}
+          {submissionId && (
+            <button className="link newsub" onClick={reset}>
+              New submission
+            </button>
+          )}
         </nav>
       </header>
 
@@ -132,9 +158,11 @@ export default function App() {
       <StatusBar state={state} stageLabels={STAGE_LABELS} />
 
       <div className="tabpane" hidden={active !== 'document'}>
-        {submissionId
-          ? <DocumentInfo submissionId={submissionId} state={state} />
-          : <Upload onUploaded={onUploaded} />}
+        {submissionId ? (
+          <DocumentInfo submissionId={submissionId} state={state} />
+        ) : (
+          <Upload onUploaded={onUploaded} />
+        )}
       </div>
       {avail.claims && (
         <div className="tabpane" hidden={active !== 'claims'}>

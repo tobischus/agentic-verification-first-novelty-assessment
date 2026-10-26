@@ -4,6 +4,7 @@ A quote is verified if it has at least `min_quote_tokens` words and occurs in th
 text after normalization, exactly or with a RapidFuzz partial ratio of at least
 `fuzzy_threshold`.
 """
+
 import re
 from dataclasses import dataclass
 
@@ -25,7 +26,7 @@ def token_count(text: str) -> int:
 @dataclass
 class QuoteCheck:
     verified: bool
-    method: str        # exact | fuzzy | too_short | not_found | empty
+    method: str  # exact | fuzzy | too_short | not_found | empty
     score: float
     matched_span: str
 
@@ -43,7 +44,7 @@ def _best_window(needle_norm: str, hay_norm: str) -> str:
     try:
         al = fuzz.partial_ratio_alignment(needle_norm, hay_norm)
         if al is not None:
-            return hay_norm[al.dest_start:al.dest_end]
+            return hay_norm[al.dest_start : al.dest_end]
     except Exception:
         pass
     return ""
@@ -107,7 +108,7 @@ def _longest_verified_run(quote, source_text, min_quote_tokens, fuzzy_threshold)
         return None
     for size in range(len(sents) - 1, 0, -1):
         for start in range(0, len(sents) - size + 1):
-            cand = " ".join(sents[start:start + size])
+            cand = " ".join(sents[start : start + size])
             c = verify_quote(cand, source_text, min_quote_tokens, fuzzy_threshold)
             if c.verified:
                 return c, expand_to_sentence(cand, source_text)
@@ -131,7 +132,7 @@ def expand_to_sentence(quote: str, source_text: str, max_extra: int = 400) -> st
     s, e = m.start(), m.end()
     while s > 0 and not source_text[s - 1].isspace():
         s -= 1
-    tail = source_text[e:min(len(source_text), e + max_extra)]
+    tail = source_text[e : min(len(source_text), e + max_extra)]
     sent_end = re.search(r"[.!?](?=\s|$)", tail)
     if sent_end:
         e += sent_end.end()

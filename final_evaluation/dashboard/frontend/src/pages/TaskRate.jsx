@@ -19,8 +19,12 @@ const WINNERS = [
   { v: 'tie', label: 'Tie' },
   { v: 'unclear', label: 'Unclear' },
 ]
-const UNCLEAR_REASONS = ['Insufficient report evidence', 'Insufficient domain expertise',
-                         'Ambiguous criterion', 'Other']
+const UNCLEAR_REASONS = [
+  'Insufficient report evidence',
+  'Insufficient domain expertise',
+  'Ambiguous criterion',
+  'Other',
+]
 const AUTOSAVE_MS = 2000
 const wordCount = (s) => (s || '').trim().split(/\s+/).filter(Boolean).length
 
@@ -58,9 +62,9 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
         setFamNeeded(!t.familiarity)
         if (t.familiarity) setFamiliarity(t.familiarity)
 
-        const serverDraft = t.final ? t.final.criteria : (t.draft || {})
+        const serverDraft = t.final ? t.final.criteria : t.draft || {}
         const local = await loadLocalDraft(me.participant_id, assignmentId)
-        setCriteria(Object.keys(serverDraft || {}).length ? serverDraft : (local || {}))
+        setCriteria(Object.keys(serverDraft || {}).length ? serverDraft : local || {})
 
         const load = async (rep) => {
           if (!rep) return null
@@ -69,8 +73,9 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
           const text = await fetch(contentUrl, { credentials: 'same-origin' }).then((r) => r.text())
           let quoteIndex = null
           if (rep.quote_index_asset_id) {
-            quoteIndex = await fetch(api.assetUrl(rep.quote_index_asset_id),
-                                    { credentials: 'same-origin' }).then((r) => r.json())
+            quoteIndex = await fetch(api.assetUrl(rep.quote_index_asset_id), {
+              credentials: 'same-origin',
+            }).then((r) => r.json())
           }
           return { type: 'markdown', text, quoteIndex }
         }
@@ -85,11 +90,14 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
         onError(String(e.message || e))
       }
     })()
-    return () => { alive = false }
+    return () => {
+      alive = false
+    }
   }, [assignmentId])
 
   useEffect(() => {
-    fetch('/criteria.json', { cache: 'no-store' }).then((r) => r.json())
+    fetch('/criteria.json', { cache: 'no-store' })
+      .then((r) => r.json())
       .then((d) => {
         setFullDescriptions(Object.fromEntries(d.criteria.map((c) => [c.key, c.full_description])))
         setQuestions(Object.fromEntries(d.criteria.map((c) => [c.key, c.short_question])))
@@ -97,40 +105,52 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
       .catch(() => {})
   }, [])
 
-  const flushSave = useCallback(async (next) => {
-    if (readOnly) return
-    setSaveState('saving')
-    try {
-      const r = await api.saveDraft(assignmentId, {
-        criteria: next, expected_revision: revision, idempotency_key: idempotencyKey(),
-      })
-      setRevision(r.revision)
-      setSaveState('saved')
-      setSavedAt(new Date())
-      await clearLocalDraft(me.participant_id, assignmentId)
-    } catch (e) {
-      if (e.status === 409 && e.data && e.data.error === 'revision_conflict') {
-        setConflict({ serverDraft: e.data.server_draft, serverRevision: e.data.server_revision, mine: next })
+  const flushSave = useCallback(
+    async (next) => {
+      if (readOnly) return
+      setSaveState('saving')
+      try {
+        const r = await api.saveDraft(assignmentId, {
+          criteria: next,
+          expected_revision: revision,
+          idempotency_key: idempotencyKey(),
+        })
+        setRevision(r.revision)
+        setSaveState('saved')
+        setSavedAt(new Date())
+        await clearLocalDraft(me.participant_id, assignmentId)
+      } catch (e) {
+        if (e.status === 409 && e.data && e.data.error === 'revision_conflict') {
+          setConflict({
+            serverDraft: e.data.server_draft,
+            serverRevision: e.data.server_revision,
+            mine: next,
+          })
+          setSaveState('error')
+          return
+        }
         setSaveState('error')
-        return
+        await saveLocalDraft(me.participant_id, assignmentId, next)
       }
-      setSaveState('error')
-      await saveLocalDraft(me.participant_id, assignmentId, next)
-    }
-  }, [assignmentId, revision, readOnly, me.participant_id])
+    },
+    [assignmentId, revision, readOnly, me.participant_id],
+  )
 
   const markTouched = (key) => setTouched((t) => (t[key] ? t : { ...t, [key]: true }))
 
-  const saveFamiliarity = useCallback(async (next) => {
-    if (readOnly || !next.familiarity || next.read_before === null) return
-    try {
-      await api.setFamiliarity({ paper_id: task.paper.paper_id, ...next })
-      setFamNeeded(false)
-      setFamJustRecorded(true)
-    } catch (e) {
-      onError(String(e.message || e))
-    }
-  }, [readOnly, task, onError])
+  const saveFamiliarity = useCallback(
+    async (next) => {
+      if (readOnly || !next.familiarity || next.read_before === null) return
+      try {
+        await api.setFamiliarity({ paper_id: task.paper.paper_id, ...next })
+        setFamNeeded(false)
+        setFamJustRecorded(true)
+      } catch (e) {
+        onError(String(e.message || e))
+      }
+    },
+    [readOnly, task, onError],
+  )
 
   const updateFamiliarity = (patch) => {
     setFamiliarity((f) => {
@@ -151,13 +171,19 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
     saveTimer.current = setTimeout(() => flushSave(next), AUTOSAVE_MS)
   }
 
-  const saveNow = () => { clearTimeout(saveTimer.current); flushSave(criteria) }
+  const saveNow = () => {
+    clearTimeout(saveTimer.current)
+    flushSave(criteria)
+  }
 
   useEffect(() => () => clearTimeout(saveTimer.current), [])
 
   useEffect(() => {
     const handler = (e) => {
-      if (saveState === 'unsaved' || saveState === 'error') { e.preventDefault(); e.returnValue = '' }
+      if (saveState === 'unsaved' || saveState === 'error') {
+        e.preventDefault()
+        e.returnValue = ''
+      }
     }
     window.addEventListener('beforeunload', handler)
     return () => window.removeEventListener('beforeunload', handler)
@@ -176,8 +202,10 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
     return out
   }, [criteria])
 
-  const famProblem = famNeeded && (!familiarity.familiarity || familiarity.read_before === null)
-    ? 'Answer both background questions about this paper.' : null
+  const famProblem =
+    famNeeded && (!familiarity.familiarity || familiarity.read_before === null)
+      ? 'Answer both background questions about this paper.'
+      : null
 
   const problems = useMemo(() => {
     const out = Object.entries(fieldProblems).flatMap(([k, v]) => v.map((m) => `${k}: ${m}`))
@@ -189,13 +217,18 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
 
   const doSubmit = async () => {
     if (readOnly) return
-    if (problems.length) { setSubmitAttempted(true); return }
+    if (problems.length) {
+      setSubmitAttempted(true)
+      return
+    }
     setSubmitting(true)
     try {
       if (famNeeded) await saveFamiliarity(familiarity)
       await flushSave(criteria)
       const r = await api.submitTask(assignmentId, {
-        criteria, expected_revision: revision + 1, idempotency_key: submitKeyRef.current,
+        criteria,
+        expected_revision: revision + 1,
+        idempotency_key: submitKeyRef.current,
       })
       await clearLocalDraft(me.participant_id, assignmentId)
       onDone(r)
@@ -203,7 +236,9 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
       if (e.status === 409) {
         const t = await api.getTask(assignmentId)
         setRevision(t.revision)
-        onError('Your task was updated in another tab. The latest state was reloaded -- press Submit again.')
+        onError(
+          'Your task was updated in another tab. The latest state was reloaded -- press Submit again.',
+        )
       } else {
         onError(String(e.message || e))
       }
@@ -258,11 +293,20 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
       <div className="fe-report-body">
         {!rep && <div className="muted">Loading…</div>}
         {rep?.type === 'pdf' && (
-          <StudyPdfPane url={rep.url} highlights={[]} title={`Report ${side.toUpperCase()} (PDF)`} />
+          <StudyPdfPane
+            url={rep.url}
+            highlights={[]}
+            title={`Report ${side.toUpperCase()} (PDF)`}
+          />
         )}
         {rep?.type === 'markdown' && (
-          <ReportRenderer text={rep.text} quoteIndex={rep.quoteIndex} idPrefix={side}
-                         activeId={localActive(side)} onPick={openSubmissionAt(side)} />
+          <ReportRenderer
+            text={rep.text}
+            quoteIndex={rep.quoteIndex}
+            idPrefix={side}
+            activeId={localActive(side)}
+            onPick={openSubmissionAt(side)}
+          />
         )}
       </div>
     </div>
@@ -271,16 +315,28 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
   return (
     <div className="fe-rate">
       <div className="fe-topbar">
-        <button className="link" onClick={onBack}>‹ Task list</button>
+        <button className="link" onClick={onBack}>
+          ‹ Task list
+        </button>
         <div className="fe-save-state">
-          {readOnly ? <span className="fe-status fe-status-submitted">Submitted (read-only)</span>
-            : saveState === 'saving' ? 'Saving…'
-            : saveState === 'unsaved' ? 'Unsaved changes'
-            : saveState === 'error' ? <span className="fe-form-error">Connection problem — changes not yet saved</span>
-            : savedAt ? `Saved at ${savedAt.toLocaleTimeString()}` : 'Saved'}
+          {readOnly ? (
+            <span className="fe-status fe-status-submitted">Submitted (read-only)</span>
+          ) : saveState === 'saving' ? (
+            'Saving…'
+          ) : saveState === 'unsaved' ? (
+            'Unsaved changes'
+          ) : saveState === 'error' ? (
+            <span className="fe-form-error">Connection problem — changes not yet saved</span>
+          ) : savedAt ? (
+            `Saved at ${savedAt.toLocaleTimeString()}`
+          ) : (
+            'Saved'
+          )}
         </div>
         <div className="fe-topbar-actions">
-          <button className="link" onClick={() => setShowSubmission(true)}>View submission</button>
+          <button className="link" onClick={() => setShowSubmission(true)}>
+            View submission
+          </button>
         </div>
       </div>
 
@@ -288,15 +344,28 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
         <div className="fe-card fe-conflict">
           <strong>This task was edited elsewhere.</strong> Your unsent edits were kept locally.
           <div className="fe-actions">
-            <button onClick={async () => {
-              const t = await api.getTask(assignmentId)
-              setCriteria(t.draft || {}); setRevision(t.revision); setConflict(null); setSaveState('saved')
-            }}>Use the server version</button>
-            <button className="secondary" onClick={async () => {
-              const t = await api.getTask(assignmentId)
-              setRevision(t.revision); setConflict(null)
-              await flushSave(conflict.mine)
-            }}>Keep my version</button>
+            <button
+              onClick={async () => {
+                const t = await api.getTask(assignmentId)
+                setCriteria(t.draft || {})
+                setRevision(t.revision)
+                setConflict(null)
+                setSaveState('saved')
+              }}
+            >
+              Use the server version
+            </button>
+            <button
+              className="secondary"
+              onClick={async () => {
+                const t = await api.getTask(assignmentId)
+                setRevision(t.revision)
+                setConflict(null)
+                await flushSave(conflict.mine)
+              }}
+            >
+              Keep my version
+            </button>
           </div>
         </div>
       )}
@@ -309,8 +378,13 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
       <div className="fe-form fe-card" ref={formRef} id="fe-rating-form">
         <div className="fe-form-head">
           <h2>Your assessment</h2>
-          <button type="button" className="link"
-                 onClick={() => document.querySelector('.fe-reports')?.scrollIntoView({ behavior: 'smooth' })}>
+          <button
+            type="button"
+            className="link"
+            onClick={() =>
+              document.querySelector('.fe-reports')?.scrollIntoView({ behavior: 'smooth' })
+            }
+          >
             ↑ Back to the reports
           </button>
         </div>
@@ -318,15 +392,19 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
         {famNeeded ? (
           <div className="fe-fam">
             <div className="fe-fam-intro muted">
-              Two background questions about this paper. You will be asked these only once
-              per paper — later comparisons of the same paper reuse your answers.
+              Two background questions about this paper. You will be asked these only once per paper
+              — later comparisons of the same paper reuse your answers.
             </div>
             <div className="fe-field">
               <label htmlFor="fam-area">
                 Before starting this study, how familiar were you with this paper’s research area?
               </label>
-              <select id="fam-area" value={familiarity.familiarity} disabled={readOnly}
-                     onChange={(e) => updateFamiliarity({ familiarity: e.target.value })}>
+              <select
+                id="fam-area"
+                value={familiarity.familiarity}
+                disabled={readOnly}
+                onChange={(e) => updateFamiliarity({ familiarity: e.target.value })}
+              >
                 <option value="">Select…</option>
                 <option value="low">Low</option>
                 <option value="moderate">Moderate</option>
@@ -334,10 +412,15 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
               </select>
             </div>
             <div className="fe-field">
-              <label htmlFor="fam-read">Had you read this submission before starting this study?</label>
-              <select id="fam-read" value={familiarity.read_before === null ? '' : String(familiarity.read_before)}
-                     disabled={readOnly}
-                     onChange={(e) => updateFamiliarity({ read_before: e.target.value === 'true' })}>
+              <label htmlFor="fam-read">
+                Had you read this submission before starting this study?
+              </label>
+              <select
+                id="fam-read"
+                value={familiarity.read_before === null ? '' : String(familiarity.read_before)}
+                disabled={readOnly}
+                onChange={(e) => updateFamiliarity({ read_before: e.target.value === 'true' })}
+              >
                 <option value="">Select…</option>
                 <option value="true">Yes</option>
                 <option value="false">No</option>
@@ -373,9 +456,14 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
               <div className="fe-radios">
                 {WINNERS.map((w) => (
                   <label key={w.v} className={'fe-radio' + (v.winner === w.v ? ' selected' : '')}>
-                    <input type="radio" name={c.key} value={w.v} disabled={readOnly}
-                          checked={v.winner === w.v}
-                          onChange={() => updateCriterion(c.key, { winner: w.v })} />
+                    <input
+                      type="radio"
+                      name={c.key}
+                      value={w.v}
+                      disabled={readOnly}
+                      checked={v.winner === w.v}
+                      onChange={() => updateCriterion(c.key, { winner: w.v })}
+                    />
                     {w.label}
                   </label>
                 ))}
@@ -383,28 +471,51 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
               {v.winner === 'unclear' && (
                 <div className="fe-field">
                   <label>Why is this unclear?</label>
-                  <select value={v.unclear_reason || ''} disabled={readOnly}
-                         onChange={(e) => updateCriterion(c.key, { unclear_reason: e.target.value })}>
+                  <select
+                    value={v.unclear_reason || ''}
+                    disabled={readOnly}
+                    onChange={(e) => updateCriterion(c.key, { unclear_reason: e.target.value })}
+                  >
                     <option value="">Select…</option>
-                    {UNCLEAR_REASONS.map((r) => <option key={r} value={r}>{r}</option>)}
+                    {UNCLEAR_REASONS.map((r) => (
+                      <option key={r} value={r}>
+                        {r}
+                      </option>
+                    ))}
                   </select>
                   {v.unclear_reason === 'Other' && (
-                    <input type="text" placeholder="Short explanation" value={v.unclear_other || ''}
-                          disabled={readOnly}
-                          onChange={(e) => updateCriterion(c.key, { unclear_other: e.target.value })} />
+                    <input
+                      type="text"
+                      placeholder="Short explanation"
+                      value={v.unclear_other || ''}
+                      disabled={readOnly}
+                      onChange={(e) => updateCriterion(c.key, { unclear_other: e.target.value })}
+                    />
                   )}
                 </div>
               )}
               <div className="fe-field">
-                <label>Reason / decisive observation <span className="muted">(optional, max 50 words)</span></label>
-                <textarea rows={2} value={v.reason || ''} disabled={readOnly}
-                         onBlur={() => { markTouched(c.key); saveNow() }}
-                         onChange={(e) => updateCriterion(c.key, { reason: e.target.value })} />
+                <label>
+                  Reason / decisive observation{' '}
+                  <span className="muted">(optional, max 50 words)</span>
+                </label>
+                <textarea
+                  rows={2}
+                  value={v.reason || ''}
+                  disabled={readOnly}
+                  onBlur={() => {
+                    markTouched(c.key)
+                    saveNow()
+                  }}
+                  onChange={(e) => updateCriterion(c.key, { reason: e.target.value })}
+                />
                 <div className={'fe-wordcount' + (wc > 50 ? ' over' : '')}>{wc}/50 words</div>
               </div>
               {!readOnly && showFor(c.key) && (
                 <ul className="fe-field-error">
-                  {fieldProblems[c.key].map((m, mi) => <li key={mi}>{m}</li>)}
+                  {fieldProblems[c.key].map((m, mi) => (
+                    <li key={mi}>{m}</li>
+                  ))}
                 </ul>
               )}
             </div>
@@ -415,8 +526,8 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
           <div className="fe-submit-row">
             {submitAttempted && problems.length > 0 && (
               <div className="fe-problems-summary">
-                {problems.length} field{problems.length === 1 ? '' : 's'} still need attention —
-                see the messages above.
+                {problems.length} field{problems.length === 1 ? '' : 's'} still need attention — see
+                the messages above.
               </div>
             )}
             <button disabled={submitting} onClick={doSubmit}>
@@ -433,19 +544,31 @@ export default function TaskRate({ me, assignmentId, onDone, onBack, onError }) 
       </div>
 
       {!readOnly && (
-        <button type="button" className="fe-jump-form"
-               onClick={() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+        <button
+          type="button"
+          className="fe-jump-form"
+          onClick={() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+        >
           ▤ Rating form
-          {submitAttempted && problems.length > 0 && <span className="fe-jump-badge">{problems.length}</span>}
+          {submitAttempted && problems.length > 0 && (
+            <span className="fe-jump-badge">{problems.length}</span>
+          )}
         </button>
       )}
 
       {showSubmission && (
-        <div className="fe-overlay" onClick={(e) => { if (e.target.className === 'fe-overlay') setShowSubmission(false) }}>
+        <div
+          className="fe-overlay"
+          onClick={(e) => {
+            if (e.target.className === 'fe-overlay') setShowSubmission(false)
+          }}
+        >
           <div className="fe-overlay-inner">
             <div className="fe-overlay-head">
               <strong>Submission — {task.paper.title}</strong>
-              <button className="link" onClick={() => setShowSubmission(false)}>close</button>
+              <button className="link" onClick={() => setShowSubmission(false)}>
+                close
+              </button>
             </div>
             <StudyPdfPane
               url={api.assetUrl(task.paper.submission_pdf_asset_id)}

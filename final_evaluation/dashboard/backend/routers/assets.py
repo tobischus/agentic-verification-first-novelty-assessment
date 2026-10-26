@@ -1,4 +1,5 @@
 """One endpoint serves every asset, so authorization is checked in one place."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -13,8 +14,12 @@ router = APIRouter(prefix="/api/assets", tags=["assets"])
 
 def _participant_may_access(db: Session, participant: models.Participant, asset_id: str) -> bool:
     """True if the asset belongs to one of the participant's assignments."""
-    task_ids = [row[0] for row in db.query(models.Assignment.task_id)
-               .filter(models.Assignment.participant_id == participant.id).all()]
+    task_ids = [
+        row[0]
+        for row in db.query(models.Assignment.task_id)
+        .filter(models.Assignment.participant_id == participant.id)
+        .all()
+    ]
     if not task_ids:
         return False
     tasks = db.query(models.Task).filter(models.Task.id.in_(task_ids)).all()
@@ -45,13 +50,18 @@ def _serve(request, asset: models.Asset):
     resolved = backend.resolve(asset.storage_key, asset.content_type)
     if resolved.kind == "redirect":
         return RedirectResponse(resolved.url)
-    return FileResponse(resolved.path, media_type=asset.content_type,
-                        filename=f"{asset.id}{resolved.path.suffix}")
+    return FileResponse(
+        resolved.path, media_type=asset.content_type, filename=f"{asset.id}{resolved.path.suffix}"
+    )
 
 
 @router.get("/{asset_id}")
-def get_asset(asset_id: str, request=None, db: Session = Depends(get_db),
-             participant: models.Participant = Depends(current_participant)):
+def get_asset(
+    asset_id: str,
+    request=None,
+    db: Session = Depends(get_db),
+    participant: models.Participant = Depends(current_participant),
+):
     asset = db.query(models.Asset).filter(models.Asset.id == asset_id).first()
     if asset is None:
         raise HTTPException(404, "asset not found")

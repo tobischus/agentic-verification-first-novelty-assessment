@@ -1,4 +1,5 @@
 """Pairwise LLM judge of novelty reports (E1), both presentation orders, fully logged."""
+
 import hashlib
 import json
 import os
@@ -11,7 +12,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "src" / "novelty_assessment"))
 
-from dotenv import load_dotenv                                          # noqa: E402
+from dotenv import load_dotenv  # noqa: E402
 
 load_dotenv()
 
@@ -23,8 +24,13 @@ MAX_TOKENS = 16384
 MAX_ATTEMPTS = 3
 
 
-CRITERIA = ("submission_fidelity", "comparison_specificity", "presented_evidence",
-            "conclusion_warrant", "reviewer_usefulness")
+CRITERIA = (
+    "submission_fidelity",
+    "comparison_specificity",
+    "presented_evidence",
+    "conclusion_warrant",
+    "reviewer_usefulness",
+)
 WINNERS = ("A", "B", "tie", "unclear")
 
 INVENTORY_FIELDS = {
@@ -57,12 +63,6 @@ def sha(text: str) -> str:
 def with_line_ids(text: str, prefix: str) -> str:
     """Prefix every line with a running id."""
     return "\n".join(f"{prefix}{i:04d} {ln}" for i, ln in enumerate(text.splitlines(), 1))
-
-
-
-
-
-
 
 
 def _locator_ids(*texts) -> set:
@@ -112,8 +112,13 @@ def validate(parsed: dict, valid_ids: set, inventory: bool = False) -> list:
         elif not isinstance(locs, list):
             problems.append(f"{name}: locators not a list")
         else:
-            bad = [x for x in locs if isinstance(x, str)
-                   and re.fullmatch(r"[SAB]\d{4}", x.strip()) and x.strip() not in valid_ids]
+            bad = [
+                x
+                for x in locs
+                if isinstance(x, str)
+                and re.fullmatch(r"[SAB]\d{4}", x.strip())
+                and x.strip() not in valid_ids
+            ]
             if bad:
                 problems.append(f"{name}: locators not in material: {bad[:5]}")
     extra = [k for k in crit if k not in CRITERIA]
@@ -139,18 +144,29 @@ def _parse_json(text: str):
         return None, f"invalid JSON ({e})"
 
 
-def make_llm(service_tier: str | None = None, cache_breakpoints: bool = False,
-             model: str | None = None, effort: str | None = None):
+def make_llm(
+    service_tier: str | None = None,
+    cache_breakpoints: bool = False,
+    model: str | None = None,
+    effort: str | None = None,
+):
     """The judge model. `service_tier` and `cache_breakpoints` change billing only. `model` and `effort` override JUDGE_MODEL and JUDGE_EFFORT."""
     from langchain_openai import ChatOpenAI
+
     kw = {}
     if service_tier:
         kw["service_tier"] = service_tier
     if cache_breakpoints:
         kw["extra_body"] = {"prompt_cache_options": {"mode": "explicit"}}
-    return ChatOpenAI(model_name=model or JUDGE_MODEL, api_key=os.getenv("OPENAI_API_KEY"),
-                      reasoning_effort=effort or JUDGE_EFFORT, max_tokens=MAX_TOKENS,
-                      max_retries=0, timeout=900, **kw)
+    return ChatOpenAI(
+        model_name=model or JUDGE_MODEL,
+        api_key=os.getenv("OPENAI_API_KEY"),
+        reasoning_effort=effort or JUDGE_EFFORT,
+        max_tokens=MAX_TOKENS,
+        max_retries=0,
+        timeout=900,
+        **kw,
+    )
 
 
 _BREAKPOINT = {"mode": "explicit"}
@@ -162,10 +178,14 @@ def user_parts(sub_txt: str, a_txt: str, b_txt: str) -> list:
     mid_a, rest = rest.split("{report_a}")
     mid_b, end = rest.split("{report_b}")
     parts = [pre + sub_txt, mid_a + a_txt, mid_b + b_txt + end]
-    assert "".join(parts) == USER_TEMPLATE.format(submission=sub_txt, report_a=a_txt, report_b=b_txt)
-    return [{"type": "text", "text": parts[0], "prompt_cache_breakpoint": _BREAKPOINT},
-            {"type": "text", "text": parts[1], "prompt_cache_breakpoint": _BREAKPOINT},
-            {"type": "text", "text": parts[2]}]
+    assert "".join(parts) == USER_TEMPLATE.format(
+        submission=sub_txt, report_a=a_txt, report_b=b_txt
+    )
+    return [
+        {"type": "text", "text": parts[0], "prompt_cache_breakpoint": _BREAKPOINT},
+        {"type": "text", "text": parts[1], "prompt_cache_breakpoint": _BREAKPOINT},
+        {"type": "text", "text": parts[2]},
+    ]
 
 
 def _is_capacity_429(e: Exception) -> bool:
@@ -190,19 +210,38 @@ def usage_counts(msg) -> dict:
     read = ptd.get("cached_tokens")
     if read is None:
         read = next((v for k, v in det.items() if k.endswith("cache_read") and v), 0)
-    reasoning = next((v for k, v in (meta.get("output_token_details") or {}).items()
-                      if k.endswith("reasoning") and v), 0)
-    return {"input_tokens": meta.get("input_tokens", 0), "output_tokens": meta.get("output_tokens", 0),
-            "cache_tokens": read or 0, "cache_write_tokens": ptd.get("cache_write_tokens"),
-            "reasoning_tokens": reasoning}
+    reasoning = next(
+        (
+            v
+            for k, v in (meta.get("output_token_details") or {}).items()
+            if k.endswith("reasoning") and v
+        ),
+        0,
+    )
+    return {
+        "input_tokens": meta.get("input_tokens", 0),
+        "output_tokens": meta.get("output_tokens", 0),
+        "cache_tokens": read or 0,
+        "cache_write_tokens": ptd.get("cache_write_tokens"),
+        "reasoning_tokens": reasoning,
+    }
 
 
-def run_call(llm, system_prompt: str, call: dict, docs: dict, cache_breakpoints: bool = False,
-             cache_key: str | None = None, wait_on_429: bool = False,
-             model: str | None = None, effort: str | None = None,
-             inventory: bool = False) -> dict:
+def run_call(
+    llm,
+    system_prompt: str,
+    call: dict,
+    docs: dict,
+    cache_breakpoints: bool = False,
+    cache_key: str | None = None,
+    wait_on_429: bool = False,
+    model: str | None = None,
+    effort: str | None = None,
+    inventory: bool = False,
+) -> dict:
     """One judge call with its attempts. Returns the stored record."""
     from langchain_core.messages import HumanMessage, SystemMessage
+
     paper = call["paper_id"]
     sub_txt = docs[paper]["submission"]
     a_txt = docs[paper]["reports"][call["system_a"]]
@@ -210,7 +249,10 @@ def run_call(llm, system_prompt: str, call: dict, docs: dict, cache_breakpoints:
     user = USER_TEMPLATE.format(submission=sub_txt, report_a=a_txt, report_b=b_txt)
     valid_ids = _locator_ids(sub_txt, a_txt, b_txt)
     if cache_breakpoints:
-        messages = [SystemMessage(system_prompt), HumanMessage(content=user_parts(sub_txt, a_txt, b_txt))]
+        messages = [
+            SystemMessage(system_prompt),
+            HumanMessage(content=user_parts(sub_txt, a_txt, b_txt)),
+        ]
     else:
         messages = [("system", system_prompt), ("human", user)]
     invoke_kw = {"prompt_cache_key": cache_key} if cache_key else {}
@@ -231,8 +273,12 @@ def run_call(llm, system_prompt: str, call: dict, docs: dict, cache_breakpoints:
         "effort": effort or JUDGE_EFFORT,
         "thinking": "reasoning_effort",
         "max_tokens": MAX_TOKENS,
-        "context_chars": {"submission": len(sub_txt), "report_a": len(a_txt),
-                          "report_b": len(b_txt), "user_prompt": len(user)},
+        "context_chars": {
+            "submission": len(sub_txt),
+            "report_a": len(a_txt),
+            "report_b": len(b_txt),
+            "user_prompt": len(user),
+        },
         "request_format": "text_parts_cache_breakpoints" if cache_breakpoints else "single_string",
         "attempts": [],
     }
@@ -249,8 +295,11 @@ def run_call(llm, system_prompt: str, call: dict, docs: dict, cache_breakpoints:
                 except Exception as e:  # noqa: BLE001
                     if not (wait_on_429 and _is_capacity_429(e) and waits < len(FLEX_WAITS)):
                         raise
-                    print(f"    429 ({str(e)[:80]}) -- waiting {FLEX_WAITS[waits]}s, "
-                          "not counted as an attempt", flush=True)
+                    print(
+                        f"    429 ({str(e)[:80]}) -- waiting {FLEX_WAITS[waits]}s, "
+                        "not counted as an attempt",
+                        flush=True,
+                    )
                     time.sleep(FLEX_WAITS[waits])
                     waits += 1
             if waits:
@@ -258,14 +307,16 @@ def run_call(llm, system_prompt: str, call: dict, docs: dict, cache_breakpoints:
             att["latency_s"] = round(time.perf_counter() - t0, 1)
             raw = msg.content if isinstance(msg.content, str) else json.dumps(msg.content)
             rmeta = getattr(msg, "response_metadata", {}) or {}
-            att.update({
-                "raw_response": raw,
-                "returned_model": rmeta.get("model_name", ""),
-                "stop_reason": rmeta.get("finish_reason", ""),
-                "service_tier": rmeta.get("service_tier"),
-                "system_fingerprint": rmeta.get("system_fingerprint"),
-                **usage_counts(msg),
-            })
+            att.update(
+                {
+                    "raw_response": raw,
+                    "returned_model": rmeta.get("model_name", ""),
+                    "stop_reason": rmeta.get("finish_reason", ""),
+                    "service_tier": rmeta.get("service_tier"),
+                    "system_fingerprint": rmeta.get("system_fingerprint"),
+                    **usage_counts(msg),
+                }
+            )
             parsed, note = _parse_json(raw)
             att["parse_note"] = note
             if parsed is None:
@@ -303,7 +354,3 @@ def run_call(llm, system_prompt: str, call: dict, docs: dict, cache_breakpoints:
     rec["started_at"] = rec["attempts"][0]["started_at"]
     rec["finished_at"] = _utc_now()
     return rec
-
-
-
-

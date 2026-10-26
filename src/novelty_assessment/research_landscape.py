@@ -83,18 +83,14 @@ class PaperInformation(BaseModel):
 
     paper_id: str
     title: str
-    methods: List[str] = Field(
-        description="List of methods/approaches proposed in the paper"
-    )
+    methods: List[str] = Field(description="List of methods/approaches proposed in the paper")
     problems: List[str] = Field(description="List of problems the paper addresses")
     datasets: List[str] = Field(description="List of datasets used for evaluation")
     metrics: List[str] = Field(description="List of evaluation metrics used")
     results: List[Dict[str, str]] = Field(
         description="Key quantitative results with metric name -> value pairs"
     )
-    novelty_claims: List[str] = Field(
-        description="Claims about what is novel in this work"
-    )
+    novelty_claims: List[str] = Field(description="Claims about what is novel in this work")
     is_submission: bool = False
 
 
@@ -106,10 +102,8 @@ class ResearchLandscapeAnalyzer:
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise ValueError("OPENAI_API_KEY environment variable is not set")
-        
-        self.llm = ChatOpenAI(
-            model_name=model_name, temperature=temperature, api_key=api_key
-        )
+
+        self.llm = ChatOpenAI(model_name=model_name, temperature=temperature, api_key=api_key)
 
         self.research_landscape_prompt = research_landscape_prompt
 
@@ -125,14 +119,11 @@ class ResearchLandscapeAnalyzer:
             submission_paper_obj = json.load(f)
 
         with open(
-            os.path.join(
-                data_dir, submission_id, "related_work_data", "ranked_papers.json"
-            ),
+            os.path.join(data_dir, submission_id, "related_work_data", "ranked_papers.json"),
             "r",
             encoding="utf-8",
         ) as f:
             ranked_papers = json.load(f)
-
 
         structured_representation_path = os.path.join(
             data_dir, submission_id, "structured_representation.json"
@@ -144,16 +135,12 @@ class ResearchLandscapeAnalyzer:
             data = json.load(f)
 
             structured_representation = data["structured_representation"]
-            structured_representation["main_paper"]["parsed"][
-                "paper_id"
-            ] = submission_id
+            structured_representation["main_paper"]["parsed"]["paper_id"] = submission_id
             structured_representation["main_paper"]["parsed"]["is_submission"] = True
-            structured_representation["main_paper"]["parsed"]["title"] = (
-                submission_paper_obj["title"]
-            )
-            paper_info = PaperInformation(
-                **structured_representation["main_paper"]["parsed"]
-            )
+            structured_representation["main_paper"]["parsed"]["title"] = submission_paper_obj[
+                "title"
+            ]
+            paper_info = PaperInformation(**structured_representation["main_paper"]["parsed"])
             papers.append(paper_info)
 
             selected_papers = {i["paper_id"]: i for i in ranked_papers}
@@ -179,54 +166,34 @@ class ResearchLandscapeAnalyzer:
 
         formatted_text = "## SUBMISSION PAPER\n\n"
         formatted_text += f"TITLE: {submission.title}\n\n"
+        formatted_text += "METHODS:\n" + "\n".join([f"- {m}" for m in submission.methods]) + "\n\n"
         formatted_text += (
-            f"METHODS:\n" + "\n".join([f"- {m}" for m in submission.methods]) + "\n\n"
+            "PROBLEMS:\n" + "\n".join([f"- {p}" for p in submission.problems]) + "\n\n"
         )
         formatted_text += (
-            f"PROBLEMS:\n" + "\n".join([f"- {p}" for p in submission.problems]) + "\n\n"
+            "DATASETS:\n" + "\n".join([f"- {d}" for d in submission.datasets]) + "\n\n"
+        )
+        formatted_text += "METRICS:\n" + "\n".join([f"- {m}" for m in submission.metrics]) + "\n\n"
+        formatted_text += (
+            "RESULTS:\n" + "\n".join([f"- {json.dumps(r)}" for r in submission.results]) + "\n\n"
         )
         formatted_text += (
-            f"DATASETS:\n" + "\n".join([f"- {d}" for d in submission.datasets]) + "\n\n"
-        )
-        formatted_text += (
-            f"METRICS:\n" + "\n".join([f"- {m}" for m in submission.metrics]) + "\n\n"
-        )
-        formatted_text += (
-            f"RESULTS:\n"
-            + "\n".join([f"- {json.dumps(r)}" for r in submission.results])
-            + "\n\n"
-        )
-        formatted_text += (
-            f"NOVELTY CLAIMS:\n"
-            + "\n".join([f"- {c}" for c in submission.novelty_claims])
-            + "\n\n"
+            "NOVELTY CLAIMS:\n" + "\n".join([f"- {c}" for c in submission.novelty_claims]) + "\n\n"
         )
 
         formatted_text += "## RELATED PAPERS\n\n"
 
         for i, paper in enumerate(related_papers, 1):
             formatted_text += f"### RELATED PAPER {i}: {paper.title}\n\n"
+            formatted_text += "METHODS:\n" + "\n".join([f"- {m}" for m in paper.methods]) + "\n\n"
+            formatted_text += "PROBLEMS:\n" + "\n".join([f"- {p}" for p in paper.problems]) + "\n\n"
+            formatted_text += "DATASETS:\n" + "\n".join([f"- {d}" for d in paper.datasets]) + "\n\n"
+            formatted_text += "METRICS:\n" + "\n".join([f"- {m}" for m in paper.metrics]) + "\n\n"
             formatted_text += (
-                f"METHODS:\n" + "\n".join([f"- {m}" for m in paper.methods]) + "\n\n"
+                "RESULTS:\n" + "\n".join([f"- {json.dumps(r)}" for r in paper.results]) + "\n\n"
             )
             formatted_text += (
-                f"PROBLEMS:\n" + "\n".join([f"- {p}" for p in paper.problems]) + "\n\n"
-            )
-            formatted_text += (
-                f"DATASETS:\n" + "\n".join([f"- {d}" for d in paper.datasets]) + "\n\n"
-            )
-            formatted_text += (
-                f"METRICS:\n" + "\n".join([f"- {m}" for m in paper.metrics]) + "\n\n"
-            )
-            formatted_text += (
-                f"RESULTS:\n"
-                + "\n".join([f"- {json.dumps(r)}" for r in paper.results])
-                + "\n\n"
-            )
-            formatted_text += (
-                f"NOVELTY CLAIMS:\n"
-                + "\n".join([f"- {c}" for c in paper.novelty_claims])
-                + "\n\n"
+                "NOVELTY CLAIMS:\n" + "\n".join([f"- {c}" for c in paper.novelty_claims]) + "\n\n"
             )
 
         return formatted_text
@@ -246,9 +213,7 @@ class ResearchLandscapeAnalyzer:
         papers = self.load_papers(data_dir, submission_id)
 
         if len(papers) < 2:
-            raise ValueError(
-                f"Not enough papers found. Need at least 2, got {len(papers)}"
-            )
+            raise ValueError(f"Not enough papers found. Need at least 2, got {len(papers)}")
 
         analysis = self.analyze_landscape(papers)
 
@@ -321,7 +286,7 @@ class ResearchLandscapeAnalyzer:
             batch_entries.append(batch_entry)
 
         os.makedirs(output_dir, exist_ok=True)
-        
+
         output_path = os.path.join(output_dir, "batch_research_landscape_input.jsonl")
         with open(output_path, "w", encoding="utf-8") as f:
             for entry in batch_entries:
@@ -331,7 +296,9 @@ class ResearchLandscapeAnalyzer:
 
         print(f"Total number of submissions: {len(batch_entries)}")
         if batch_entries:
-            print(f"Sample content length: {len(batch_entries[0]['body']['messages'][0]['content'])} chars")
+            print(
+                f"Sample content length: {len(batch_entries[0]['body']['messages'][0]['content'])} chars"
+            )
 
         return output_path
 
@@ -459,51 +426,36 @@ class ResearchLandscapeAnalyzer:
 
 if __name__ == "__main__":
     import argparse
-    
+
     parser = argparse.ArgumentParser(description="Generate research landscape analysis")
     parser.add_argument(
         "--data-dir",
         type=str,
         default="../../novelty_assessment/data_iclr_all_topics/iclr_compiled_v2",
-        help="Directory containing submission data"
+        help="Directory containing submission data",
     )
+    parser.add_argument("--model", type=str, default="gpt-4.1", help="OpenAI model to use")
     parser.add_argument(
-        "--model",
-        type=str,
-        default="gpt-4.1",
-        help="OpenAI model to use"
+        "--submission-id", type=str, help="Process single submission (for run_analysis)"
     )
-    parser.add_argument(
-        "--submission-id",
-        type=str,
-        help="Process single submission (for run_analysis)"
-    )
-    parser.add_argument(
-        "--prepare",
-        action="store_true",
-        help="Prepare batch inference data"
-    )
-    parser.add_argument(
-        "--process",
-        action="store_true",
-        help="Process batch results"
-    )
+    parser.add_argument("--prepare", action="store_true", help="Prepare batch inference data")
+    parser.add_argument("--process", action="store_true", help="Process batch results")
     parser.add_argument(
         "--results-file",
         type=str,
         default="./openai_outputs/batch_research_landscape_output.jsonl",
-        help="Path to batch results file"
+        help="Path to batch results file",
     )
-    
+
     args = parser.parse_args()
-    
+
     analyzer = ResearchLandscapeAnalyzer(model_name=args.model)
-    
+
     if args.submission_id:
         analyzer.run_analysis(args.data_dir, args.submission_id, "research_landscape.txt")
-    
+
     if args.prepare:
         analyzer.prepare_batch_inference_data(args.data_dir, args.model)
-    
+
     if args.process:
         analyzer.process_batch_results(args.results_file, args.data_dir)

@@ -1,4 +1,5 @@
 """E1 analysis over judge_calls.jsonl, offline."""
+
 from __future__ import annotations
 
 import itertools
@@ -8,8 +9,13 @@ import random
 from collections import Counter, defaultdict
 from pathlib import Path
 
-CRITERIA = ("submission_fidelity", "comparison_specificity", "presented_evidence",
-            "conclusion_warrant", "reviewer_usefulness")
+CRITERIA = (
+    "submission_fidelity",
+    "comparison_specificity",
+    "presented_evidence",
+    "conclusion_warrant",
+    "reviewer_usefulness",
+)
 SYSTEMS = ("agent", "linear", "opennovelty", "deepreviewer", "afzal")
 N_BOOT, BOOT_SEED = 1000, 2026
 
@@ -40,8 +46,10 @@ def units(recs: list, paper_set: str | None = None) -> dict:
             continue
         a, b = r["system_a"], r["system_b"]
         x, y = sorted((a, b), key=SYSTEMS.index)
-        u = out.setdefault((r["paper_id"], (x, y)),
-                           {"paper_set": r.get("paper_set"), "human_task": r.get("human_task")})
+        u = out.setdefault(
+            (r["paper_id"], (x, y)),
+            {"paper_set": r.get("paper_set"), "human_task": r.get("human_task")},
+        )
         u["xy" if a == x else "yx"] = r
     return out
 
@@ -61,7 +69,7 @@ def sign_test(k: int, m: int) -> float:
     n = k + m
     if n == 0:
         return 1.0
-    tail = sum(math.comb(n, i) for i in range(min(k, m) + 1)) / 2 ** n
+    tail = sum(math.comb(n, i) for i in range(min(k, m) + 1)) / 2**n
     return min(1.0, 2 * tail)
 
 
@@ -91,8 +99,11 @@ def pair_table(us: dict, crit: str, pair: tuple) -> dict:
     x, y = pair
     verdicts = {paper: stable_verdict(u, crit) for (paper, p), u in us.items() if p == pair}
     c = Counter(verdicts.values())
-    scored = [1 if v == x else -1 if v == y else 0 for v in verdicts.values()
-              if v not in ("incomplete", "unclear")]
+    scored = [
+        1 if v == x else -1 if v == y else 0
+        for v in verdicts.values()
+        if v not in ("incomplete", "unclear")
+    ]
     n = len(scored)
     net = sum(scored) / n if n else None
     ci = None
@@ -100,9 +111,19 @@ def pair_table(us: dict, crit: str, pair: tuple) -> dict:
         rng = random.Random(BOOT_SEED)
         boots = sorted(sum(rng.choice(scored) for _ in range(n)) / n for _ in range(N_BOOT))
         ci = [boots[int(0.025 * N_BOOT)], boots[int(0.975 * N_BOOT) - 1]]
-    return {"pair": [x, y], "papers": n, f"{x}_wins": c[x], f"{y}_wins": c[y], "tie": c["tie"],
-            "inconsistent": c["inconsistent"], "unclear": c["unclear"], "incomplete": c["incomplete"],
-            "net_preference": net, "ci95": ci, "sign_test_p": sign_test(c[x], c[y])}
+    return {
+        "pair": [x, y],
+        "papers": n,
+        f"{x}_wins": c[x],
+        f"{y}_wins": c[y],
+        "tie": c["tie"],
+        "inconsistent": c["inconsistent"],
+        "unclear": c["unclear"],
+        "incomplete": c["incomplete"],
+        "net_preference": net,
+        "ci95": ci,
+        "sign_test_p": sign_test(c[x], c[y]),
+    }
 
 
 ELO_BASE, ELO_PER_LOG = 1000.0, 400 / math.log(10)
@@ -191,23 +212,33 @@ def elo(us: dict, crits=CRITERIA) -> dict:
     if not fit:
         return {}
     rng = random.Random(BOOT_SEED)
-    boots = [_bt_fit([g for p in (rng.choice(papers) for _ in papers) for g in by_paper[p]])
-             for _ in range(N_BOOT)]
+    boots = [
+        _bt_fit([g for p in (rng.choice(papers) for _ in papers) for g in by_paper[p]])
+        for _ in range(N_BOOT)
+    ]
     ranked = sorted(fit, key=lambda s: -fit[s])
     ratings = {}
     for s in ranked:
         vals = sorted(ELO_BASE + ELO_PER_LOG * b[s] for b in boots if s in b)
-        ratings[s] = {"elo": round(ELO_BASE + ELO_PER_LOG * fit[s], 1),
-                      "ci95": [round(vals[int(0.025 * len(vals))], 1),
-                               round(vals[int(0.975 * len(vals)) - 1], 1)]}
+        ratings[s] = {
+            "elo": round(ELO_BASE + ELO_PER_LOG * fit[s], 1),
+            "ci95": [
+                round(vals[int(0.025 * len(vals))], 1),
+                round(vals[int(0.975 * len(vals)) - 1], 1),
+            ],
+        }
     higher = {}
     for x, y in itertools.combinations(ranked, 2):
         both = [b for b in boots if x in b and y in b]
         higher[f"{x}>{y}"] = round(sum(b[x] > b[y] for b in both) / len(both), 3) if both else None
     for s, r in ratings.items():
         r["rank"] = shared_rank(ratings, s)
-    return {"ratings": ratings, "bootstrap_share_higher": higher,
-            "games": sum(len(v) for v in by_paper.values()), "papers": len(papers)}
+    return {
+        "ratings": ratings,
+        "bootstrap_share_higher": higher,
+        "games": sum(len(v) for v in by_paper.values()),
+        "papers": len(papers),
+    }
 
 
 def shared_rank(ratings: dict, s: str) -> int:
@@ -228,8 +259,10 @@ def online_elo(us: dict, crits=CRITERIA, k: float = ELO_K, orders: int = ELO_ORD
         rng.shuffle(games)
         r = {s: ELO_BASE for s in systems}
         for x, y, v in games:
-            delta = k * ((1.0 if v == x else 0.5 if v == "tie" else 0.0)
-                         - 1 / (1 + 10 ** ((r[y] - r[x]) / 400)))
+            delta = k * (
+                (1.0 if v == x else 0.5 if v == "tie" else 0.0)
+                - 1 / (1 + 10 ** ((r[y] - r[x]) / 400))
+            )
             r[x] += delta
             r[y] -= delta
         for s in systems:
@@ -240,8 +273,14 @@ def online_elo(us: dict, crits=CRITERIA, k: float = ELO_K, orders: int = ELO_ORD
 def position(recs: list, crit: str) -> dict:
     c = Counter(r["parsed_result"]["criteria"][crit]["winner"] for r in recs if not r.get("failed"))
     pref = c["A"] + c["B"]
-    return {"A": c["A"], "B": c["B"], "tie": c["tie"], "unclear": c["unclear"],
-            "share_A": c["A"] / pref if pref else None, "sign_test_p": sign_test(c["A"], c["B"])}
+    return {
+        "A": c["A"],
+        "B": c["B"],
+        "tie": c["tie"],
+        "unclear": c["unclear"],
+        "share_A": c["A"] / pref if pref else None,
+        "sign_test_p": sign_test(c["A"], c["B"]),
+    }
 
 
 def length_effect(us: dict, crit: str) -> dict:
@@ -256,8 +295,11 @@ def length_effect(us: dict, crit: str) -> dict:
         longer = x if cc["report_a"] > cc["report_b"] else y
         total += 1
         won += v == longer
-    return {"stable_preferences": total, "longer_won": won,
-            "share_longer_won": won / total if total else None}
+    return {
+        "stable_preferences": total,
+        "longer_won": won,
+        "share_longer_won": won / total if total else None,
+    }
 
 
 def cost(recs: list, corr: dict) -> dict:
@@ -272,14 +314,21 @@ def cost(recs: list, corr: dict) -> dict:
         out["output_tokens"] += r["output_tokens"]
         out["cache_read_tokens"] += c.get("cache_tokens_derived", r.get("cache_tokens") or 0)
         out["cache_write_tokens"] += r.get("cache_write_tokens") or 0
-        rt = c["reasoning_tokens_corrected"] if "reasoning_tokens_corrected" in c else r.get("reasoning_tokens")
+        rt = (
+            c["reasoning_tokens_corrected"]
+            if "reasoning_tokens_corrected" in c
+            else r.get("reasoning_tokens")
+        )
         if rt is not None:
             out["reasoning_tokens"] += rt
             out["reasoning_recorded_calls"] += 1
         usd = c.get("billed_usd_corrected", r.get("billed_usd"))
         if usd is None:
             t, long = r["input_tokens"], r["input_tokens"] > 272_000
-            usd = (t * 2.0 * 1.25 * (2 if long else 1) + r["output_tokens"] * 12.0 * (1.5 if long else 1)) / 1e6
+            usd = (
+                t * 2.0 * 1.25 * (2 if long else 1)
+                + r["output_tokens"] * 12.0 * (1.5 if long else 1)
+            ) / 1e6
             est.append(r["call_index"])
         out["billed_usd"] += usd
         out["latency_s"] += r.get("latency_s") or 0
@@ -292,8 +341,11 @@ def cost(recs: list, corr: dict) -> dict:
 
 def completeness(recs: list, plan: dict | None) -> dict:
     ok = Counter((r["paper_id"], r["system_a"], r["system_b"]) for r in recs if not r.get("failed"))
-    res = {"recorded_ok": sum(ok.values()), "technical_failures": sum(1 for r in recs if r.get("failed")),
-           "duplicates": [list(k) for k, n in ok.items() if n > 1]}
+    res = {
+        "recorded_ok": sum(ok.values()),
+        "technical_failures": sum(1 for r in recs if r.get("failed")),
+        "duplicates": [list(k) for k, n in ok.items() if n > 1],
+    }
     if plan:
         planned = {(c["paper_id"], c["system_a"], c["system_b"]) for c in plan["calls"]}
         res["planned"] = len(planned)
@@ -307,8 +359,13 @@ def analyze(recs: list, corr: dict, plan: dict | None = None) -> dict:
     rubrics = {r.get("rubric_version") for r in recs}
     if len(ids) > 1 or len(rubrics) > 1:
         raise SystemExit(f"mixed runs in one file: {ids} / {rubrics}")
-    out = {"e1_id": ids.pop() if ids else None, "rubric_version": rubrics.pop() if rubrics else None,
-           "completeness": completeness(recs, plan), "cost": cost(recs, corr), "by_paper_set": {}}
+    out = {
+        "e1_id": ids.pop() if ids else None,
+        "rubric_version": rubrics.pop() if rubrics else None,
+        "completeness": completeness(recs, plan),
+        "cost": cost(recs, corr),
+        "by_paper_set": {},
+    }
     sets = [None] + sorted({r.get("paper_set") for r in recs if r.get("paper_set")})
     for ps in sets:
         us = units(recs, ps)
@@ -317,12 +374,16 @@ def analyze(recs: list, corr: dict, plan: dict | None = None) -> dict:
         for crit in CRITERIA:
             verdicts = Counter(stable_verdict(u, crit) for u in us.values())
             complete = sum(n for v, n in verdicts.items() if v != "incomplete")
-            stable = sum(n for v, n in verdicts.items() if v not in ("incomplete", "inconsistent", "unclear"))
+            stable = sum(
+                n for v, n in verdicts.items() if v not in ("incomplete", "inconsistent", "unclear")
+            )
             block["criteria"][crit] = {
                 "units_complete": complete,
                 "order_consistency": stable / complete if complete else None,
                 "position": position(sel, crit),
-                "pairs": [pair_table(us, crit, pair) for pair in itertools.combinations(SYSTEMS, 2)],
+                "pairs": [
+                    pair_table(us, crit, pair) for pair in itertools.combinations(SYSTEMS, 2)
+                ],
                 "bradley_terry_log_strength": bradley_terry(us, crit),
                 "elo": elo(us, (crit,)),
                 "length": length_effect(us, crit),
@@ -337,13 +398,22 @@ def analyze(recs: list, corr: dict, plan: dict | None = None) -> dict:
 def print_report(res: dict, paper_set: str = "all") -> None:
     c, k = res["completeness"], res["cost"]
     print(f"E1 {res['e1_id']} ({res['rubric_version']})")
-    print(f"  calls: {c['recorded_ok']} ok" + (f" of {c['planned']} planned, {c['missing']} missing" if "planned" in c else "")
-          + f", {c['technical_failures']} technical failures, {len(c['duplicates'])} duplicates, "
-          f"{k.get('calls_with_retries', 0)} with retries")
-    print(f"  cost: ${k['billed_usd']:.2f} billed | {k.get('input_tokens', 0) / 1e6:.2f}M in "
-          f"({k.get('cache_read_tokens', 0) / max(k.get('input_tokens', 1), 1):.0%} cache reads) | "
-          f"{k.get('output_tokens', 0):,} out | reasoning recorded for {k.get('reasoning_recorded_calls', 0)} calls"
-          + (f" | estimated for calls {k['billed_usd_estimated_for_calls']}" if k["billed_usd_estimated_for_calls"] else ""))
+    print(
+        f"  calls: {c['recorded_ok']} ok"
+        + (f" of {c['planned']} planned, {c['missing']} missing" if "planned" in c else "")
+        + f", {c['technical_failures']} technical failures, {len(c['duplicates'])} duplicates, "
+        f"{k.get('calls_with_retries', 0)} with retries"
+    )
+    print(
+        f"  cost: ${k['billed_usd']:.2f} billed | {k.get('input_tokens', 0) / 1e6:.2f}M in "
+        f"({k.get('cache_read_tokens', 0) / max(k.get('input_tokens', 1), 1):.0%} cache reads) | "
+        f"{k.get('output_tokens', 0):,} out | reasoning recorded for {k.get('reasoning_recorded_calls', 0)} calls"
+        + (
+            f" | estimated for calls {k['billed_usd_estimated_for_calls']}"
+            if k["billed_usd_estimated_for_calls"]
+            else ""
+        )
+    )
     b = res["by_paper_set"][paper_set]
     print(f"\n[{paper_set}] {b['papers']} papers")
     for crit, d in b["criteria"].items():
@@ -351,33 +421,55 @@ def print_report(res: dict, paper_set: str = "all") -> None:
         oc = f"{d['order_consistency']:.0%}" if d["order_consistency"] is not None else "-"
         sa = f"{pos['share_A']:.0%}" if pos["share_A"] is not None else "-"
         sl = f"{ln['share_longer_won']:.0%}" if ln["share_longer_won"] is not None else "-"
-        print(f"\n  {crit}: order-consistent {oc} of {d['units_complete']} units | share A {sa} "
-              f"(p={pos['sign_test_p']:.2f}) | longer report won {sl} of {ln['stable_preferences']}")
+        print(
+            f"\n  {crit}: order-consistent {oc} of {d['units_complete']} units | share A {sa} "
+            f"(p={pos['sign_test_p']:.2f}) | longer report won {sl} of {ln['stable_preferences']}"
+        )
         for t in d["pairs"]:
             if not t["papers"]:
                 continue
             x, y = t["pair"]
             ci = f"[{t['ci95'][0]:+.2f}, {t['ci95'][1]:+.2f}]" if t["ci95"] else ""
-            print(f"    {x:12} vs {y:12} n={t['papers']:2}  {t[f'{x}_wins']:2}:{t[f'{y}_wins']:<2} "
-                  f"tie {t['tie']:2} incons {t['inconsistent']:2} uncl {t['unclear']}  "
-                  f"net {t['net_preference']:+.2f} {ci} p={t['sign_test_p']:.3f} "
-                  f"p_holm={t['sign_test_p_holm_criteria']:.3f}")
+            print(
+                f"    {x:12} vs {y:12} n={t['papers']:2}  {t[f'{x}_wins']:2}:{t[f'{y}_wins']:<2} "
+                f"tie {t['tie']:2} incons {t['inconsistent']:2} uncl {t['unclear']}  "
+                f"net {t['net_preference']:+.2f} {ci} p={t['sign_test_p']:.3f} "
+                f"p_holm={t['sign_test_p_holm_criteria']:.3f}"
+            )
         if d["bradley_terry_log_strength"]:
-            print("    Bradley-Terry: " + "  ".join(f"{s} {v:+.2f}" for s, v in d["bradley_terry_log_strength"].items()))
+            print(
+                "    Bradley-Terry: "
+                + "  ".join(f"{s} {v:+.2f}" for s, v in d["bradley_terry_log_strength"].items())
+            )
         if d.get("elo"):
             _print_elo("    Elo", d["elo"])
     if b.get("elo_all_criteria"):
-        print(f"\n  all five criteria pooled ({b['elo_all_criteria']['games']} games, "
-              f"{b['elo_all_criteria']['papers']} papers):")
+        print(
+            f"\n  all five criteria pooled ({b['elo_all_criteria']['games']} games, "
+            f"{b['elo_all_criteria']['papers']} papers):"
+        )
         _print_elo("    Elo (Bradley-Terry)", b["elo_all_criteria"])
-        print("    online Elo, K=%d, mean of %d orders: " % (ELO_K, ELO_ORDERS)
-              + "  ".join(f"{s} {v:.0f}" for s, v in b["online_elo_all_criteria"].items()))
+        print(
+            "    online Elo, K=%d, mean of %d orders: " % (ELO_K, ELO_ORDERS)
+            + "  ".join(f"{s} {v:.0f}" for s, v in b["online_elo_all_criteria"].items())
+        )
 
 
 def _print_elo(label: str, e: dict) -> None:
-    print(f"{label}: " + "  ".join(f"#{r['rank']} {s} {r['elo']:.0f} [{r['ci95'][0]:.0f}, {r['ci95'][1]:.0f}]"
-                                   for s, r in e["ratings"].items()))
+    print(
+        f"{label}: "
+        + "  ".join(
+            f"#{r['rank']} {s} {r['elo']:.0f} [{r['ci95'][0]:.0f}, {r['ci95'][1]:.0f}]"
+            for s, r in e["ratings"].items()
+        )
+    )
     ranked = list(e["ratings"])
-    close = [f"P({x}>{y})={e['bootstrap_share_higher'][f'{x}>{y}']:.2f}"
-             for x, y in zip(ranked, ranked[1:])]
-    print(" " * (len(label) - len(label.lstrip()) + 2) + "adjacent ranks, bootstrap: " + "  ".join(close))
+    close = [
+        f"P({x}>{y})={e['bootstrap_share_higher'][f'{x}>{y}']:.2f}"
+        for x, y in zip(ranked, ranked[1:])
+    ]
+    print(
+        " " * (len(label) - len(label.lstrip()) + 2)
+        + "adjacent ranks, bootstrap: "
+        + "  ".join(close)
+    )

@@ -1,11 +1,11 @@
 """The study's data model. One definition, portable to SQLite and PostgreSQL."""
+
 from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import (JSON, Boolean, DateTime, ForeignKey, Integer, String, Text,
-                        UniqueConstraint)
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -21,9 +21,9 @@ class Base(DeclarativeBase):
     pass
 
 
-
 class Study(Base):
     """One evaluation study."""
+
     __tablename__ = "studies"
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     title: Mapped[str] = mapped_column(String(200))
@@ -43,14 +43,19 @@ class Paper(Base):
     study_id: Mapped[str] = mapped_column(ForeignKey("studies.id"), index=True)
     paper_key: Mapped[str] = mapped_column(String(80))
     title: Mapped[str] = mapped_column(String(400))
-    submission_pdf_asset_id: Mapped[str | None] = mapped_column(ForeignKey("assets.id"), nullable=True)
-    submission_text_asset_id: Mapped[str | None] = mapped_column(ForeignKey("assets.id"), nullable=True)
+    submission_pdf_asset_id: Mapped[str | None] = mapped_column(
+        ForeignKey("assets.id"), nullable=True
+    )
+    submission_text_asset_id: Mapped[str | None] = mapped_column(
+        ForeignKey("assets.id"), nullable=True
+    )
     is_training_only: Mapped[bool] = mapped_column(Boolean, default=False)
     __table_args__ = (UniqueConstraint("study_id", "paper_key", name="uq_paper_study_key"),)
 
 
 class Asset(Base):
     """One frozen file: a PDF, a rendered-markdown text blob, or a JSON quote index."""
+
     __tablename__ = "assets"
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     study_id: Mapped[str] = mapped_column(ForeignKey("studies.id"), index=True)
@@ -66,6 +71,7 @@ class Asset(Base):
 
 class Report(Base):
     """One system's frozen output for one paper. `system_id` is never sent to participants."""
+
     __tablename__ = "reports"
     id: Mapped[str] = mapped_column(String(160), primary_key=True)
     study_id: Mapped[str] = mapped_column(ForeignKey("studies.id"), index=True)
@@ -79,9 +85,9 @@ class Report(Base):
     __table_args__ = (UniqueConstraint("paper_id", "system_id", name="uq_report_paper_system"),)
 
 
-
 class Task(Base):
     """A paper and an unordered system pair to be judged."""
+
     __tablename__ = "tasks"
     id: Mapped[str] = mapped_column(String(160), primary_key=True)
     study_id: Mapped[str] = mapped_column(ForeignKey("studies.id"), index=True)
@@ -97,6 +103,7 @@ class Task(Base):
 
 class Participant(Base):
     """A pseudonymous rater or an admin. Only an HMAC of the access code is stored."""
+
     __tablename__ = "participants"
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     study_id: Mapped[str] = mapped_column(ForeignKey("studies.id"), index=True)
@@ -113,11 +120,14 @@ class Participant(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     failed_logins: Mapped[int] = mapped_column(Integer, default=0)
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    __table_args__ = (UniqueConstraint("study_id", "code_display", name="uq_participant_code_display"),)
+    __table_args__ = (
+        UniqueConstraint("study_id", "code_display", name="uq_participant_code_display"),
+    )
 
 
 class Assignment(Base):
     """One task assigned to one participant, with the participant's A/B orientation."""
+
     __tablename__ = "assignments"
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     study_id: Mapped[str] = mapped_column(ForeignKey("studies.id"), index=True)
@@ -130,17 +140,24 @@ class Assignment(Base):
     revision: Mapped[int] = mapped_column(Integer, default=0)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     active_ms: Mapped[int] = mapped_column(Integer, default=0)
-    last_activity_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_activity_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     draft: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
-    __table_args__ = (UniqueConstraint("study_id", "task_id", "participant_id", name="uq_assignment_once"),)
+    __table_args__ = (
+        UniqueConstraint("study_id", "task_id", "participant_id", name="uq_assignment_once"),
+    )
 
 
 class FinalResponse(Base):
     """The submitted answer of one assignment, written once and never edited."""
+
     __tablename__ = "final_responses"
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    assignment_id: Mapped[str] = mapped_column(ForeignKey("assignments.id"), index=True, unique=True)
+    assignment_id: Mapped[str] = mapped_column(
+        ForeignKey("assignments.id"), index=True, unique=True
+    )
     criteria: Mapped[dict] = mapped_column(JSON)
     receipt_id: Mapped[str] = mapped_column(String(64), unique=True)
     idempotency_key: Mapped[str] = mapped_column(String(120), index=True)
@@ -151,6 +168,7 @@ class FinalResponse(Base):
 
 class PaperFamiliarity(Base):
     """Asked once per participant and paper, on the first task of the paper."""
+
     __tablename__ = "paper_familiarity"
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     study_id: Mapped[str] = mapped_column(ForeignKey("studies.id"), index=True)
@@ -164,6 +182,7 @@ class PaperFamiliarity(Base):
 
 class PaperReading(Base):
     """The reading step before a paper's tasks open, one row per participant and paper."""
+
     __tablename__ = "paper_readings"
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     study_id: Mapped[str] = mapped_column(ForeignKey("studies.id"), index=True)
@@ -177,6 +196,7 @@ class PaperReading(Base):
 
 class Session_(Base):
     """A server-side login session. The cookie carries only an opaque token."""
+
     __tablename__ = "sessions"
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     participant_id: Mapped[str] = mapped_column(ForeignKey("participants.id"), index=True)

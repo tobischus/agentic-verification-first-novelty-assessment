@@ -14,12 +14,17 @@ export default function ClaimsReview({ submissionId, onApproved }) {
   const [focus, setFocus] = useState(null)
 
   useEffect(() => {
-    api.claims(submissionId).then((d) => {
-      setDoc(d)
-      setClaims(d.claims
-        .filter((c) => c.status !== 'rejected')
-        .map((c) => ({ ...c, _key: c.id, _dirty: false, _rejected: false })))
-    }).catch((e) => setErr(String(e)))
+    api
+      .claims(submissionId)
+      .then((d) => {
+        setDoc(d)
+        setClaims(
+          d.claims
+            .filter((c) => c.status !== 'rejected')
+            .map((c) => ({ ...c, _key: c.id, _dirty: false, _rejected: false })),
+        )
+      })
+      .catch((e) => setErr(String(e)))
   }, [submissionId])
 
   const update = (key, val) =>
@@ -30,21 +35,36 @@ export default function ClaimsReview({ submissionId, onApproved }) {
   const toggleEdit = (key) => setEditing((e) => ({ ...e, [key]: !e[key] }))
   const addClaim = () => {
     const key = 'new-' + Date.now()
-    setClaims((cs) => [...cs, {
-      _key: key, id: null, claim_text: '', evidence_quote: '', source: 'reviewer',
-      _new: true, _dirty: true, _rejected: false,
-    }])
+    setClaims((cs) => [
+      ...cs,
+      {
+        _key: key,
+        id: null,
+        claim_text: '',
+        evidence_quote: '',
+        source: 'reviewer',
+        _new: true,
+        _dirty: true,
+        _rejected: false,
+      },
+    ])
     setEditing((e) => ({ ...e, [key]: true }))
   }
 
   const approve = async () => {
-    setBusy(true); setErr('')
+    setBusy(true)
+    setErr('')
     try {
       const ops = []
       for (const c of claims) {
         const text = (c.claim_text || '').trim()
         if (c._new) {
-          if (text) ops.push({ op: 'add', name: text.split(/\s+/).slice(0, 12).join(' '), claim_text: text })
+          if (text)
+            ops.push({
+              op: 'add',
+              name: text.split(/\s+/).slice(0, 12).join(' '),
+              claim_text: text,
+            })
         } else if (c._rejected) {
           ops.push({ op: 'delete', claim_id: c.id })
         } else if (c._dirty) {
@@ -55,21 +75,31 @@ export default function ClaimsReview({ submissionId, onApproved }) {
       await api.approve(submissionId, 'claims')
       onApproved()
     } catch (e) {
-      setErr(String(e)); setBusy(false)
+      setErr(String(e))
+      setBusy(false)
     }
   }
 
   const colors = useMemo(() => {
     const m = {}
-    ;(claims || []).forEach((c, i) => { m[c._key] = colorFor(i) })
+    ;(claims || []).forEach((c, i) => {
+      m[c._key] = colorFor(i)
+    })
     return m
   }, [claims])
 
-  const highlights = useMemo(() => (claims || [])
-    .filter((c) => !c._rejected && (c.evidence_quote || '').trim())
-    .map((c) => ({ id: c._key, text: c.evidence_quote, color: colors[c._key],
-                   label: (c.claim_text || '').slice(0, 90) })),
-    [claims, colors])
+  const highlights = useMemo(
+    () =>
+      (claims || [])
+        .filter((c) => !c._rejected && (c.evidence_quote || '').trim())
+        .map((c) => ({
+          id: c._key,
+          text: c.evidence_quote,
+          color: colors[c._key],
+          label: (c.claim_text || '').slice(0, 90),
+        })),
+    [claims, colors],
+  )
 
   if (err && !claims) return <div className="error">{err}</div>
   if (!claims) return <div className="panel">Loading claims…</div>
@@ -90,17 +120,28 @@ export default function ClaimsReview({ submissionId, onApproved }) {
       {claims.map((c) => (
         <div
           key={c._key}
-          className={'claim card' + (c._rejected ? ' rejected' : '')
-            + (c.evidence_quote ? ' qjump' : '') + (focus === c._key ? ' active' : '')}
+          className={
+            'claim card' +
+            (c._rejected ? ' rejected' : '') +
+            (c.evidence_quote ? ' qjump' : '') +
+            (focus === c._key ? ' active' : '')
+          }
           style={c.evidence_quote ? { borderLeftColor: colors[c._key] } : undefined}
-          onClick={() => { if (!editing[c._key] && c.evidence_quote) setFocus(c._key) }}
+          onClick={() => {
+            if (!editing[c._key] && c.evidence_quote) setFocus(c._key)
+          }}
         >
           {!editing[c._key] && (
-            <button className="edit-btn" title="Edit claim" onClick={() => toggleEdit(c._key)}>✎</button>
+            <button className="edit-btn" title="Edit claim" onClick={() => toggleEdit(c._key)}>
+              ✎
+            </button>
           )}
           {editing[c._key] ? (
             <textarea
-              className="claim-text" rows={3} autoFocus value={c.claim_text}
+              className="claim-text"
+              rows={3}
+              autoFocus
+              value={c.claim_text}
               placeholder="novelty claim"
               onChange={(e) => update(c._key, e.target.value)}
               onBlur={() => toggleEdit(c._key)}
@@ -125,13 +166,15 @@ export default function ClaimsReview({ submissionId, onApproved }) {
           </div>
           {open[c._key] && c.evidence_quote && (
             <blockquote className="evidence">
-              <span className="qswatch" style={{ background: colors[c._key] }} />
-              “{c.evidence_quote}”
+              <span className="qswatch" style={{ background: colors[c._key] }} />“{c.evidence_quote}
+              ”
               <div className="evidence-meta">
                 {c.source ? `— ${c.source} ` : ''}
-                {c.evidence_verified
-                  ? <span className="verified">✓ Verbatim in the paper</span>
-                  : <span className="unverified">Not matched verbatim</span>}
+                {c.evidence_verified ? (
+                  <span className="verified">✓ Verbatim in the paper</span>
+                ) : (
+                  <span className="unverified">Not matched verbatim</span>
+                )}
               </div>
             </blockquote>
           )}
@@ -139,8 +182,12 @@ export default function ClaimsReview({ submissionId, onApproved }) {
       ))}
 
       <div className="actions">
-        <button className="secondary" onClick={addClaim}>Add claim</button>
-        <button disabled={busy} onClick={approve}>{busy ? 'Submitting…' : 'Approve claims'}</button>
+        <button className="secondary" onClick={addClaim}>
+          Add claim
+        </button>
+        <button disabled={busy} onClick={approve}>
+          {busy ? 'Submitting…' : 'Approve claims'}
+        </button>
       </div>
       {err && <div className="error">{err}</div>}
     </div>

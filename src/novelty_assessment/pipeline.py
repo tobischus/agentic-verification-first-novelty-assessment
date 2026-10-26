@@ -16,7 +16,7 @@ class NoveltyAssessmentPipeline:
         """Initialize the pipeline with the specified LLM settings."""
         self.model_name = model_name
         self.temperature = temperature
-        
+
         self.extractor = StructuredRepresentationGenerator(model_name, temperature)
         self.analyzer = ResearchLandscapeAnalyzer(model_name, temperature)
         self.assessor = NoveltyAssessor(model_name, temperature)
@@ -25,7 +25,7 @@ class NoveltyAssessmentPipeline:
     def run_complete_pipeline(self, data_dir: str, submission_id: str) -> str:
         """Run the complete novelty assessment pipeline for a single submission."""
         print(f"Starting complete pipeline for submission: {submission_id}")
-        
+
         print("Step 1/4: Extracting structured representations...")
         self.extractor.process_single_submission(data_dir, submission_id)
         print("✓ Structured extraction completed")
@@ -48,7 +48,7 @@ class NoveltyAssessmentPipeline:
     def run_from_step(self, data_dir: str, submission_id: str, start_step: int) -> str:
         """Run pipeline starting from a specific step (useful if earlier steps are already completed)."""
         print(f"Starting pipeline from step {start_step} for submission: {submission_id}")
-        
+
         if start_step <= 1:
             print("Step 1/4: Extracting structured representations...")
             self.extractor.process_single_submission(data_dir, submission_id)
@@ -78,7 +78,7 @@ class NoveltyAssessmentPipeline:
             "structured_extraction": False,
             "research_landscape": False,
             "novelty_assessment": False,
-            "reviewer_summary": False
+            "reviewer_summary": False,
         }
 
         structured_path = os.path.join(data_dir, submission_id, "structured_representation.json")
@@ -99,40 +99,27 @@ class NoveltyAssessmentPipeline:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run complete novelty assessment pipeline")
     parser.add_argument(
-        "--data-dir",
-        type=str,
-        default="../../data",
-        help="Directory containing submission data"
+        "--data-dir", type=str, default="../../data", help="Directory containing submission data"
     )
+    parser.add_argument("--model", type=str, default="gpt-4.1", help="OpenAI model to use")
     parser.add_argument(
-        "--model",
-        type=str,
-        default="gpt-4.1",
-        help="OpenAI model to use"
-    )
-    parser.add_argument(
-        "--submission-id",
-        type=str,
-        required=True,
-        help="ID of the submission to process"
+        "--submission-id", type=str, required=True, help="ID of the submission to process"
     )
     parser.add_argument(
         "--start-step",
         type=int,
         default=1,
         choices=[1, 2, 3, 4],
-        help="Step to start from (1=extraction, 2=landscape, 3=assessment, 4=summary)"
+        help="Step to start from (1=extraction, 2=landscape, 3=assessment, 4=summary)",
     )
     parser.add_argument(
-        "--check-status",
-        action="store_true",
-        help="Check which steps have been completed"
+        "--check-status", action="store_true", help="Check which steps have been completed"
     )
-    
+
     args = parser.parse_args()
-    
+
     pipeline = NoveltyAssessmentPipeline(model_name=args.model)
-    
+
     if args.check_status:
         status = pipeline.check_step_dependencies(args.data_dir, args.submission_id)
         print(f"Pipeline status for {args.submission_id}:")

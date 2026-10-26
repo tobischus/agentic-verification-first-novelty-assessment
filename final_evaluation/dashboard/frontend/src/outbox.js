@@ -25,12 +25,15 @@ export async function saveLocalDraft(participantId, assignmentId, payload) {
     const db = await openDb()
     await new Promise((resolve, reject) => {
       const tx = db.transaction(STORE, 'readwrite')
-      tx.objectStore(STORE).put({ key: keyFor(participantId, assignmentId), payload, savedAt: Date.now() })
+      tx.objectStore(STORE).put({
+        key: keyFor(participantId, assignmentId),
+        payload,
+        savedAt: Date.now(),
+      })
       tx.oncomplete = resolve
       tx.onerror = () => reject(tx.error)
     })
-  } catch {
-  }
+  } catch {}
 }
 
 export async function loadLocalDraft(participantId, assignmentId) {
@@ -56,7 +59,7 @@ export async function clearLocalDraft(participantId, assignmentId) {
       tx.oncomplete = resolve
       tx.onerror = () => reject(tx.error)
     })
-  } catch {  }
+  } catch {}
 }
 
 export async function clearAllForParticipant(participantId) {
@@ -75,5 +78,5 @@ export async function clearAllForParticipant(participantId) {
       tx.oncomplete = resolve
       tx.onerror = () => reject(tx.error)
     })
-  } catch {  }
+  } catch {}
 }

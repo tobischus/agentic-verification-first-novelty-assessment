@@ -1,4 +1,5 @@
 """Create every table in models.py."""
+
 from ..backend import models
 
 

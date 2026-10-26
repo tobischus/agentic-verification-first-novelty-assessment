@@ -1,4 +1,5 @@
 """Inputs for Afzal et al.'s assessment stage, built from this pipeline's outputs."""
+
 import argparse
 import json
 import re
@@ -45,13 +46,15 @@ def build(data_dir: str, submission_id: str, max_chars: int = 20000) -> dict:
 
     ft = sub / f"{submission_id}_fulltext.json"
     if ft.exists():
-        intro = _from_sections(json.loads(ft.read_text(encoding="utf-8")).get("sections"), max_chars)
+        intro = _from_sections(
+            json.loads(ft.read_text(encoding="utf-8")).get("sections"), max_chars
+        )
         if intro:
             (out_dir / f"{submission_id}_intro.txt").write_text(intro, encoding="utf-8")
             stats["submission"] = True
 
     ranked = sub / "related_work_data" / "ranked_papers.json"
-    for p in (json.loads(ranked.read_text(encoding="utf-8")) if ranked.exists() else []):
+    for p in json.loads(ranked.read_text(encoding="utf-8")) if ranked.exists() else []:
         pid = p.get("paper_id")
         if not pid:
             continue
@@ -74,8 +77,10 @@ def main():
     args = ap.parse_args()
     s = build(args.data_dir, args.submission_id, args.max_chars)
     print(f"submission intro written: {s['submission']}")
-    print(f"related-paper intros    : {s['papers_written']} "
-          f"({s['papers_missing_fulltext']} pool papers have no parsed full text)")
+    print(
+        f"related-paper intros    : {s['papers_written']} "
+        f"({s['papers_missing_fulltext']} pool papers have no parsed full text)"
+    )
 
 
 if __name__ == "__main__":

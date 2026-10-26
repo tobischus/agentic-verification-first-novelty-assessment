@@ -1,4 +1,5 @@
 """Access codes, sessions, CSRF, rate limiting, and the deterministic assignment RNG."""
+
 from __future__ import annotations
 
 import hashlib
@@ -19,14 +20,16 @@ def generate_code(display: str) -> str:
 
 def hash_code(full_code: str, pepper: str) -> str:
     if not pepper:
-        raise RuntimeError("ACCESS_CODE_PEPPER is not set -- refusing to hash a code with no pepper")
-    return hmac.new(pepper.encode("utf-8"), full_code.strip().encode("utf-8"),
-                    hashlib.sha256).hexdigest()
+        raise RuntimeError(
+            "ACCESS_CODE_PEPPER is not set -- refusing to hash a code with no pepper"
+        )
+    return hmac.new(
+        pepper.encode("utf-8"), full_code.strip().encode("utf-8"), hashlib.sha256
+    ).hexdigest()
 
 
 def codes_match(full_code: str, stored_hash: str, pepper: str) -> bool:
     return hmac.compare_digest(hash_code(full_code, pepper), stored_hash)
-
 
 
 def new_session_token() -> str:
@@ -39,7 +42,6 @@ def hash_token(token: str) -> str:
 
 def new_csrf_token() -> str:
     return secrets.token_urlsafe(24)
-
 
 
 MAX_FAILED_LOGINS = 8
@@ -74,7 +76,6 @@ def ip_rate_limited(ip: str) -> bool:
     return len(hist) > IP_MAX_ATTEMPTS
 
 
-
 def orientation_bit(seed: int, pair_key: str) -> int:
     """A fixed 0/1 per (seed, pair_key), independent of any participant."""
     rng = random.Random(f"{seed}:orientation:{pair_key}")
@@ -87,8 +88,9 @@ def orientation_for(seed: int, pair_key: str, participant_ordinal: int) -> str:
     return "reversed" if bit else "forward"
 
 
-def block_and_task_order(order_seed: int, paper_keys: list[str],
-                         tasks_by_paper: dict[str, list[str]]) -> list[str]:
+def block_and_task_order(
+    order_seed: int, paper_keys: list[str], tasks_by_paper: dict[str, list[str]]
+) -> list[str]:
     """Shuffle paper blocks, then tasks within each block, with `order_seed`. Returns task ids in presentation order."""
     rng = random.Random(order_seed)
     papers = list(paper_keys)
@@ -101,8 +103,5 @@ def block_and_task_order(order_seed: int, paper_keys: list[str],
     return out
 
 
-
 def new_receipt_id() -> str:
     return "RCPT-" + secrets.token_hex(8).upper()
-
-

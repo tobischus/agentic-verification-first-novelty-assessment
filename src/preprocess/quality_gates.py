@@ -1,4 +1,5 @@
 """Quality gates of document processing."""
+
 from typing import Dict, List
 
 MIN_FULLTEXT_CHARS = 1000

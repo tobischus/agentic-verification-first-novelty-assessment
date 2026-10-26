@@ -4,6 +4,7 @@ Records the configuration (code version, models, budgets, prompt and schema hash
 text sent to a model as a hashed context snapshot, the provenance and decision trace of
 each prior paper, and the outcome of the claim.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -26,12 +27,15 @@ def _short(digest: str) -> str:
 
 def git_commit(repo_root: Path, save_diff_to: Optional[Path] = None) -> dict:
     """Current commit, and for a modified working tree the saved and hashed diff."""
+
     def run(*args) -> str:
         try:
-            return subprocess.run(args, cwd=str(repo_root), capture_output=True,
-                                  text=True, timeout=20).stdout
+            return subprocess.run(
+                args, cwd=str(repo_root), capture_output=True, text=True, timeout=20
+            ).stdout
         except Exception:
             return ""
+
     commit = run("git", "rev-parse", "HEAD").strip()
     status = run("git", "status", "--porcelain").strip()
     info = {
@@ -73,8 +77,7 @@ def schema_hashes(models: dict) -> dict:
     out = {}
     for name, model in (models or {}).items():
         try:
-            out[name] = _short(sha256_text(
-                json.dumps(model.model_json_schema(), sort_keys=True)))
+            out[name] = _short(sha256_text(json.dumps(model.model_json_schema(), sort_keys=True)))
         except Exception:
             continue
     return out
@@ -128,24 +131,31 @@ class RunLog:
     def paper_source(self, paper_id: str, pool_entry: dict) -> None:
         """The pinned version and parsed text a comparison is based on."""
         p = pool_entry or {}
-        self.comparisons.setdefault(paper_id, {}).update({
-            "paper_id": paper_id,
-            "title": p.get("title", ""),
-            "version_status": p.get("version_status", ""),
-            "pinned_version": p.get("pinned_version", ""),
-            "pinned_version_date": p.get("pinned_version_date", ""),
-            "pinned_url": p.get("pinned_url", ""),
-            "pdf_sha256": p.get("doc_sha256", ""),
-            "abstract_source": p.get("abstract_source", ""),
-            "history_complete": p.get("history_complete", None),
-            "missing_versions": p.get("missing_versions", []),
-            "parsed_text_path": p.get("parsed_text_path", ""),
-            "parsed_text_sha256": p.get("parsed_text_sha256", ""),
-        })
+        self.comparisons.setdefault(paper_id, {}).update(
+            {
+                "paper_id": paper_id,
+                "title": p.get("title", ""),
+                "version_status": p.get("version_status", ""),
+                "pinned_version": p.get("pinned_version", ""),
+                "pinned_version_date": p.get("pinned_version_date", ""),
+                "pinned_url": p.get("pinned_url", ""),
+                "pdf_sha256": p.get("doc_sha256", ""),
+                "abstract_source": p.get("abstract_source", ""),
+                "history_complete": p.get("history_complete", None),
+                "missing_versions": p.get("missing_versions", []),
+                "parsed_text_path": p.get("parsed_text_path", ""),
+                "parsed_text_sha256": p.get("parsed_text_sha256", ""),
+            }
+        )
 
-    def paper_outcome(self, paper_id: str, comp: dict, pool_entry: dict = None,
-                      sections_used: list = None,
-                      fulltext_fetch_status: str = "") -> None:
+    def paper_outcome(
+        self,
+        paper_id: str,
+        comp: dict,
+        pool_entry: dict = None,
+        sections_used: list = None,
+        fulltext_fetch_status: str = "",
+    ) -> None:
         """Final state, comparison, evidence and decision trace of one paper."""
         c = comp or {}
         diag = c.get("map_diag") or {}
@@ -164,35 +174,43 @@ class RunLog:
         else:
             state = "not_compared"
 
-        prov.update({
-            "final_state": state,
-            "final_comparison": {
-                "overlap_degree": c.get("overlap_degree", ""),
-                "refutation_status": c.get("refutation_status", ""),
-                "assessment": c.get("assessment", ""),
-                "what_is_shared": c.get("what_is_shared", ""),
-                "submission_delta": c.get("submission_delta", ""),
-                "brief_note": c.get("brief_note", ""),
-            },
-            "comparison_proposal": c.get("comparison_proposal") or {},
-            "evidence_check": c.get("evidence_check") or {},
-            "evidence_pairs": c.get("evidence_pairs") or [],
-            "map_diag": {k: v for k, v in diag.items() if k != "loop"},
-            "unresolved_deficit": c.get("unresolved_deficit", ""),
-            "unresolved_reason": c.get("unresolved_reason", ""),
-            "sections_used": list(sections_used or c.get("sections_used") or []),
-            "fulltext_fetch_status": (fulltext_fetch_status
-                                      or c.get("fulltext_fetch_status", "")),
-            "decision_trace": list(diag.get("loop") or []),
-        })
+        prov.update(
+            {
+                "final_state": state,
+                "final_comparison": {
+                    "overlap_degree": c.get("overlap_degree", ""),
+                    "refutation_status": c.get("refutation_status", ""),
+                    "assessment": c.get("assessment", ""),
+                    "what_is_shared": c.get("what_is_shared", ""),
+                    "submission_delta": c.get("submission_delta", ""),
+                    "brief_note": c.get("brief_note", ""),
+                },
+                "comparison_proposal": c.get("comparison_proposal") or {},
+                "evidence_check": c.get("evidence_check") or {},
+                "evidence_pairs": c.get("evidence_pairs") or [],
+                "map_diag": {k: v for k, v in diag.items() if k != "loop"},
+                "unresolved_deficit": c.get("unresolved_deficit", ""),
+                "unresolved_reason": c.get("unresolved_reason", ""),
+                "sections_used": list(sections_used or c.get("sections_used") or []),
+                "fulltext_fetch_status": (
+                    fulltext_fetch_status or c.get("fulltext_fetch_status", "")
+                ),
+                "decision_trace": list(diag.get("loop") or []),
+            }
+        )
 
     def round_contexts(self, paper_id: str, turn: int, **context_ids) -> None:
         """The context ids a call in a given round received."""
         rounds = self.comparisons.setdefault(paper_id, {}).setdefault("rounds", [])
         rounds.append({"turn": turn, **{k: v for k, v in context_ids.items() if v}})
 
-    def finish(self, verdict: str, comparisons: list, stop_reason: str = "",
-               evidence_sufficient: Optional[bool] = None) -> dict:
+    def finish(
+        self,
+        verdict: str,
+        comparisons: list,
+        stop_reason: str = "",
+        evidence_sufficient: Optional[bool] = None,
+    ) -> dict:
         """Claim outcome with the papers that remained open and why."""
         open_papers, seen = [], set()
         for c in comparisons or []:
@@ -201,25 +219,35 @@ class RunLog:
                 state, reason = "technical_error", "the evidence map call did not complete"
             elif c.get("unresolved") or c.get("insufficient"):
                 state = "budget_exhausted"
-                reason = (c.get("unresolved_deficit", "")
-                          or c.get("unresolved_reason", "")
-                          or c.get("paper_state", ""))
+                reason = (
+                    c.get("unresolved_deficit", "")
+                    or c.get("unresolved_reason", "")
+                    or c.get("paper_state", "")
+                )
             else:
                 continue
             seen.add(pid)
-            open_papers.append({
-                "paper_id": pid, "title": c.get("title", ""),
-                "state": state, "reason": reason,
-                "semantic_degree": c.get("overlap_degree", ""),
-            })
+            open_papers.append(
+                {
+                    "paper_id": pid,
+                    "title": c.get("title", ""),
+                    "state": state,
+                    "reason": reason,
+                    "semantic_degree": c.get("overlap_degree", ""),
+                }
+            )
         for pid, prov in self.comparisons.items():
             status = prov.get("version_status")
             if pid in seen or not status or status in ("pinned", "single"):
                 continue
-            open_papers.append({
-                "paper_id": pid, "title": prov.get("title", ""),
-                "state": "not_admissible", "reason": f"version {status}",
-            })
+            open_papers.append(
+                {
+                    "paper_id": pid,
+                    "title": prov.get("title", ""),
+                    "state": "not_admissible",
+                    "reason": f"version {status}",
+                }
+            )
 
         for c in comparisons or []:
             pid = c.get("paper_id")
@@ -262,8 +290,7 @@ class RunLog:
             d.mkdir(parents=True, exist_ok=True)
             p = d / f"{self.claim_id}_{self.run_id}.json"
             self.outcome["bundle"] = f"{p.stem}.zip"
-            p.write_text(json.dumps(self.to_dict(), ensure_ascii=False, indent=1),
-                         encoding="utf-8")
+            p.write_text(json.dumps(self.to_dict(), ensure_ascii=False, indent=1), encoding="utf-8")
             self._bundle(p)
             return p
         except Exception:
@@ -274,7 +301,7 @@ class RunLog:
         try:
             d = self._log_dir()
             zpath = log_path.with_suffix(".zip")
-            diff_name = ((self.config.get("git") or {}).get("diff_path") or "")
+            diff_name = (self.config.get("git") or {}).get("diff_path") or ""
             with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED) as z:
                 z.write(log_path, log_path.name)
                 if diff_name and (d / diff_name).exists():

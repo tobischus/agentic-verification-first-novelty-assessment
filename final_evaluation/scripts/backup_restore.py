@@ -1,4 +1,5 @@
 """Local backup and restore of the study database."""
+
 from __future__ import annotations
 
 import json
@@ -13,9 +14,21 @@ from ..dashboard.backend.settings import get_settings
 
 FE_ROOT = Path(__file__).resolve().parents[1]
 
-TABLES = [models.Study, models.Asset, models.Paper, models.Report, models.Task,
-         models.Participant, models.Session_, models.Assignment, models.FinalResponse,
-         models.PaperFamiliarity, models.PaperReading, models.AuditEvent, models.TechnicalIssue]
+TABLES = [
+    models.Study,
+    models.Asset,
+    models.Paper,
+    models.Report,
+    models.Task,
+    models.Participant,
+    models.Session_,
+    models.Assignment,
+    models.FinalResponse,
+    models.PaperFamiliarity,
+    models.PaperReading,
+    models.AuditEvent,
+    models.TechnicalIssue,
+]
 
 
 def _row_to_dict(row) -> dict:
@@ -33,11 +46,13 @@ def _rows_for_study(db, model, study_id: str) -> list:
     if hasattr(model, "study_id"):
         q = q.filter(model.study_id == study_id)
     elif model is models.FinalResponse:
-        q = q.join(models.Assignment, models.Assignment.id == models.FinalResponse.assignment_id) \
-            .filter(models.Assignment.study_id == study_id)
+        q = q.join(
+            models.Assignment, models.Assignment.id == models.FinalResponse.assignment_id
+        ).filter(models.Assignment.study_id == study_id)
     elif model is models.Session_:
-        q = q.join(models.Participant, models.Participant.id == models.Session_.participant_id) \
-            .filter(models.Participant.study_id == study_id)
+        q = q.join(
+            models.Participant, models.Participant.id == models.Session_.participant_id
+        ).filter(models.Participant.study_id == study_id)
     return q.all()
 
 
@@ -47,10 +62,14 @@ def backup(study_id: str, out_path: str) -> Path:
     Session = db_mod.make_session_factory(engine)
     db = Session()
     try:
-        dump = {"study_id": study_id, "backed_up_at": datetime.now(timezone.utc).isoformat(),
-               "database_url_host": settings.database_url.split("@")[-1]
-                                    if "@" in settings.database_url else "sqlite",
-               "tables": {}}
+        dump = {
+            "study_id": study_id,
+            "backed_up_at": datetime.now(timezone.utc).isoformat(),
+            "database_url_host": settings.database_url.split("@")[-1]
+            if "@" in settings.database_url
+            else "sqlite",
+            "tables": {},
+        }
         for model in TABLES:
             rows = _rows_for_study(db, model, study_id)
             dump["tables"][model.__tablename__] = [_row_to_dict(r) for r in rows]
@@ -70,13 +89,17 @@ def backup(study_id: str, out_path: str) -> Path:
 def restore(input_path: str, target_local: str) -> None:
     target = Path(target_local).resolve()
     if target.exists():
-        raise SystemExit(f"refusing to restore into an existing file: {target}. "
-                        "Restore only ever targets a NEW local sqlite file -- pick a "
-                        "path that does not exist yet (this is a safety rail, not a "
-                        "limitation: it can never overwrite an active study database).")
+        raise SystemExit(
+            f"refusing to restore into an existing file: {target}. "
+            "Restore only ever targets a NEW local sqlite file -- pick a "
+            "path that does not exist yet (this is a safety rail, not a "
+            "limitation: it can never overwrite an active study database)."
+        )
     if not str(target).startswith(str(FE_ROOT)):
-        print(f"note: {target} is outside final_evaluation/ -- proceeding, but the brief's "
-             "own examples restore under final_evaluation/private/.")
+        print(
+            f"note: {target} is outside final_evaluation/ -- proceeding, but the brief's "
+            "own examples restore under final_evaluation/private/."
+        )
 
     with zipfile.ZipFile(input_path) as z:
         dump = json.loads(z.read("backup.json").decode("utf-8"))
@@ -97,6 +120,8 @@ def restore(input_path: str, target_local: str) -> None:
         db.commit()
     finally:
         db.close()
-    print(f"restored {sum(len(v) for v in dump['tables'].values())} row(s) across "
-         f"{len(dump['tables'])} tables from study {dump['study_id']!r} "
-         f"(backed up {dump['backed_up_at']}) into {target}")
+    print(
+        f"restored {sum(len(v) for v in dump['tables'].values())} row(s) across "
+        f"{len(dump['tables'])} tables from study {dump['study_id']!r} "
+        f"(backed up {dump['backed_up_at']}) into {target}"
+    )

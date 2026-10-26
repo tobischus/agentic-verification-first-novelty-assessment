@@ -25,14 +25,14 @@ from sklearn.metrics.pairwise import cosine_similarity
 logger = logging.getLogger(__name__)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import paper_versions as pv
-from paper_versions import DEFAULT_MIN_GAP_DAYS as MIN_PRIOR_GAP_DAYS
+import paper_versions as pv  # noqa: E402
+from paper_versions import DEFAULT_MIN_GAP_DAYS as MIN_PRIOR_GAP_DAYS  # noqa: E402
 
 load_dotenv()
 
 sys.path.append(str(Path(__file__).resolve().parents[2] / "RankGPT"))
 
-from rank_gpt import (
+from rank_gpt import (  # noqa: E402
     create_permutation_instruction,
     run_llm,
     receive_permutation,
@@ -97,8 +97,13 @@ def _abstract_shingles(text: str, n: int = 10):
     return {" ".join(words[i : i + n]) for i in range(len(words) - n + 1)}
 
 
-def is_same_paper(candidate_abstract: str, submission_abstract: str,
-                  n: int = 10, min_shared: int = 2, token_ratio: float = 95.0) -> bool:
+def is_same_paper(
+    candidate_abstract: str,
+    submission_abstract: str,
+    n: int = 10,
+    min_shared: int = 2,
+    token_ratio: float = 95.0,
+) -> bool:
     """True when a retrieved paper is the submission itself, e.g. a renamed earlier arXiv version."""
     ca = (candidate_abstract or "").strip()
     sa = (submission_abstract or "").strip()
@@ -196,9 +201,7 @@ class PaperRankingSystem:
         detailed_formatter = logging.Formatter(
             "%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s"
         )
-        simple_formatter = logging.Formatter(
-            "%(asctime)s - %(levelname)s - %(message)s"
-        )
+        simple_formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
 
         log_file = self.log_dir / f"paper_ranking_{time.strftime('%Y%m%d_%H%M%S')}.log"
         file_handler = logging.FileHandler(log_file)
@@ -234,7 +237,9 @@ class PaperRankingSystem:
 
                 if response.status_code == 200:
                     self.logger.debug(f"Request successful on attempt {attempt + 1}")
-                    self._s2_min_interval = max(self._s2_floor_interval, self._s2_min_interval * 0.9)
+                    self._s2_min_interval = max(
+                        self._s2_floor_interval, self._s2_min_interval * 0.9
+                    )
                     return response.json()
                 elif response.status_code == 429:
                     self._s2_min_interval = min(self._s2_max_interval, self._s2_min_interval * 1.5)
@@ -261,16 +266,10 @@ class PaperRankingSystem:
                     time.sleep(2**attempt)
 
             except requests.RequestException as e:
-                self.logger.warning(
-                    f"Request exception on attempt {attempt + 1}: {str(e)}"
-                )
+                self.logger.warning(f"Request exception on attempt {attempt + 1}: {str(e)}")
                 if attempt == max_retries - 1:
-                    self.logger.error(
-                        f"Request failed after {max_retries} attempts: {str(e)}"
-                    )
-                    raise APIError(
-                        f"Request failed after {max_retries} attempts: {str(e)}"
-                    )
+                    self.logger.error(f"Request failed after {max_retries} attempts: {str(e)}")
+                    raise APIError(f"Request failed after {max_retries} attempts: {str(e)}")
                 time.sleep(2**attempt)
 
         return {}
@@ -292,9 +291,7 @@ class PaperRankingSystem:
                 content="You are KeywordGPT, an intelligent assistant that can identify relevant keywords for searching documents related to the idea of the paper."
             ),
             HumanMessage(
-                content=prompt.format(
-                    title=source_paper.title, abstract=source_paper.abstract
-                )
+                content=prompt.format(title=source_paper.title, abstract=source_paper.abstract)
             ),
         ]
 
@@ -307,12 +304,8 @@ class PaperRankingSystem:
                 KeywordOutput, include_raw=True
             ).invoke(messages)
 
-            prompt_tokens = (
-                response["raw"].response_metadata["token_usage"].prompt_tokens
-            )
-            completion_tokens = (
-                response["raw"].response_metadata["token_usage"].completion_tokens
-            )
+            prompt_tokens = response["raw"].response_metadata["token_usage"].prompt_tokens
+            completion_tokens = response["raw"].response_metadata["token_usage"].completion_tokens
 
             from litellm.cost_calculator import cost_per_token
 
@@ -332,9 +325,7 @@ class PaperRankingSystem:
         except Exception as e:
             self.logger.error(f"Error generating keywords: {str(e)}")
             fallback_queries = source_paper.title.lower().split()[:4]
-            self.logger.warning(
-                f"Using fallback queries from title: {fallback_queries}"
-            )
+            self.logger.warning(f"Using fallback queries from title: {fallback_queries}")
             return fallback_queries, 0.0
 
     def fetch_papers_from_semantic_scholar(
@@ -344,9 +335,7 @@ class PaperRankingSystem:
         year: Optional[int] = None,
     ) -> List[Paper]:
         """Fetch papers from Semantic Scholar with retry logic."""
-        self.logger.info(
-            f"Fetching papers from Semantic Scholar for {len(queries)} queries"
-        )
+        self.logger.info(f"Fetching papers from Semantic Scholar for {len(queries)} queries")
         all_papers = []
 
         headers = {}
@@ -367,7 +356,7 @@ class PaperRankingSystem:
             if _progress:
                 _progress.report(i, len(queries))
             try:
-                self.logger.debug(f"Processing query {i+1}/{len(queries)}: '{query}'")
+                self.logger.debug(f"Processing query {i + 1}/{len(queries)}: '{query}'")
                 url = f"{self.base_url}/search?query={query}&fields=title,abstract,paperId,publicationDate,year,externalIds&limit={max_papers_per_query}"
                 if year:
                     url += f"&year=-{year}"
@@ -384,9 +373,7 @@ class PaperRankingSystem:
                             Paper(
                                 paper_id=paper_data.get("paperId", "Unknown ID"),
                                 title=paper_data.get("title", "Unknown Title"),
-                                abstract=paper_data.get(
-                                    "abstract", "No abstract available"
-                                ),
+                                abstract=paper_data.get("abstract", "No abstract available"),
                                 publication_date=paper_data.get("publicationDate", ""),
                                 year=paper_data.get("year", ""),
                                 externalIds=ext_ids,
@@ -397,9 +384,7 @@ class PaperRankingSystem:
                     self.logger.warning(f"No data returned for query: '{query}'")
 
             except APIError as e:
-                self.logger.error(
-                    f"Failed to fetch papers for query '{query}': {str(e)}"
-                )
+                self.logger.error(f"Failed to fetch papers for query '{query}': {str(e)}")
                 continue
 
         if _progress:
@@ -414,7 +399,6 @@ class PaperRankingSystem:
         unique_papers = {}
 
         def is_valid_paper(paper: Paper, source_paper: Paper) -> bool:
-
             if fuzz.ratio(paper.title.lower(), source_paper.title.lower()) >= 90:
                 self.logger.debug(f"Skipping similar title: {paper.title}")
                 return False
@@ -463,9 +447,7 @@ class PaperRankingSystem:
 
         filtered_count = 0
         for paper in query_papers:
-            if paper.paper_id not in unique_papers and is_valid_paper(
-                paper, source_paper
-            ):
+            if paper.paper_id not in unique_papers and is_valid_paper(paper, source_paper):
                 unique_papers[paper.paper_id] = paper
             else:
                 filtered_count += 1
@@ -581,9 +563,7 @@ class PaperRankingSystem:
 
                 while start_pos >= rank_start:
                     start_pos = max(start_pos, rank_start)
-                    self.logger.debug(
-                        f"Processing ranking window: {start_pos}-{end_pos}"
-                    )
+                    self.logger.debug(f"Processing ranking window: {start_pos}-{end_pos}")
 
                     messages = create_permutation_instruction(
                         item=ranked_item_list,
@@ -591,9 +571,7 @@ class PaperRankingSystem:
                         rank_end=end_pos,
                         model_name=self.ranking_model,
                     )
-                    messages = (
-                        PURPOSE_PROMPT_PREFIX + messages[3:-1] + PURPOSE_PROMPT_POST
-                    )
+                    messages = PURPOSE_PROMPT_PREFIX + messages[3:-1] + PURPOSE_PROMPT_POST
 
                     permutation = run_llm(
                         messages,
@@ -611,9 +589,7 @@ class PaperRankingSystem:
             reranked_papers_list = []
             failed_matches = 0
             for r_paper in ranked_item_list["hits"]:
-                match = re.search(
-                    r"(?<=Title: ).*?(?=\n Abstract:)", r_paper["content"]
-                )
+                match = re.search(r"(?<=Title: ).*?(?=\n Abstract:)", r_paper["content"])
                 if match:
                     title = match.group(0)
                     for paper in papers:
@@ -622,14 +598,10 @@ class PaperRankingSystem:
                             break
                 else:
                     failed_matches += 1
-                    self.logger.warning(
-                        "Failed to match paper title in ranking results"
-                    )
+                    self.logger.warning("Failed to match paper title in ranking results")
 
             if failed_matches > 0:
-                self.logger.warning(
-                    f"Failed to match {failed_matches} papers in ranking results"
-                )
+                self.logger.warning(f"Failed to match {failed_matches} papers in ranking results")
 
             self.logger.info(
                 f"{ranking_type.capitalize()} ranking completed. Cost: ${total_cost:.4f}. {len(reranked_papers_list)} papers returned"
@@ -694,9 +666,28 @@ class PaperRankingSystem:
         import re
 
         _STOP = {
-            "using", "based", "with", "from", "that", "this", "into", "over", "via",
-            "models", "model", "language", "large", "approach", "approaches", "method",
-            "methods", "framework", "towards", "learning", "neural", "networks",
+            "using",
+            "based",
+            "with",
+            "from",
+            "that",
+            "this",
+            "into",
+            "over",
+            "via",
+            "models",
+            "model",
+            "language",
+            "large",
+            "approach",
+            "approaches",
+            "method",
+            "methods",
+            "framework",
+            "towards",
+            "learning",
+            "neural",
+            "networks",
         }
 
         def keywords(titles):
@@ -738,14 +729,10 @@ class PaperRankingSystem:
 
         try:
             with open(self.results_dir / "ranked_papers.json", "w") as f:
-                json.dump(
-                    [p.to_dict() for p in results.final_ranked_papers], f, indent=2
-                )
+                json.dump([p.to_dict() for p in results.final_ranked_papers], f, indent=2)
 
             with open(self.results_dir / "all_retrieved_papers.json", "w") as f:
-                json.dump(
-                    [p.to_dict() for p in results.all_retrieved_papers], f, indent=2
-                )
+                json.dump([p.to_dict() for p in results.all_retrieved_papers], f, indent=2)
 
             metadata = {
                 "submission_id": results.submission_id,
@@ -804,9 +791,7 @@ class PaperRankingSystem:
             )
 
             self.logger.info("Step 3: Merging paper collections")
-            all_papers = self.merge_paper_collections(
-                cited_papers, query_papers, source_paper
-            )
+            all_papers = self.merge_paper_collections(cited_papers, query_papers, source_paper)
 
             self.logger.info("Step 4: Computing embeddings")
             all_abstracts = [source_paper.abstract] + [p.abstract for p in all_papers]
@@ -824,12 +809,8 @@ class PaperRankingSystem:
                 if i < len(similarity_scores):
                     p.relevance = round(float(similarity_scores[i]), 4)
 
-            top_n_papers = self.filter_top_n_papers(
-                all_papers, similarity_scores, top_n_similarity
-            )
-            self.logger.info(
-                f"Filtered to top {len(top_n_papers)} papers by similarity"
-            )
+            top_n_papers = self.filter_top_n_papers(all_papers, similarity_scores, top_n_similarity)
+            self.logger.info(f"Filtered to top {len(top_n_papers)} papers by similarity")
 
             self.logger.info("Step 6: Performing RankGPT ranking")
             try:
@@ -838,24 +819,18 @@ class PaperRankingSystem:
                 _progress = None
             if _progress:
                 _progress.start_phase("Ranking candidates", 2)
-            general_ranked, cost1 = self.rankgpt_rerank(
-                source_paper, top_n_papers, "general"
-            )
+            general_ranked, cost1 = self.rankgpt_rerank(source_paper, top_n_papers, "general")
             total_cost += cost1
             if _progress:
                 _progress.report(1, 2)
 
-            purpose_ranked, cost2 = self.rankgpt_rerank(
-                source_paper, top_n_papers, "purpose"
-            )
+            purpose_ranked, cost2 = self.rankgpt_rerank(source_paper, top_n_papers, "purpose")
             total_cost += cost2
             if _progress:
                 _progress.report(2, 2)
 
             self.logger.info("Step 7: Combining rankings")
-            final_ranked = self.combine_rankings(
-                general_ranked, purpose_ranked, combination_k
-            )
+            final_ranked = self.combine_rankings(general_ranked, purpose_ranked, combination_k)
             self.logger.info(f"Final ranking contains {len(final_ranked)} papers")
 
             self.cluster_papers(final_ranked)
@@ -877,21 +852,19 @@ class PaperRankingSystem:
                 purpose_ranking=purpose_ranked,
             )
 
-            print(f"\n=== FINAL RANKING SUMMARY ===")
+            print("\n=== FINAL RANKING SUMMARY ===")
             print(f"Total papers in final ranking: {len(final_ranked)}")
             print(f"Cited papers: {cited_count}")
             print(f"Non-cited papers: {non_cited_count}")
             print(
-                f"Percentage cited: {(cited_count/len(final_ranked)*100):.1f}%"
+                f"Percentage cited: {(cited_count / len(final_ranked) * 100):.1f}%"
                 if final_ranked
                 else "0%"
             )
 
             self.save_results(results)
 
-            self.logger.info(
-                f"Pipeline completed successfully. Total cost: ${total_cost:.4f}"
-            )
+            self.logger.info(f"Pipeline completed successfully. Total cost: ${total_cost:.4f}")
             return results
 
         except Exception as e:
@@ -921,13 +894,13 @@ class PaperRankingSystem:
 def process_for_pipeline(data_dir: str, submission_id: str) -> bool:
     """Process a single submission for pipeline integration."""
     input_file = Path(data_dir) / submission_id / f"{submission_id}.json"
-    
+
     if not input_file.exists():
         raise FileNotFoundError(f"Input file not found: {input_file}")
-    
+
     with open(input_file, "r", encoding="utf-8") as f:
         submission_data = json.load(f)
-    
+
     ranking_system = PaperRankingSystem(
         keyword_model="gpt-4o",
         ranking_model="gpt-3.5-turbo",
@@ -935,7 +908,7 @@ def process_for_pipeline(data_dir: str, submission_id: str) -> bool:
         results_dir=str(Path(data_dir) / submission_id / "related_work_data"),
         log_dir=str(Path(data_dir) / submission_id / "logs"),
     )
-    
+
     try:
         _today = datetime.now()
         sub_year = str(submission_data.get("year") or _today.year)
@@ -947,25 +920,25 @@ def process_for_pipeline(data_dir: str, submission_id: str) -> bool:
             year=sub_year,
             publication_date=sub_pub_date,
         )
-        
+
         valid_cited_papers = []
         for cited_paper_data in submission_data.get("cited_papers", []):
             if cited_paper_data.get("ss_paper_obj"):
                 ss_paper_obj = cited_paper_data["ss_paper_obj"].copy()
                 ss_paper_obj.pop("citations", None)
                 ss_paper_obj["cited_paper"] = True
-                
+
                 try:
                     cited_paper = Paper(**ss_paper_obj)
                     valid_cited_papers.append(cited_paper)
                 except Exception as e:
                     ranking_system.logger.warning(f"Failed to create Paper object: {e}")
                     continue
-        
+
         if not valid_cited_papers:
             ranking_system.logger.warning(f"No valid cited papers found for {submission_id}")
             return False
-        
+
         ranking_system.find_similar_papers(
             source_paper=source_paper,
             cited_papers=valid_cited_papers,
@@ -974,55 +947,39 @@ def process_for_pipeline(data_dir: str, submission_id: str) -> bool:
             top_n_similarity=100,
             combination_k=15,
         )
-        
+
         ranking_system.logger.info(f"Successfully processed {submission_id}")
         return True
-        
+
     except Exception as e:
         ranking_system.logger.error(f"Error processing {submission_id}: {e}")
         return False
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Paper retrieval and ranking system - single submission mode only")
-    parser.add_argument(
-        "--data-dir",
-        type=str,
-        required=True,
-        help="Data directory containing submission data"
+    parser = argparse.ArgumentParser(
+        description="Paper retrieval and ranking system - single submission mode only"
     )
     parser.add_argument(
-        "--submission-id",
-        type=str,
-        required=True,
-        help="Submission ID to process"
+        "--data-dir", type=str, required=True, help="Data directory containing submission data"
+    )
+    parser.add_argument("--submission-id", type=str, required=True, help="Submission ID to process")
+    parser.add_argument(
+        "--keyword-model", type=str, default="gpt-4o", help="Model for keyword generation"
     )
     parser.add_argument(
-        "--keyword-model",
-        type=str,
-        default="gpt-4o",
-        help="Model for keyword generation"
-    )
-    parser.add_argument(
-        "--ranking-model",
-        type=str,
-        default="gpt-3.5-turbo",
-        help="Model for paper ranking"
+        "--ranking-model", type=str, default="gpt-3.5-turbo", help="Model for paper ranking"
     )
     parser.add_argument(
         "--embedding-model",
         type=str,
         default="allenai/specter2_base",
-        help="Embedding model for similarity"
+        help="Embedding model for similarity",
     )
-    parser.add_argument(
-        "--verbose", "-v",
-        action="store_true",
-        help="Verbose logging"
-    )
-    
+    parser.add_argument("--verbose", "-v", action="store_true", help="Verbose logging")
+
     args = parser.parse_args()
-    
+
     success = process_for_pipeline(args.data_dir, args.submission_id)
     if success:
         print(f"✅ Successfully processed submission {args.submission_id}")

@@ -22,7 +22,7 @@ class ReviewGuidanceGenerator:
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise ValueError("OPENAI_API_KEY environment variable is not set")
-        
+
         self.llm = ChatOpenAI(
             model_name=model_name,
             temperature=temperature,
@@ -39,10 +39,7 @@ class ReviewGuidanceGenerator:
 
         return assessment
 
-
-    def generate_guidance(
-        self, novelty_assessment: str
-    ) -> str:
+    def generate_guidance(self, novelty_assessment: str) -> str:
         """Generate reviewer guidance based on novelty assessment and landscape analysis."""
         prompt = reviewer_summary_prompt.format(novelty_assessment=novelty_assessment)
 
@@ -50,9 +47,7 @@ class ReviewGuidanceGenerator:
 
         return guidance
 
-    def run_guidance_generation(
-        self, data_dir: str, submission_id: str
-    ) -> str:
+    def run_guidance_generation(self, data_dir: str, submission_id: str) -> str:
         """Run the complete review guidance generation pipeline."""
         assessment_file = os.path.join(data_dir, submission_id, "novelty_delta_analysis.txt")
         novelty_assessment = self.load_novelty_assessment(assessment_file)
@@ -63,7 +58,7 @@ class ReviewGuidanceGenerator:
         with open(output_file, "w", encoding="utf-8") as f:
             f.write(guidance.content)
 
-        print(f"Review guidance saved to summary.txt")
+        print("Review guidance saved to summary.txt")
 
         from litellm import cost_per_token
 
@@ -78,7 +73,7 @@ class ReviewGuidanceGenerator:
 
         data_dir = os.path.dirname(os.path.dirname(output_file))
         meta_path = os.path.join(data_dir, "metadata.json")
-        
+
         current_meta = {}
         if os.path.exists(meta_path):
             with open(meta_path, "r") as f:
@@ -108,9 +103,7 @@ class ReviewGuidanceGenerator:
 
         for submission_id in submission_ids:
             try:
-                assessment_path = os.path.join(
-                    data_dir, submission_id, "ours", assessment_file
-                )
+                assessment_path = os.path.join(data_dir, submission_id, "ours", assessment_file)
                 if not os.path.exists(assessment_path):
                     print(f"Missing novelty assessment for {submission_id}")
                     missing_assessment += 1
@@ -118,9 +111,7 @@ class ReviewGuidanceGenerator:
 
                 novelty_assessment = self.load_novelty_assessment(assessment_path)
 
-                prompt = reviewer_summary_prompt.format(
-                    novelty_assessment=novelty_assessment
-                )
+                prompt = reviewer_summary_prompt.format(novelty_assessment=novelty_assessment)
 
                 batch_entry = {
                     "custom_id": f"reviewer-guidance-{submission_id}",
@@ -140,7 +131,7 @@ class ReviewGuidanceGenerator:
                 print(f"Error preparing batch data for {submission_id}: {e}")
 
         print(
-            f"Valid submissions for review guidance: {valid_submissions}/{total_submissions} ({valid_submissions/total_submissions*100:.1f}%)"
+            f"Valid submissions for review guidance: {valid_submissions}/{total_submissions} ({valid_submissions / total_submissions * 100:.1f}%)"
         )
         if missing_assessment > 0:
             print(f"Submissions missing novelty assessment: {missing_assessment}")
@@ -148,10 +139,8 @@ class ReviewGuidanceGenerator:
             print(f"Submissions missing landscape analysis: {missing_landscape}")
 
         os.makedirs("./openai_inputs", exist_ok=True)
-        
-        output_path = os.path.join(
-            "./openai_inputs", "batch_reviewer_guidance_input.jsonl"
-        )
+
+        output_path = os.path.join("./openai_inputs", "batch_reviewer_guidance_input.jsonl")
         with open(output_path, "w", encoding="utf-8") as f:
             for entry in batch_entries:
                 f.write(json.dumps(entry) + "\n")
@@ -279,10 +268,8 @@ class ReviewGuidanceGenerator:
         print(f"Total estimated cost: ${stats['total_cost']:.4f}")
 
         os.makedirs("./openai_outputs", exist_ok=True)
-        
-        summary_path = os.path.join(
-            "./openai_outputs", "reviewer_guidance_processing_summary.json"
-        )
+
+        summary_path = os.path.join("./openai_outputs", "reviewer_guidance_processing_summary.json")
         with open(summary_path, "w") as f:
             json.dump(stats, f, indent=3)
 
@@ -291,74 +278,45 @@ class ReviewGuidanceGenerator:
 
 if __name__ == "__main__":
     import argparse
-    
+
     parser = argparse.ArgumentParser(description="Generate reviewer guidance summaries")
     parser.add_argument(
         "--data-dir",
         type=str,
         default="../../novelty_assessment/data_iclr_all_topics/iclr_compiled_v2",
-        help="Directory containing submission data"
+        help="Directory containing submission data",
     )
+    parser.add_argument("--model", type=str, default="gpt-4.1", help="OpenAI model to use")
     parser.add_argument(
-        "--model",
-        type=str,
-        default="gpt-4.1",
-        help="OpenAI model to use"
-    )
-    parser.add_argument(
-        "--submission-id",
-        type=str,
-        help="Process single submission (for run_guidance_generation)"
+        "--submission-id", type=str, help="Process single submission (for run_guidance_generation)"
     )
     parser.add_argument(
         "--assessment-file",
         type=str,
         default="novelty_delta_analysis.txt",
-        help="Path to novelty assessment file"
+        help="Path to novelty assessment file",
     )
     parser.add_argument(
-        "--output-file",
-        type=str,
-        default="summary.txt",
-        help="Output file for summary"
+        "--output-file", type=str, default="summary.txt", help="Output file for summary"
     )
-    parser.add_argument(
-        "--prepare",
-        action="store_true",
-        help="Prepare batch inference data"
-    )
-    parser.add_argument(
-        "--process",
-        action="store_true",
-        help="Process batch results"
-    )
+    parser.add_argument("--prepare", action="store_true", help="Prepare batch inference data")
+    parser.add_argument("--process", action="store_true", help="Process batch results")
     parser.add_argument(
         "--results-file",
         type=str,
         default="./openai_outputs/batch_reviewer_guidance_output.jsonl",
-        help="Path to batch results file"
+        help="Path to batch results file",
     )
-    
+
     args = parser.parse_args()
-    
+
     generator = ReviewGuidanceGenerator(model_name=args.model)
-    
+
     if args.submission_id:
-        generator.run_guidance_generation(
-            args.data_dir,
-            args.submission_id
-        )
-    
+        generator.run_guidance_generation(args.data_dir, args.submission_id)
+
     if args.prepare:
-        generator.prepare_batch_inference_data(
-            args.data_dir,
-            args.assessment_file,
-            args.model
-        )
-    
+        generator.prepare_batch_inference_data(args.data_dir, args.assessment_file, args.model)
+
     if args.process:
-        generator.process_batch_results(
-            args.data_dir,
-            args.results_file,
-            args.output_file
-        )
+        generator.process_batch_results(args.data_dir, args.results_file, args.output_file)

@@ -1,4 +1,5 @@
 """Full text of prior papers: version pinning, PDF download and parsing."""
+
 import argparse
 import hashlib
 import json
@@ -35,7 +36,6 @@ class FullTextFetcher:
     def __init__(self, grobid_server: str = "http://localhost:8070"):
         self.client = GrobidClient(grobid_server, timeout=180)
         self.parser = EnhancedGrobidParser()
-
 
     @staticmethod
     def _arxiv_id_by_title(title: str) -> str:
@@ -147,8 +147,10 @@ class FullTextFetcher:
                 recorded = (pin or {}).get("doc_sha256")
                 if not pin or (recorded and recorded == self._sha256(dest)):
                     return True
-                logger.info(f"  cached PDF does not match the pinned "
-                            f"{pin.get('version') or 'version'} -- discarding it")
+                logger.info(
+                    f"  cached PDF does not match the pinned "
+                    f"{pin.get('version') or 'version'} -- discarding it"
+                )
                 dest.unlink()
                 self._drop_derived_texts(pdfs_dir.parent, pid)
             else:
@@ -157,11 +159,15 @@ class FullTextFetcher:
         if pin and pin.get("url"):
             ok, detail = self._try_download(pin["url"], dest)
             if ok:
-                logger.info(f"  downloaded [{detail}] <- {pin['url']}  "
-                            f"(pinned {pin.get('version', '?')} of {pin.get('version_date', '?')})")
+                logger.info(
+                    f"  downloaded [{detail}] <- {pin['url']}  "
+                    f"(pinned {pin.get('version', '?')} of {pin.get('version_date', '?')})"
+                )
                 return True
-            logger.info(f"  download FAILED [{detail}] <- {pin['url']}  "
-                        f"(pinned {pin.get('version', '?')}; NOT falling back to the current version)")
+            logger.info(
+                f"  download FAILED [{detail}] <- {pin['url']}  "
+                f"(pinned {pin.get('version', '?')}; NOT falling back to the current version)"
+            )
             return False
 
         urls, doi = [], paper.get("doi")
@@ -215,9 +221,6 @@ class FullTextFetcher:
             logger.info(f"  download FAILED [{detail}] <- {url}")
         return False
 
-
-
-
     def _has_fulltext(self, rwd: Path, pid: str) -> bool:
         return (
             (rwd / "nougat_output" / f"{pid}.mmd").exists()
@@ -232,7 +235,6 @@ class FullTextFetcher:
         pdfs_dir.mkdir(parents=True, exist_ok=True)
         ft_dir.mkdir(parents=True, exist_ok=True)
         return rwd, pdfs_dir, ft_dir
-
 
     VERSIONS_FILE = "versions.json"
 
@@ -284,7 +286,8 @@ class FullTextFetcher:
 
     def _save_versions(self, rwd: Path, data: dict) -> None:
         self._versions_path(rwd).write_text(
-            json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+            json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8"
+        )
 
     @staticmethod
     def _submission_date(data_dir: str, submission_id: str) -> str:
@@ -296,8 +299,9 @@ class FullTextFetcher:
             return ""
         return str(meta.get("publication_date") or meta.get("year") or "")
 
-    def resolve_versions(self, data_dir: str, submission_id: str, paper_ids=None,
-                         force: bool = False) -> dict:
+    def resolve_versions(
+        self, data_dir: str, submission_id: str, paper_ids=None, force: bool = False
+    ) -> dict:
         """Pin each paper to the newest version that is still prior work."""
         sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "retrieval"))
         import paper_versions as pv
@@ -321,17 +325,23 @@ class FullTextFetcher:
             e = manifest.get(pid)
             if not e or not e.get("resolved_at"):
                 return True
-            return (e.get("submission_date") != str(sub_date)
-                    or int(e.get("min_gap_days") or -1) != gap)
+            return (
+                e.get("submission_date") != str(sub_date) or int(e.get("min_gap_days") or -1) != gap
+            )
 
         todo = [pid for pid in paper_ids if force or stale(pid)]
-        requestioned = [pid for pid in todo
-                        if (manifest.get(pid) or {}).get("resolved_at") and not force]
+        requestioned = [
+            pid for pid in todo if (manifest.get(pid) or {}).get("resolved_at") and not force
+        ]
         if requestioned:
-            logger.info(f"cutoff changed since {len(requestioned)} pin(s) were recorded "
-                        f"-- re-resolving them against {sub_date} / {gap}d")
-        logger.info(f"pinning versions against submission date {sub_date} "
-                    f"({len(todo)} to resolve, {len(paper_ids) - len(todo)} already recorded)")
+            logger.info(
+                f"cutoff changed since {len(requestioned)} pin(s) were recorded "
+                f"-- re-resolving them against {sub_date} / {gap}d"
+            )
+        logger.info(
+            f"pinning versions against submission date {sub_date} "
+            f"({len(todo)} to resolve, {len(paper_ids) - len(todo)} already recorded)"
+        )
 
         for i, pid in enumerate(todo, 1):
             rec = by_id.get(pid)
@@ -344,26 +354,37 @@ class FullTextFetcher:
             entry["title"] = rec.get("title", "")
             old = manifest.get(pid) or {}
             if old.get("version") == entry.get("version") and old.get("doc_sha256"):
-                for k in ("doc_sha256", "downloaded_at", "parsed_from_sha256",
-                          "parsed_at", "parsed_text_path", "parsed_text_sha256"):
+                for k in (
+                    "doc_sha256",
+                    "downloaded_at",
+                    "parsed_from_sha256",
+                    "parsed_at",
+                    "parsed_text_path",
+                    "parsed_text_sha256",
+                ):
                     if old.get(k):
                         entry[k] = old[k]
             manifest[pid] = entry
 
             title = rec.get("title", "")[:55]
             if pin.usable:
-                logger.info(f"[ver {i}/{len(todo)}] {pid} {title} -> "
-                            f"{pin.status} {pin.version or '(single)'} {pin.version_date}")
+                logger.info(
+                    f"[ver {i}/{len(todo)}] {pid} {title} -> "
+                    f"{pin.status} {pin.version or '(single)'} {pin.version_date}"
+                )
             else:
-                logger.info(f"[ver {i}/{len(todo)}] {pid} {title} -> {pin.status.upper()}: "
-                            f"{pin.note} (latest {pin.latest_version} {pin.latest_version_date})")
+                logger.info(
+                    f"[ver {i}/{len(todo)}] {pid} {title} -> {pin.status.upper()}: "
+                    f"{pin.note} (latest {pin.latest_version} {pin.latest_version_date})"
+                )
 
         self._save_versions(rwd, manifest)
         self._apply_version_abstracts(rwd, ranked, manifest)
         counts = {}
         for pid in paper_ids:
-            counts[(manifest.get(pid) or {}).get("status", "unrecorded")] = \
+            counts[(manifest.get(pid) or {}).get("status", "unrecorded")] = (
                 counts.get((manifest.get(pid) or {}).get("status", "unrecorded"), 0) + 1
+            )
         logger.info(f"version pinning: {counts}")
         return manifest
 
@@ -380,9 +401,11 @@ class FullTextFetcher:
             return {}
 
         prev = manifest.get(pid) or {}
-        if (prev.get("resolved_at")
-                and prev.get("submission_date") == str(sub_date)
-                and int(prev.get("min_gap_days") or -1) == pv.DEFAULT_MIN_GAP_DAYS):
+        if (
+            prev.get("resolved_at")
+            and prev.get("submission_date") == str(sub_date)
+            and int(prev.get("min_gap_days") or -1) == pv.DEFAULT_MIN_GAP_DAYS
+        ):
             return prev
         pin = pv.resolve_version(record, sub_date)
         entry = pin.to_dict()
@@ -394,12 +417,14 @@ class FullTextFetcher:
             manifest[pid] = entry
             self._save_versions(rwd, manifest)
         if not pin.usable:
-            logger.info(f"[ver] {pid} {record.get('title','')[:55]} -> "
-                        f"{pin.status.upper()}: {pin.note}")
+            logger.info(
+                f"[ver] {pid} {record.get('title', '')[:55]} -> {pin.status.upper()}: {pin.note}"
+            )
         return entry
 
-    def record_pdf_hash(self, data_dir: str, submission_id: str, paper_id: str,
-                        pdf_path: Path) -> str:
+    def record_pdf_hash(
+        self, data_dir: str, submission_id: str, paper_id: str, pdf_path: Path
+    ) -> str:
         """Bind the file now on disk to its manifest entry."""
         rwd, _, _ = self._dirs(data_dir, submission_id)
         with self._MANIFEST_LOCK:
@@ -432,13 +457,14 @@ class FullTextFetcher:
                     changed += 1
             p["abstract_source"] = src or "record"
         (rwd / "ranked_papers.json").write_text(
-            json.dumps(ranked, ensure_ascii=False, indent=1), encoding="utf-8")
+            json.dumps(ranked, ensure_ascii=False, indent=1), encoding="utf-8"
+        )
         if changed:
             logger.info(f"  replaced {changed} abstract(s) with the pinned version's own text")
 
-
-    def download_pdfs(self, data_dir: str, submission_id: str, paper_ids=None,
-                      pin_versions: bool = True) -> dict:
+    def download_pdfs(
+        self, data_dir: str, submission_id: str, paper_ids=None, pin_versions: bool = True
+    ) -> dict:
         """Ensure a PDF is on disk for each target paper. Returns {paper_id: bool}."""
         rwd, pdfs_dir, ft_dir = self._dirs(data_dir, submission_id)
         ranked = json.loads((rwd / "ranked_papers.json").read_text(encoding="utf-8"))
@@ -447,8 +473,7 @@ class FullTextFetcher:
         if paper_ids is None:
             paper_ids = list(by_id)
 
-        manifest = (self.resolve_versions(data_dir, submission_id, paper_ids)
-                    if pin_versions else {})
+        manifest = self.resolve_versions(data_dir, submission_id, paper_ids) if pin_versions else {}
 
         try:
             import progress as _progress
@@ -471,29 +496,35 @@ class FullTextFetcher:
 
             if pin_versions and pin.get("status") not in self.USABLE_STATUSES:
                 results[pid] = False
-                logger.info(f"[dl {idx+1}/{n}] {pid}  {title} -> skipped "
-                            f"({pin.get('status', 'unresolved')}: {pin.get('note', '')})")
+                logger.info(
+                    f"[dl {idx + 1}/{n}] {pid}  {title} -> skipped "
+                    f"({pin.get('status', 'unresolved')}: {pin.get('note', '')})"
+                )
                 continue
 
             if pdf_path.exists() and self._is_valid_pdf(pdf_path):
                 on_disk = pin.get("doc_sha256")
                 if not pin_versions or not pin:
                     results[pid] = True
-                    logger.info(f"[dl {idx+1}/{n}] {pid}  {title} -> already on disk")
+                    logger.info(f"[dl {idx + 1}/{n}] {pid}  {title} -> already on disk")
                     continue
                 if on_disk and on_disk == self._sha256(pdf_path):
                     results[pid] = True
-                    logger.info(f"[dl {idx+1}/{n}] {pid}  {title} -> already on disk "
-                                f"({pin.get('version') or 'single'})")
+                    logger.info(
+                        f"[dl {idx + 1}/{n}] {pid}  {title} -> already on disk "
+                        f"({pin.get('version') or 'single'})"
+                    )
                     continue
-                logger.info(f"[dl {idx+1}/{n}] {pid}  {title} -> cached PDF is not the "
-                            f"pinned {pin.get('version') or 'version'}, re-fetching")
+                logger.info(
+                    f"[dl {idx + 1}/{n}] {pid}  {title} -> cached PDF is not the "
+                    f"pinned {pin.get('version') or 'version'}, re-fetching"
+                )
                 pdf_path.unlink()
                 dropped = self._drop_derived_texts(rwd, pid)
                 if dropped:
                     logger.info(f"  dropped {dropped} stale parsed text(s) with it")
             else:
-                logger.info(f"[dl {idx+1}/{n}] {pid}  {title}")
+                logger.info(f"[dl {idx + 1}/{n}] {pid}  {title}")
 
             t0 = time.time()
             ok = self.ensure_pdf(by_id[pid], pdfs_dir, pin=pin or None)
@@ -503,7 +534,7 @@ class FullTextFetcher:
                 pin["downloaded_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
                 manifest[pid] = pin
             if not ok:
-                logger.info(f"  -> no_pdf (no downloadable PDF found)  [{time.time()-t0:.1f}s]")
+                logger.info(f"  -> no_pdf (no downloadable PDF found)  [{time.time() - t0:.1f}s]")
             time.sleep(1)
         if _progress:
             _progress.report(n, n)
@@ -512,7 +543,6 @@ class FullTextFetcher:
         n_ok = sum(1 for v in results.values() if v)
         logger.info(f"PDF download done: {n_ok}/{n} available on disk")
         return results
-
 
     def parse_one(self, data_dir: str, submission_id: str, paper_id: str) -> str:
         """Parse one downloaded PDF into sectioned full text."""
@@ -547,16 +577,16 @@ class FullTextFetcher:
                     self._save_versions(rwd, manifest)
         except Exception as e:
             logger.info(f"[parse] {paper_id}: could not record provenance ({type(e).__name__})")
-        logger.info(f"[parse] {paper_id} -> ok ({len(text)} chars)  [{time.time()-t0:.1f}s]")
+        logger.info(f"[parse] {paper_id} -> ok ({len(text)} chars)  [{time.time() - t0:.1f}s]")
         return "ok"
-
-
 
     def fetch(self, data_dir: str, submission_id: str, paper_ids=None) -> dict:
         """Download and parse every target paper."""
         rwd, pdfs_dir, ft_dir = self._dirs(data_dir, submission_id)
-        by_id = {p["paper_id"]: p for p in
-                 json.loads((rwd / "ranked_papers.json").read_text(encoding="utf-8"))}
+        by_id = {
+            p["paper_id"]: p
+            for p in json.loads((rwd / "ranked_papers.json").read_text(encoding="utf-8"))
+        }
         if paper_ids is None:
             paper_ids = [pid for pid in by_id if not self._has_fulltext(rwd, pid)]
 
@@ -566,6 +596,7 @@ class FullTextFetcher:
 
         try:
             import progress as _progress
+
             _progress.start_phase("Parsing full text", len(have_pdf))
         except Exception:
             _progress = None
@@ -573,7 +604,9 @@ class FullTextFetcher:
             if _progress:
                 _progress.report(idx, len(have_pdf))
             status = self.parse_one(data_dir, submission_id, pid)
-            results[pid] = f"ok ({(ft_dir / f'{pid}.txt').stat().st_size} chars)" if status == "ok" else status
+            results[pid] = (
+                f"ok ({(ft_dir / f'{pid}.txt').stat().st_size} chars)" if status == "ok" else status
+            )
         if _progress:
             _progress.report(len(have_pdf), len(have_pdf))
 
@@ -587,11 +620,18 @@ class FullTextFetcher:
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Phase 2: fetch full text (PDF download + GROBID) for candidates")
+    ap = argparse.ArgumentParser(
+        description="Phase 2: fetch full text (PDF download + GROBID) for candidates"
+    )
     ap.add_argument("--data-dir", required=True)
     ap.add_argument("--submission-id", required=True)
     ap.add_argument("--server", default="http://localhost:8070")
-    ap.add_argument("--paper-ids", nargs="*", default=None, help="specific paper ids (default: all pool papers lacking full text)")
+    ap.add_argument(
+        "--paper-ids",
+        nargs="*",
+        default=None,
+        help="specific paper ids (default: all pool papers lacking full text)",
+    )
     args = ap.parse_args()
 
     results = FullTextFetcher(args.server).fetch(args.data_dir, args.submission_id, args.paper_ids)

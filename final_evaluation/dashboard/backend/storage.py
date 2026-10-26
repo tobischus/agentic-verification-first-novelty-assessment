@@ -1,4 +1,5 @@
 """Storage backends for asset bytes: local files or Supabase."""
+
 from __future__ import annotations
 
 import hashlib
@@ -32,6 +33,7 @@ class StorageBackend:
 
 class LocalStorage(StorageBackend):
     """Files live under `<LOCAL_ASSET_ROOT>/<study_id>/<asset_id>__<basename>`."""
+
     name = "local"
 
     def __init__(self, root: Path):
@@ -54,6 +56,7 @@ class LocalStorage(StorageBackend):
 
 class SupabaseStorage(StorageBackend):
     """Private Supabase Storage bucket, accessed server-side with the service-role key."""
+
     name = "supabase"
 
     def __init__(self, url: str, service_role_key: str, bucket: str):
@@ -101,13 +104,21 @@ def backend_from_env() -> StorageBackend:
         url = os.getenv("SUPABASE_URL", "")
         key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
         bucket = os.getenv("SUPABASE_BUCKET", "")
-        missing = [n for n, v in (("SUPABASE_URL", url), ("SUPABASE_SERVICE_ROLE_KEY", key),
-                                  ("SUPABASE_BUCKET", bucket)) if not v]
+        missing = [
+            n
+            for n, v in (
+                ("SUPABASE_URL", url),
+                ("SUPABASE_SERVICE_ROLE_KEY", key),
+                ("SUPABASE_BUCKET", bucket),
+            )
+            if not v
+        ]
         if missing:
             raise RuntimeError(
                 f"STORAGE_BACKEND=supabase but missing: {', '.join(missing)} -- "
                 "set these in the environment (Render secret settings in the cloud, "
-                ".env locally). Local development can use STORAGE_BACKEND=local instead.")
+                ".env locally). Local development can use STORAGE_BACKEND=local instead."
+            )
         return SupabaseStorage(url, key, bucket)
     root = Path(os.getenv("LOCAL_ASSET_ROOT", "final_evaluation/private/assets"))
     return LocalStorage(root)

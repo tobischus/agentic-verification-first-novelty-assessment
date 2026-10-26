@@ -31,9 +31,18 @@ export default function App() {
 
   useEffect(() => {
     refreshMe().then((d) => {
-      if (!d) { setView('login'); return }
-      if (d.role === 'admin') { setView('admin'); return }
-      if (!d.consented) { setView('instructions'); return }
+      if (!d) {
+        setView('login')
+        return
+      }
+      if (d.role === 'admin') {
+        setView('admin')
+        return
+      }
+      if (!d.consented) {
+        setView('instructions')
+        return
+      }
       const s = window.history.state
       if (s && s.view === 'rate' && s.assignmentId) {
         setActiveAssignmentId(s.assignmentId)
@@ -53,14 +62,20 @@ export default function App() {
     setView(next)
     if (extra.assignmentId !== undefined) setActiveAssignmentId(extra.assignmentId)
     if (extra.paperId !== undefined) setActivePaperId(extra.paperId)
-    window.history.pushState({ view: next, assignmentId: extra.assignmentId ?? null,
-                               paperId: extra.paperId ?? null }, '')
+    window.history.pushState(
+      { view: next, assignmentId: extra.assignmentId ?? null, paperId: extra.paperId ?? null },
+      '',
+    )
   }, [])
 
   useEffect(() => {
     const onPop = (e) => {
       const s = e.state
-      if (s) { setView(s.view); setActiveAssignmentId(s.assignmentId ?? null); setActivePaperId(s.paperId ?? null) }
+      if (s) {
+        setView(s.view)
+        setActiveAssignmentId(s.assignmentId ?? null)
+        setActivePaperId(s.paperId ?? null)
+      }
     }
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
@@ -73,7 +88,9 @@ export default function App() {
 
   const onLogout = async () => {
     const pid = me?.participant_id
-    try { await api.logout() } catch {  }
+    try {
+      await api.logout()
+    } catch {}
     if (pid) await clearAllForParticipant(pid)
     setMe(null)
     go('login')
@@ -84,10 +101,24 @@ export default function App() {
   return (
     <div className="fe-app">
       {me?.is_pilot && <div className="fe-pilot-banner">{PILOT_BANNER}</div>}
-      {err && <div className="fe-error-bar">{err} <button className="link" onClick={() => setErr('')}>dismiss</button></div>}
+      {err && (
+        <div className="fe-error-bar">
+          {err}{' '}
+          <button className="link" onClick={() => setErr('')}>
+            dismiss
+          </button>
+        </div>
+      )}
       {view === 'login' && <Login onLoggedIn={onLoggedIn} />}
       {view === 'instructions' && me && (
-        <Instructions me={me} onConsented={() => { refreshMe(); go('tasks') }} onLogout={onLogout} />
+        <Instructions
+          me={me}
+          onConsented={() => {
+            refreshMe()
+            go('tasks')
+          }}
+          onLogout={onLogout}
+        />
       )}
       {view === 'tasks' && me && (
         <TaskList

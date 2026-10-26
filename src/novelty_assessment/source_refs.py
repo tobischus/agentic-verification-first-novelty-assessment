@@ -1,4 +1,5 @@
 """The short id ("R7") a prior paper carries throughout one report."""
+
 from pathlib import Path
 from typing import Iterable, Optional
 

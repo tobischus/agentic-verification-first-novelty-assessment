@@ -8,13 +8,17 @@ export default function Login({ onLoggedIn }) {
 
   const submit = async (e) => {
     e.preventDefault()
-    setBusy(true); setErr('')
+    setBusy(true)
+    setErr('')
     try {
       await api.login(code.trim())
       onLoggedIn()
     } catch (e2) {
-      setErr(e2.status === 429 ? 'Too many attempts. Please wait a few minutes and try again.'
-        : 'Invalid access code.')
+      setErr(
+        e2.status === 429
+          ? 'Too many attempts. Please wait a few minutes and try again.'
+          : 'Invalid access code.',
+      )
     } finally {
       setBusy(false)
     }
@@ -26,12 +30,18 @@ export default function Login({ onLoggedIn }) {
         <h1>Study access</h1>
         <label htmlFor="code">Access code</label>
         <input
-          id="code" type="text" autoComplete="off" autoFocus
-          value={code} onChange={(e) => setCode(e.target.value)}
+          id="code"
+          type="text"
+          autoComplete="off"
+          autoFocus
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
           placeholder="e.g. R01-…"
         />
         {err && <div className="fe-form-error">{err}</div>}
-        <button type="submit" disabled={busy || !code.trim()}>{busy ? 'Checking…' : 'Continue'}</button>
+        <button type="submit" disabled={busy || !code.trim()}>
+          {busy ? 'Checking…' : 'Continue'}
+        </button>
       </form>
     </div>
   )

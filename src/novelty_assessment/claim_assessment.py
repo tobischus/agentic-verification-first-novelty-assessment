@@ -1,4 +1,5 @@
 """Claim explanations: why each claim received its verdict."""
+
 import argparse
 import hashlib
 import json
@@ -73,87 +74,132 @@ def _check_phrase(c: dict) -> str:
     if status == "material":
         pds = (c.get("evidence_check") or {}).get("proposed_degree_supported")
         if vd.degree(c) in vd.OVERLAP_DEGREES:
-            return ("material evidence; the proposed level is CONFIRMED" if pds is True else
-                    "material evidence, but the evidence check did NOT support the proposed "
-                    "level (NOT established at this level)")
+            return (
+                "material evidence; the proposed level is CONFIRMED"
+                if pds is True
+                else "material evidence, but the evidence check did NOT support the proposed "
+                "level (NOT established at this level)"
+            )
         return "material evidence of a shared element (no overlap level was proposed)"
     if status == "nonmaterial":
         return "the examined passages did not establish a shared element (NOT established)"
     return "evidence check inconclusive (NOT established)"
 
 
-def build_claim_findings(entry: dict, claim_no: int, claim_text: str, verdict: str,
-                         refs: dict) -> str:
+def build_claim_findings(
+    entry: dict, claim_no: int, claim_text: str, verdict: str, refs: dict
+) -> str:
     """What the model sees for one claim: recorded results only, no traces, no quotes."""
     comparisons = entry.get("comparisons") or []
-    details = sorted((c for c in comparisons if vd.is_overlap(c) or vd.conflicts(c)),
-                     key=vd.sort_key)
+    details = sorted(
+        (c for c in comparisons if vd.is_overlap(c) or vd.conflicts(c)), key=vd.sort_key
+    )
     rest = [c for c in comparisons if c not in details]
-    ref = lambda c: refs.get(source_refs.paper_id(c), "R?")
 
-    out = [f"## Claim {claim_no}", f"Claimed contribution: {_txt(claim_text)}",
-           f"FIXED VERDICT: {vd.verdict_label(verdict)}",
-           f"Comparisons recorded as anticipating (challenging) this claim: "
-           + (", ".join(ref(c) for c in comparisons if vd.challenges(c)) or "none"),
-           f"Prior papers compared for this claim: {len(comparisons)}", ""]
-    confirmed = [c for c in details if vd.degree(c) in vd.OVERLAP_DEGREES and vd.degree_confirmed(c)]
+    def ref(c):
+        return refs.get(source_refs.paper_id(c), "R?")
+
+    out = [
+        f"## Claim {claim_no}",
+        f"Claimed contribution: {_txt(claim_text)}",
+        f"FIXED VERDICT: {vd.verdict_label(verdict)}",
+        "Comparisons recorded as anticipating (challenging) this claim: "
+        + (", ".join(ref(c) for c in comparisons if vd.challenges(c)) or "none"),
+        f"Prior papers compared for this claim: {len(comparisons)}",
+        "",
+    ]
+    confirmed = [
+        c for c in details if vd.degree(c) in vd.OVERLAP_DEGREES and vd.degree_confirmed(c)
+    ]
     by_level = {}
     for c in confirmed:
         by_level[vd.degree(c)] = by_level.get(vd.degree(c), 0) + 1
-    unconfirmed = [c for c in details if vd.degree(c) in vd.OVERLAP_DEGREES
-                   and not vd.degree_confirmed(c) and not vd.conflicts(c)]
+    unconfirmed = [
+        c
+        for c in details
+        if vd.degree(c) in vd.OVERLAP_DEGREES and not vd.degree_confirmed(c) and not vd.conflicts(c)
+    ]
     conflicting = [c for c in details if vd.conflicts(c)]
     rest_levels = {}
     for c in rest:
-        rest_levels[vd.degree(c) or "not recorded"] = rest_levels.get(vd.degree(c) or "not recorded", 0) + 1
-    out += ["## COUNTS (exact -- use these numbers, never count yourself)", "",
-            f"- detailed comparisons: {len(details)}",
-            *(f"- confirmed {d} overlap: {n}" for d, n in
-              sorted(by_level.items(), key=lambda kv: vd.degree_rank(kv[0]))),
-            f"- proposed overlap NOT established (level not supported, check inconclusive or "
-            f"missing): {len(unconfirmed)}",
-            f"- conflicts between level and evidence check: {len(conflicting)}",
-            f"- other comparisons (no detailed section): {len(rest)}"
-            + (" (" + ", ".join(f"{n} {d}" for d, n in sorted(
-                rest_levels.items(), key=lambda kv: vd.degree_rank(kv[0]))) + ")" if rest else ""),
-            ""]
+        rest_levels[vd.degree(c) or "not recorded"] = (
+            rest_levels.get(vd.degree(c) or "not recorded", 0) + 1
+        )
+    out += [
+        "## COUNTS (exact -- use these numbers, never count yourself)",
+        "",
+        f"- detailed comparisons: {len(details)}",
+        *(
+            f"- confirmed {d} overlap: {n}"
+            for d, n in sorted(by_level.items(), key=lambda kv: vd.degree_rank(kv[0]))
+        ),
+        f"- proposed overlap NOT established (level not supported, check inconclusive or "
+        f"missing): {len(unconfirmed)}",
+        f"- conflicts between level and evidence check: {len(conflicting)}",
+        f"- other comparisons (no detailed section): {len(rest)}"
+        + (
+            " ("
+            + ", ".join(
+                f"{n} {d}"
+                for d, n in sorted(rest_levels.items(), key=lambda kv: vd.degree_rank(kv[0]))
+            )
+            + ")"
+            if rest
+            else ""
+        ),
+        "",
+    ]
     out += ["## DETAILED COMPARISONS (strongest first)", ""]
     if not details:
-        out += ["None. No comparison for this claim reached partial overlap or recorded a "
-                "conflict between its level and its evidence check.", ""]
+        out += [
+            "None. No comparison for this claim reached partial overlap or recorded a "
+            "conflict between its level and its evidence check.",
+            "",
+        ]
     for c in details:
         out.append(f"- {ref(c)} — {_txt(c.get('title')) or 'Untitled prior work'}")
         out.append(f"  Recorded overlap level: {vd.degree(c) or 'not recorded'}")
         out.append(f"  Evidence check: {_check_phrase(c)}")
         if vd.conflicts(c):
             if vd.degree(c) in vd.OVERLAP_DEGREES:
-                out.append(f"  CONFLICT: the recorded level ({vd.degree(c)}) was not borne out -- "
-                           "the examined passages did not establish a shared element. The "
-                           "disagreement is unresolved; the overlap is NOT established.")
+                out.append(
+                    f"  CONFLICT: the recorded level ({vd.degree(c)}) was not borne out -- "
+                    "the examined passages did not establish a shared element. The "
+                    "disagreement is unresolved; the overlap is NOT established."
+                )
             else:
-                out.append(f"  CONFLICT: the recorded level ({vd.degree(c) or 'none'}) is LOWER "
-                           "than what the evidence check found -- it found material evidence of "
-                           "a shared element. The disagreement is unresolved: neither the "
-                           "recorded level nor a higher one is established.")
-        for label, key in (("Shared contribution", "what_is_shared"),
-                           ("Reported difference", "submission_delta")):
+                out.append(
+                    f"  CONFLICT: the recorded level ({vd.degree(c) or 'none'}) is LOWER "
+                    "than what the evidence check found -- it found material evidence of "
+                    "a shared element. The disagreement is unresolved: neither the "
+                    "recorded level nor a higher one is established."
+                )
+        for label, key in (
+            ("Shared contribution", "what_is_shared"),
+            ("Reported difference", "submission_delta"),
+        ):
             if c.get(key):
                 out.append(f"  {label}: {_txt(c[key])}")
         note = c.get("assessment") or c.get("brief_note")
         if note:
             out.append(f"  Novelty argument: {_txt(note)}")
-        q = (c.get("evidence_check") or {}).get("unresolved_question") or c.get("unresolved_deficit")
+        q = (c.get("evidence_check") or {}).get("unresolved_question") or c.get(
+            "unresolved_deficit"
+        )
         if q:
             out.append(f"  Open question recorded by the evidence check: {_txt(q)}")
         out.append("")
     if rest:
         inconclusive = sum(1 for c in rest if vd.evidence_status(c) == "insufficient")
         unchecked = sum(1 for c in rest if not vd.evidence_status(c))
-        out += ["## OTHER COMPARISONS (no detailed section; numbers in COUNTS)", "",
-                f"- of these, evidence check inconclusive: {inconclusive}",
-                f"- of these, no evidence check recorded: {unchecked}", ""]
+        out += [
+            "## OTHER COMPARISONS (no detailed section; numbers in COUNTS)",
+            "",
+            f"- of these, evidence check inconclusive: {inconclusive}",
+            f"- of these, no evidence check recorded: {unchecked}",
+            "",
+        ]
     return "\n".join(out).rstrip() + "\n"
-
 
 
 def fingerprint(findings: str) -> str:
@@ -170,9 +216,11 @@ def is_stale(stored: Optional[dict], findings: str) -> bool:
     return stored.get("inputs_fingerprint") != fingerprint(findings)
 
 
-
-_NEG = re.compile(r"\b(not|no|never|without|nor|un(?:supported|confirmed|resolved)|"
-                  r"inconclusive|did not|does not|was not|were not)\b", re.I)
+_NEG = re.compile(
+    r"\b(not|no|never|without|nor|un(?:supported|confirmed|resolved)|"
+    r"inconclusive|did not|does not|was not|were not)\b",
+    re.I,
+)
 
 
 def consistency_problems(text: str, entry: dict, verdict: str, refs: dict) -> List[str]:
@@ -183,40 +231,56 @@ def consistency_problems(text: str, entry: dict, verdict: str, refs: dict) -> Li
     cited = set(re.findall(r"\bR\d+\b", text))
     unknown = sorted(cited - set(by_ref), key=lambda r: int(r[1:]))
     if unknown:
-        problems.append(f"Source id(s) {', '.join(unknown)} are not among this claim's "
-                        f"comparisons. Use only ids from FINDINGS.")
+        problems.append(
+            f"Source id(s) {', '.join(unknown)} are not among this claim's "
+            f"comparisons. Use only ids from FINDINGS."
+        )
     if len(cited & set(by_ref)) > 5:
-        problems.append(f"The text names {len(cited & set(by_ref))} source ids; name at most "
-                        "three decisive ones and give the others as a count.")
+        problems.append(
+            f"The text names {len(cited & set(by_ref))} source ids; name at most "
+            "three decisive ones and give the others as a count."
+        )
     words = len(text.split())
     if not WORDS_LO <= words <= WORDS_HI:
         problems.append(f"The text has {words} words; it must have {WORDS_LO}-{WORDS_HI}.")
     if re.search(r"\bnovel\b", text, re.I) and not re.search(r"\bnovelty\b", text, re.I):
         problems.append("Do not call the claim novel.")
     if verdict == "not_challenged" and re.search(
-            r"\b(is|are|was|were)\s+(anticipated|challenged|refuted)\b", text, re.I):
-        for m in re.finditer(r"[^.]*\b(is|are|was|were)\s+(anticipated|challenged|refuted)\b[^.]*\.",
-                             text, re.I):
+        r"\b(is|are|was|were)\s+(anticipated|challenged|refuted)\b", text, re.I
+    ):
+        for m in re.finditer(
+            r"[^.]*\b(is|are|was|were)\s+(anticipated|challenged|refuted)\b[^.]*\.", text, re.I
+        ):
             if not _NEG.search(m.group(0)):
-                problems.append("The verdict is 'not challenged'; do not state that the claim "
-                                f"is anticipated or challenged: \"{m.group(0).strip()}\"")
+                problems.append(
+                    "The verdict is 'not challenged'; do not state that the claim "
+                    f'is anticipated or challenged: "{m.group(0).strip()}"'
+                )
     for sentence in re.split(r"(?<=[.;])\s+", text):
         ids = set(re.findall(r"\bR\d+\b", sentence)) & set(by_ref)
         if len(ids) != 1:
             continue
         c = by_ref[next(iter(ids))]
         confirmed = vd.degree_confirmed(c)
-        if not confirmed and vd.degree(c) in vd.OVERLAP_DEGREES and \
-                re.search(r"\bconfirmed\b", sentence, re.I) and not _NEG.search(sentence):
-            problems.append(f"{next(iter(ids))}'s proposed level was NOT confirmed by the "
-                            f"evidence check, but this sentence calls it confirmed: "
-                            f"\"{sentence.strip()}\"")
-        if confirmed and re.search(r"\b(unsupported|not (?:been )?(?:supported|confirmed))\b",
-                                   sentence, re.I):
-            problems.append(f"{next(iter(ids))}'s level WAS confirmed, but this sentence "
-                            f"calls it unsupported: \"{sentence.strip()}\"")
+        if (
+            not confirmed
+            and vd.degree(c) in vd.OVERLAP_DEGREES
+            and re.search(r"\bconfirmed\b", sentence, re.I)
+            and not _NEG.search(sentence)
+        ):
+            problems.append(
+                f"{next(iter(ids))}'s proposed level was NOT confirmed by the "
+                f"evidence check, but this sentence calls it confirmed: "
+                f'"{sentence.strip()}"'
+            )
+        if confirmed and re.search(
+            r"\b(unsupported|not (?:been )?(?:supported|confirmed))\b", sentence, re.I
+        ):
+            problems.append(
+                f"{next(iter(ids))}'s level WAS confirmed, but this sentence "
+                f'calls it unsupported: "{sentence.strip()}"'
+            )
     return problems
-
 
 
 def _load(path: Path):
@@ -230,6 +294,7 @@ def contexts_for(data_dir: str, submission_id: str, variant: str = ""):
     """[(claim_id, claim_no, entry, verdict, findings)], b_path, artifact_b, refs."""
     from source_refs import variant_path
     import paper_synthesis
+
     sub_dir = Path(data_dir) / submission_id
     a = _load(variant_path(sub_dir, submission_id, "artifact_a", variant))
     b_path = variant_path(sub_dir, submission_id, "artifact_b", variant)
@@ -241,7 +306,9 @@ def contexts_for(data_dir: str, submission_id: str, variant: str = ""):
     a_by = {e.get("claim_id"): e for e in a.get("claims", [])}
     b_by = {v.get("claim_id"): v for v in b.get("per_claim", [])}
     claims_doc = _load(sub_dir / f"{submission_id}_claims.json") or {}
-    texts = {c["id"]: c.get("claim_text") for c in claims_doc.get("claims", []) or [] if c.get("id")}
+    texts = {
+        c["id"]: c.get("claim_text") for c in claims_doc.get("claims", []) or [] if c.get("id")
+    }
     out = []
     for i, cid in enumerate(order, 1):
         entry = a_by[cid]
@@ -255,12 +322,16 @@ class ClaimAssessor:
     def __init__(self, model_name: str = "gpt-4.1", temperature: float = 0.0):
         from langchain_openai import ChatOpenAI
         from dotenv import load_dotenv
+
         load_dotenv()
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise ValueError("OPENAI_API_KEY environment variable is not set")
-        self.effort = (os.getenv("NOVELTY_CONCLUSION_EFFORT", "low")
-                       if model_name.startswith(("gpt-5", "o1", "o3", "o4")) else None)
+        self.effort = (
+            os.getenv("NOVELTY_CONCLUSION_EFFORT", "low")
+            if model_name.startswith(("gpt-5", "o1", "o3", "o4"))
+            else None
+        )
         kw = {"reasoning_effort": self.effort} if self.effort else {"temperature": temperature}
         self.model_name = model_name
         self.llm = ChatOpenAI(model_name=model_name, api_key=api_key, **kw)
@@ -271,8 +342,11 @@ class ClaimAssessor:
         return " ".join(str(msg.content or "").split()), usage
 
     def assess(self, findings: str, entry: dict, verdict: str, refs: dict) -> dict:
-        prompt = (CLAIM_ASSESSMENT_PROMPT.replace("{lo}", str(WORDS_LO))
-                  .replace("{hi}", str(WORDS_HI)).replace("{findings}", findings))
+        prompt = (
+            CLAIM_ASSESSMENT_PROMPT.replace("{lo}", str(WORDS_LO))
+            .replace("{hi}", str(WORDS_HI))
+            .replace("{findings}", findings)
+        )
         text, usage = self._invoke(prompt)
         problems = consistency_problems(text, entry, verdict, refs)
         revised = False
@@ -281,7 +355,8 @@ class ClaimAssessor:
             text2, usage2 = self._invoke(
                 prompt + "\n\n# YOUR PREVIOUS ANSWER\n" + text + "\n\n# REVISION\n"
                 "Rewrite it. Fix exactly these problems and change nothing else:\n- "
-                + "\n- ".join(problems))
+                + "\n- ".join(problems)
+            )
             problems2 = consistency_problems(text2, entry, verdict, refs)
             if len(problems2) <= len(problems):
                 text, problems = text2, problems2
@@ -299,15 +374,23 @@ class ClaimAssessor:
             "reasoning_effort": self.effort,
             "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "inputs_fingerprint": fingerprint(findings),
-            "usage": {"prompt_tokens": usage.get("input_tokens"),
-                      "completion_tokens": usage.get("output_tokens")},
+            "usage": {
+                "prompt_tokens": usage.get("input_tokens"),
+                "completion_tokens": usage.get("output_tokens"),
+            },
         }
 
 
-def build(data_dir: str, submission_id: str, variant: str = "",
-          model_name: str = "gpt-4.1", workers: int = 6) -> List[dict]:
+def build(
+    data_dir: str,
+    submission_id: str,
+    variant: str = "",
+    model_name: str = "gpt-4.1",
+    workers: int = 6,
+) -> List[dict]:
     """Generate the assessment of every claim and store it in Artifact B."""
     from concurrent.futures import ThreadPoolExecutor
+
     contexts, b_path, b, refs = contexts_for(data_dir, submission_id, variant)
     assessor = ClaimAssessor(model_name=model_name)
     with ThreadPoolExecutor(max_workers=workers) as pool:
@@ -326,8 +409,11 @@ def main():
     ap.add_argument("--submission-id", required=True)
     ap.add_argument("--variant", default="")
     ap.add_argument("--model", default="gpt-4.1")
-    ap.add_argument("--check", action="store_true",
-                    help="print the findings and staleness per claim; NO model call")
+    ap.add_argument(
+        "--check",
+        action="store_true",
+        help="print the findings and staleness per claim; NO model call",
+    )
     args = ap.parse_args()
     if args.check:
         contexts, _p, b, _refs = contexts_for(args.data_dir, args.submission_id, args.variant)

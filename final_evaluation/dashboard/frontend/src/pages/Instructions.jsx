@@ -13,21 +13,30 @@ export default function Instructions({ me, onConsented, onLogout }) {
   const [err, setErr] = useState('')
 
   useEffect(() => {
-    fetch('/instructions.txt', { cache: 'no-store' }).then((r) => r.text()).then(async (t) => {
-      setText(t)
-      const enc = new TextEncoder().encode(t)
-      const digest = await crypto.subtle.digest('SHA-256', enc)
-      setSha(Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join(''))
-    })
+    fetch('/instructions.txt', { cache: 'no-store' })
+      .then((r) => r.text())
+      .then(async (t) => {
+        setText(t)
+        const enc = new TextEncoder().encode(t)
+        const digest = await crypto.subtle.digest('SHA-256', enc)
+        setSha(
+          Array.from(new Uint8Array(digest))
+            .map((b) => b.toString(16).padStart(2, '0'))
+            .join(''),
+        )
+      })
   }, [])
 
   const submit = async () => {
     if (!understood || !agree || !experience || !involvement) return
-    setBusy(true); setErr('')
+    setBusy(true)
+    setErr('')
     try {
       await api.consent({
-        accept: true, instructions_sha256: sha,
-        review_experience: experience, system_involvement: involvement,
+        accept: true,
+        instructions_sha256: sha,
+        review_experience: experience,
+        system_involvement: involvement,
         system_involvement_note: involvementNote,
       })
       onConsented()
@@ -45,18 +54,22 @@ export default function Instructions({ me, onConsented, onLogout }) {
         <pre className="fe-instructions-text">{text || 'Loading…'}</pre>
 
         <div className="fe-practice-note">
-          How it works: for each paper you first read (or skim) the submission, then
-          compare its reports in that paper's comparison tasks. Your answers are saved as
-          you go; you can stop at any time and continue later with the same access code.
+          How it works: for each paper you first read (or skim) the submission, then compare its
+          reports in that paper's comparison tasks. Your answers are saved as you go; you can stop
+          at any time and continue later with the same access code.
         </div>
 
         <label className="fe-checkbox">
-          <input type="checkbox" checked={understood} onChange={(e) => setUnderstood(e.target.checked)} />
+          <input
+            type="checkbox"
+            checked={understood}
+            onChange={(e) => setUnderstood(e.target.checked)}
+          />
           I have read and understood the instructions above.
         </label>
         <label className="fe-checkbox">
-          <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
-          I agree that my pseudonymised ratings may be used for this master's thesis research.
+          <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} />I
+          agree that my pseudonymised ratings may be used for this master's thesis research.
         </label>
 
         <div className="fe-field">
@@ -78,15 +91,23 @@ export default function Instructions({ me, onConsented, onLogout }) {
             <option value="prefer_not">Prefer not to say</option>
           </select>
           {involvement === 'yes' && (
-            <textarea placeholder="Optional note (kept private, not shown to other participants)"
-                     value={involvementNote} onChange={(e) => setInvolvementNote(e.target.value)} />
+            <textarea
+              placeholder="Optional note (kept private, not shown to other participants)"
+              value={involvementNote}
+              onChange={(e) => setInvolvementNote(e.target.value)}
+            />
           )}
         </div>
 
         {err && <div className="fe-form-error">{err}</div>}
         <div className="fe-actions">
-          <button className="secondary" onClick={onLogout}>Log out</button>
-          <button disabled={busy || !understood || !agree || !experience || !involvement} onClick={submit}>
+          <button className="secondary" onClick={onLogout}>
+            Log out
+          </button>
+          <button
+            disabled={busy || !understood || !agree || !experience || !involvement}
+            onClick={submit}
+          >
             {busy ? 'Saving…' : 'Continue'}
           </button>
         </div>

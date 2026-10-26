@@ -34,11 +34,16 @@ export default function StudyPdfPane({ url, highlights = [], focusId, onFocusCha
             type="text"
             placeholder="Search in this PDF…"
             value={query}
-            onChange={(e) => { setQuery(e.target.value); setSearchId(null) }}
+            onChange={(e) => {
+              setQuery(e.target.value)
+              setSearchId(null)
+            }}
           />
           <button type="submit">Find</button>
         </form>
-        <button type="button" className="link" onClick={toggleFullscreen}>⛶ Fullscreen</button>
+        <button type="button" className="link" onClick={toggleFullscreen}>
+          ⛶ Fullscreen
+        </button>
       </div>
       <PdfViewer key={url} url={url} highlights={effectiveHighlights} focusId={effectiveFocus} />
     </div>

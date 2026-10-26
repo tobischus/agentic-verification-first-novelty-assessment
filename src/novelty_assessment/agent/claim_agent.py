@@ -5,6 +5,7 @@ evidence gate (evidence map, verbatim and ownership checks, evidence check). A f
 check sends the paper back to reading once. The claim verdict follows from the settled
 assessments (Section 3.5).
 """
+
 import hashlib
 import json
 import os
@@ -83,48 +84,52 @@ def _usd(model: str, prompt_tokens: int, completion_tokens: int) -> float:
 
 class _SectionPick(BaseModel):
     """The sections whose FULL text should be loaded (chosen by what each is about)."""
-    sections: List[str] = Field(description="exact section titles to read in full, most relevant first")
-    why: str = Field(default="", description="what these sections are expected to show, in one sentence")
+
+    sections: List[str] = Field(
+        description="exact section titles to read in full, most relevant first"
+    )
+    why: str = Field(
+        default="", description="what these sections are expected to show, in one sentence"
+    )
 
 
 class _PaperAction(BaseModel):
     """One adaptive reading action proposed by the per-paper agent."""
 
-    tool: str = Field(
-        description="read_more | propose_dismissal | propose_compare"
-    )
+    tool: str = Field(description="read_more | propose_dismissal | propose_compare")
     sections: List[str] = Field(
         default_factory=list,
         description="for read_more: the [S#] handles of unread sections to open, exactly "
-                    "as the menu prints them (e.g. S4). A title is accepted only if it "
-                    "matches the menu exactly."
+        "as the menu prints them (e.g. S4). A title is accepted only if it "
+        "matches the menu exactly.",
     )
     suspected_deficit: str = Field(
-        default="",
-        description="the specific unresolved question or refinement objective, if any"
+        default="", description="the specific unresolved question or refinement objective, if any"
     )
     why: str = Field(
-        default="",
-        description="one or two sentences explaining why this is the best next action"
+        default="", description="one or two sentences explaining why this is the best next action"
     )
 
 
 class _Segment(BaseModel):
-    kind: str = Field(description='"text" for your own prose, "quote" for a VERBATIM span copied character-for-character from the source')
-    content: str = Field(description="the prose, or ONE contiguous verbatim quote -- never spans joined by an ellipsis (no [Section] tag, no quotation marks)")
+    kind: str = Field(
+        description='"text" for your own prose, "quote" for a VERBATIM span copied character-for-character from the source'
+    )
+    content: str = Field(
+        description="the prose, or ONE contiguous verbatim quote -- never spans joined by an ellipsis (no [Section] tag, no quotation marks)"
+    )
 
 
 class _Realization(BaseModel):
     """A flowing explanation built from prose + verbatim quote segments, in reading order."""
+
     segments: List[_Segment] = Field(default_factory=list)
 
 
 class _SectionComparison(BaseModel):
     """Semantic comparison only. Evidence is produced and verified later."""
 
-    paper_realization: List[_Segment] = Field(
-        default_factory=list
-    )
+    paper_realization: List[_Segment] = Field(default_factory=list)
 
     overlap_degree: str = Field(
         description=(
@@ -383,7 +388,7 @@ def _resolve_sections(requested, menu: List[dict], ids: dict):
     by_id = {v.casefold(): k for k, v in ids.items()}
     by_title = {" ".join(m["name"].split()).casefold(): m["name"] for m in menu}
     names, unresolved = [], []
-    for raw in (requested or []):
+    for raw in requested or []:
         tok = str(raw or "").strip().strip("[]").strip()
         if not tok:
             continue
@@ -392,8 +397,7 @@ def _resolve_sections(requested, menu: List[dict], ids: dict):
         hit = by_id.get(lead.group(1)) if lead else None
         hit = hit or by_id.get(key) or by_title.get(key)
         if hit is None:
-            tail = [n for t, n in by_title.items()
-                    if t.endswith("> " + key) or t.endswith(key)]
+            tail = [n for t, n in by_title.items() if t.endswith("> " + key) or t.endswith(key)]
             hit = tail[0] if len(tail) == 1 else None
         if hit is None:
             unresolved.append(tok)
@@ -404,10 +408,15 @@ def _resolve_sections(requested, menu: List[dict], ids: dict):
 
 def _fmt_sections_menu(menu: List[dict], ids: dict) -> str:
     """Section menu with handle, title, preview and size per line."""
-    return "\n".join(
-        f"- [{ids[m['name']]}] {m['name']} :: {m.get('preview','')[:160]} "
-        f":: ~{m.get('chars',0)} chars"
-        for m in menu if m["name"] in ids) or "(no sections)"
+    return (
+        "\n".join(
+            f"- [{ids[m['name']]}] {m['name']} :: {m.get('preview', '')[:160]} "
+            f":: ~{m.get('chars', 0)} chars"
+            for m in menu
+            if m["name"] in ids
+        )
+        or "(no sections)"
+    )
 
 
 def _fmt_sections_full(sections: List[dict], max_total: int = 24000) -> str:
@@ -486,9 +495,14 @@ class ClaimNoveltyAgent:
             key = (model, effort)
             if key not in _llm_cache:
                 is_reasoning = model.startswith(("gpt-5", "o1", "o3", "o4"))
-                kw = ({"reasoning_effort": effort} if is_reasoning else {"temperature": 0.0})
-                _llm_cache[key] = ChatOpenAI(model_name=model, api_key=api_key,
-                                             max_retries=max_retries, timeout=timeout, **kw)
+                kw = {"reasoning_effort": effort} if is_reasoning else {"temperature": 0.0}
+                _llm_cache[key] = ChatOpenAI(
+                    model_name=model,
+                    api_key=api_key,
+                    max_retries=max_retries,
+                    timeout=timeout,
+                    **kw,
+                )
             return _llm_cache[key]
 
         def role_llm(env_model: str, env_effort: str, default_effort: str) -> ChatOpenAI:
@@ -506,8 +520,10 @@ class ClaimNoveltyAgent:
 
     @staticmethod
     def _claim_str(claim: dict) -> str:
-        return (f"{claim.get('name','')} — {claim.get('claim_text','')} "
-                f"({claim.get('description','')})").strip()
+        return (
+            f"{claim.get('name', '')} — {claim.get('claim_text', '')} "
+            f"({claim.get('description', '')})"
+        ).strip()
 
     def _new_run_log(self, claim: dict):
         """Run log with the configuration this claim run is started under."""
@@ -526,15 +542,19 @@ class ClaimNoveltyAgent:
 
         try:
             sub_meta = json.loads(
-                (Path(self.data_dir) / self.submission_id /
-                 f"{self.submission_id}.json").read_text(encoding="utf-8"))
+                (Path(self.data_dir) / self.submission_id / f"{self.submission_id}.json").read_text(
+                    encoding="utf-8"
+                )
+            )
         except Exception:
             sub_meta = {}
 
         import sys as _sys
+
         _sys.path.insert(0, str(repo_root / "src" / "retrieval"))
         try:
             import paper_versions as pv
+
             gap = pv.DEFAULT_MIN_GAP_DAYS
         except Exception:
             gap = None
@@ -542,16 +562,24 @@ class ClaimNoveltyAgent:
         log.config = {
             "git": rl.git_commit(
                 repo_root,
-                save_diff_to=(Path(self.data_dir) / self.submission_id / "run_logs"
-                              / f"{claim.get('id', 'claim')}_{log.run_id}.diff")),
+                save_diff_to=(
+                    Path(self.data_dir)
+                    / self.submission_id
+                    / "run_logs"
+                    / f"{claim.get('id', 'claim')}_{log.run_id}.diff"
+                ),
+            ),
             "agent_model_default": self.model_name,
             "roles": {
-                "reading": role_cfg("reading", "NOVELTY_READING_MODEL",
-                                    "NOVELTY_READING_EFFORT", "low"),
-                "compare": role_cfg("compare", "NOVELTY_COMPARE_MODEL",
-                                    "NOVELTY_COMPARE_EFFORT", "low"),
-                "evidence": role_cfg("evidence", "NOVELTY_EVIDENCE_MODEL",
-                                     "NOVELTY_EVIDENCE_EFFORT", "low"),
+                "reading": role_cfg(
+                    "reading", "NOVELTY_READING_MODEL", "NOVELTY_READING_EFFORT", "low"
+                ),
+                "compare": role_cfg(
+                    "compare", "NOVELTY_COMPARE_MODEL", "NOVELTY_COMPARE_EFFORT", "low"
+                ),
+                "evidence": role_cfg(
+                    "evidence", "NOVELTY_EVIDENCE_MODEL", "NOVELTY_EVIDENCE_EFFORT", "low"
+                ),
             },
             "budgets": {
                 "read_cap_chars": _READ_CAP,
@@ -565,22 +593,31 @@ class ClaimNoveltyAgent:
                 "fuzzy_threshold": self.fuzzy_threshold,
             },
             "cutoff": {
-                "submission_date": str(sub_meta.get("publication_date")
-                                       or sub_meta.get("year") or ""),
+                "submission_date": str(
+                    sub_meta.get("publication_date") or sub_meta.get("year") or ""
+                ),
                 "min_gap_days": gap,
             },
             "prompts": rl.prompt_hashes(_sys.modules[__name__]),
-            "schemas": rl.schema_hashes({
-                "SectionPick": _SectionPick, "PaperAction": _PaperAction,
-                "SectionComparison": _SectionComparison, "Realization": _Realization,
-            }),
+            "schemas": rl.schema_hashes(
+                {
+                    "SectionPick": _SectionPick,
+                    "PaperAction": _PaperAction,
+                    "SectionComparison": _SectionComparison,
+                    "Realization": _Realization,
+                }
+            ),
         }
         log.config["prompts"].update(rl.prompt_hashes(evidence_map))
-        log.config["schemas"].update(rl.schema_hashes({
-            "EvidenceMap": evidence_map.EvidenceMap,
-            "Correspondence": evidence_map.Correspondence,
-            "EvidenceCheck": evidence_map.EvidenceCheck,
-        }))
+        log.config["schemas"].update(
+            rl.schema_hashes(
+                {
+                    "EvidenceMap": evidence_map.EvidenceMap,
+                    "Correspondence": evidence_map.Correspondence,
+                    "EvidenceCheck": evidence_map.EvidenceCheck,
+                }
+            )
+        )
         return log
 
     def _struct(self, model, prompt, role: str = "reading"):
@@ -591,7 +628,8 @@ class ClaimNoveltyAgent:
         pt, ct = _usage(raw) if raw is not None else (0, 0)
         cached = _cache_read(raw) if raw is not None else 0
         st = self._cache_stats.setdefault(
-            role, {"calls": 0, "prompt_tokens": 0, "cached_tokens": 0})
+            role, {"calls": 0, "prompt_tokens": 0, "cached_tokens": 0}
+        )
         st["calls"] += 1
         st["prompt_tokens"] += pt
         st["cached_tokens"] += cached
@@ -651,18 +689,33 @@ class ClaimNoveltyAgent:
             for name in requested:
                 overhead = len(f"## {name}\n") + (2 if blocks else 0)
                 remaining = max(0, cap - used - overhead)
-                secs = tb.read_sections(
-                    "submission", [name], max_total=remaining, exact=True,
-                ).get("sections", []) or []
+                secs = (
+                    tb.read_sections(
+                        "submission",
+                        [name],
+                        max_total=remaining,
+                        exact=True,
+                    ).get("sections", [])
+                    or []
+                )
                 sec = next((s for s in secs if s.get("name") == name), None)
                 if sec is None:
-                    omitted.append({"section": name, "reason": "not returned by read_sections",
-                                    "remaining_chars": remaining})
+                    omitted.append(
+                        {
+                            "section": name,
+                            "reason": "not returned by read_sections",
+                            "remaining_chars": remaining,
+                        }
+                    )
                 elif not append_source(name, sec.get("text"), "section"):
-                    omitted.append({"section": name,
-                                    "reason": "would exceed the context budget",
-                                    "section_chars": len(sec.get("text") or ""),
-                                    "remaining_chars": remaining})
+                    omitted.append(
+                        {
+                            "section": name,
+                            "reason": "would exceed the context budget",
+                            "section_chars": len(sec.get("text") or ""),
+                            "remaining_chars": remaining,
+                        }
+                    )
 
         if not blocks:
             if append_source("Submission full text", tb._submission_text, "full_text"):
@@ -673,8 +726,9 @@ class ClaimNoveltyAgent:
                 for i, hit in enumerate(hits, 1):
                     name = hit.get("section") or "Submission"
                     pid = hit.get("passage_id") or f"retrieved-{i}"
-                    append_source(f"{name} [retrieved excerpt: {pid}]", hit.get("text"),
-                                  "excerpt", pid)
+                    append_source(
+                        f"{name} [retrieved excerpt: {pid}]", hit.get("text"), "excerpt", pid
+                    )
                 notes.append("Fallback: retrieved excerpts; full sections were unavailable.")
 
         text = "\n\n".join(blocks)
@@ -698,7 +752,8 @@ class ClaimNoveltyAgent:
         log = getattr(tb, "run_log", None)
         if log is not None:
             basis["context_id"] = log.register_context(
-                "submission", text,
+                "submission",
+                text,
                 claim_id=claim.get("id", ""),
                 sections=[s.get("section") for s in sources],
                 content_kinds=kinds,
@@ -724,7 +779,7 @@ class ClaimNoveltyAgent:
             "submission_basis",
             f"{len(sources)} source blocks, {len(text):,}/{cap:,} chars "
             f"[{basis.get('context_id', 'ctx?')}], kinds={','.join(kinds) or '-'}; "
-            f"{len(omitted)} sections omitted; " + "; ".join(notes)
+            f"{len(omitted)} sections omitted; " + "; ".join(notes),
         )
         return basis, pt, ct
 
@@ -743,8 +798,15 @@ class ClaimNoveltyAgent:
         tb._log("understand_submission", "explanation from shared original-source context")
         return realization, basis["text"], pt, ct
 
-    def _examine_paper(self, tb: ClaimToolbox, claim: dict, pid: str, claim_ctx: str,
-                       carry_deficit: str = "", state: Optional[dict] = None):
+    def _examine_paper(
+        self,
+        tb: ClaimToolbox,
+        claim: dict,
+        pid: str,
+        claim_ctx: str,
+        carry_deficit: str = "",
+        state: Optional[dict] = None,
+    ):
         """Reading loop for one paper until the agent compares or sets the paper aside.
 
         Turn 0 reads exactly three sections. The first proposal to set the paper aside
@@ -771,7 +833,8 @@ class ClaimNoveltyAgent:
             except Exception as e:
                 trace.append(f"call failed ({type(e).__name__})")
                 return None
-            pt += a; ct += b
+            pt += a
+            ct += b
             return parsed
 
         state = state or {}
@@ -808,14 +871,21 @@ class ClaimNoveltyAgent:
             if not new:
                 last_take = (len(names or []), 0, 0)
                 return []
-            secs = tb.read_sections(pid, new, max_total=max(0, _READ_CAP - used),
-                                    exact=True).get("sections", []) or []
+            secs = (
+                tb.read_sections(pid, new, max_total=max(0, _READ_CAP - used), exact=True).get(
+                    "sections", []
+                )
+                or []
+            )
             done, added = [], 0
             for s in secs:
                 if s["name"] not in read:
-                    got.append(s); read.append(s["name"])
+                    got.append(s)
+                    read.append(s["name"])
                     n = len(s.get("text", ""))
-                    used += n; added += n; done.append(s["name"])
+                    used += n
+                    added += n
+                    done.append(s["name"])
             last_take = (len(names or []), len(done), added)
             return done
 
@@ -833,8 +903,11 @@ class ClaimNoveltyAgent:
         def deficit_block():
             if not deficits:
                 return ""
-            return ("\n## Still outstanding -- a check refused an earlier proposal for these\n"
-                    + "\n".join(f"- {d}" for d in deficits[-3:]) + "\n")
+            return (
+                "\n## Still outstanding -- a check refused an earlier proposal for these\n"
+                + "\n".join(f"- {d}" for d in deficits[-3:])
+                + "\n"
+            )
 
         def exhausted(turn):
             """True when no further complete section can be read."""
@@ -848,8 +921,10 @@ class ClaimNoveltyAgent:
                 return True
             if not fitting_unread():
                 cap_hit = True
-                trace.append(f"turn {turn}: no complete unread section fits remaining "
-                             f"budget ({_READ_CAP - used:,} chars)")
+                trace.append(
+                    f"turn {turn}: no complete unread section fits remaining "
+                    f"budget ({_READ_CAP - used:,} chars)"
+                )
                 return True
             return False
 
@@ -858,8 +933,10 @@ class ClaimNoveltyAgent:
             if exhausted(turn):
                 if reentry_requires_read:
                     decision = "insufficient"
-                    trace.append(f"turn {turn}: evidence deficit remains and no further "
-                                 "complete section can be read -> INSUFFICIENT")
+                    trace.append(
+                        f"turn {turn}: evidence deficit remains and no further "
+                        "complete section can be read -> INSUFFICIENT"
+                    )
                 else:
                     decision = "compare"
                 break
@@ -870,32 +947,44 @@ class ClaimNoveltyAgent:
                 mandate = _EVIDENCE_REENTRY_MANDATE
             else:
                 mandate = ""
-            act = struct(_PaperAction, _fill(
-                _PAPER_ACTION,
-                claim=claim_s,
-                realization=claim_ctx,
-                title=title,
-                read=(_fmt_sections_full(got, max_total=_READ_CAP) if got
-                      else "(nothing yet -- this turn must be a read)"),
-                unread=_fmt_sections_menu(fitting_unread(), ids=sec_ids),
-                deficits=deficit_block(),
-                mandate=mandate,
-            ))
+            act = struct(
+                _PaperAction,
+                _fill(
+                    _PAPER_ACTION,
+                    claim=claim_s,
+                    realization=claim_ctx,
+                    title=title,
+                    read=(
+                        _fmt_sections_full(got, max_total=_READ_CAP)
+                        if got
+                        else "(nothing yet -- this turn must be a read)"
+                    ),
+                    unread=_fmt_sections_menu(fitting_unread(), ids=sec_ids),
+                    deficits=deficit_block(),
+                    mandate=mandate,
+                ),
+            )
             if act is None:
                 if reentry_requires_read:
                     decision = "insufficient"
-                    trace.append(f"turn {turn}: reading action failed during evidence re-entry "
-                                 "-> INSUFFICIENT")
+                    trace.append(
+                        f"turn {turn}: reading action failed during evidence re-entry "
+                        "-> INSUFFICIENT"
+                    )
                 else:
                     decision = "compare"
                     trace.append(f"turn {turn}: no action -> compare")
                 break
             tool = (act.tool or "").strip().lower()
-            trace.append(f"turn {turn}: proposed action={tool}, sections={list(act.sections or [])}")
+            trace.append(
+                f"turn {turn}: proposed action={tool}, sections={list(act.sections or [])}"
+            )
 
             if reentry_requires_read and tool != "read_more":
-                trace.append(f"turn {turn}: {tool or 'invalid action'} rejected -- "
-                             "evidence re-entry requires read_more first")
+                trace.append(
+                    f"turn {turn}: {tool or 'invalid action'} rejected -- "
+                    "evidence re-entry requires read_more first"
+                )
                 continue
 
             if act.suspected_deficit and act.suspected_deficit.strip() not in deficits:
@@ -907,11 +996,13 @@ class ClaimNoveltyAgent:
                 if unresolved:
                     trace.append(f"  unresolved: {', '.join(unresolved[:6])}")
                 if len(names) < _FIRST_READ_N:
-                    names += take([m["name"] for m in sorted(
-                        fitting_unread(), key=lambda m: -m.get("chars", 0)
-                    )][:_FIRST_READ_N - len(names)])
-                log_read(turn, f"mandatory initial read ({_FIRST_READ_N} sections)",
-                         names, act.why)
+                    names += take(
+                        [
+                            m["name"]
+                            for m in sorted(fitting_unread(), key=lambda m: -m.get("chars", 0))
+                        ][: _FIRST_READ_N - len(names)]
+                    )
+                log_read(turn, f"mandatory initial read ({_FIRST_READ_N} sections)", names, act.why)
                 if not names:
                     decision = "compare"
                     trace.append(f"turn {turn}: nothing readable -> compare")
@@ -936,13 +1027,17 @@ class ClaimNoveltyAgent:
                         )
                         if invalid_note not in deficits:
                             deficits.append(invalid_note)
-                        trace.append(f"turn {turn}: ACTION INVALID -- requested "
-                                     f"{len(act.sections or [])}, resolved 0, "
-                                     f"{len(unread())} sections still unread -> choose again")
+                        trace.append(
+                            f"turn {turn}: ACTION INVALID -- requested "
+                            f"{len(act.sections or [])}, resolved 0, "
+                            f"{len(unread())} sections still unread -> choose again"
+                        )
                         continue
                     if reentry_requires_read:
-                        trace.append(f"turn {turn}: evidence re-entry read loaded nothing; "
-                                     "deficit remains unresolved")
+                        trace.append(
+                            f"turn {turn}: evidence re-entry read loaded nothing; "
+                            "deficit remains unresolved"
+                        )
                         continue
                     decision = "compare"
                     trace.append(f"turn {turn}: no unread sections remain -> compare")
@@ -957,22 +1052,32 @@ class ClaimNoveltyAgent:
             if tool in ("dismiss", "propose_dismissal"):
                 if falsification_done:
                     decision, why = "dismiss", (act.why or "").strip()
-                    trace.append(f"turn {turn}: propose_dismissal (falsification done) -> DISMISSED")
+                    trace.append(
+                        f"turn {turn}: propose_dismissal (falsification done) -> DISMISSED"
+                    )
                     trace.append(f"  reason: {' '.join(why.split())}")
                     break
                 trace.append(f"turn {turn}: propose_dismissal")
                 left = fitting_unread()
                 if not left:
                     falsification_done = True
-                    trace.append(f"turn {turn}: dismissal falsification exhausted "
-                                 f"(no unread sections left)")
+                    trace.append(
+                        f"turn {turn}: dismissal falsification exhausted (no unread sections left)"
+                    )
                     continue
                 trace.append(f"turn {turn}: dismissal falsification required")
-                pick = struct(_SectionPick, _fill(
-                    _FALSIFY_DISMISSAL, claim=claim_s, title=title,
-                    why=(act.why or "")[:600],
-                    read=_fmt_sections_full(got, max_total=_READ_CAP),
-                    unread=_fmt_sections_menu(left, ids=sec_ids), n=_FALSIFY_SECTIONS))
+                pick = struct(
+                    _SectionPick,
+                    _fill(
+                        _FALSIFY_DISMISSAL,
+                        claim=claim_s,
+                        title=title,
+                        why=(act.why or "")[:600],
+                        read=_fmt_sections_full(got, max_total=_READ_CAP),
+                        unread=_fmt_sections_menu(left, ids=sec_ids),
+                        n=_FALSIFY_SECTIONS,
+                    ),
+                )
                 asked = (getattr(pick, "sections", None) or []) if pick else []
                 wanted, unresolved = resolve(asked)
                 names = take(wanted[:_FALSIFY_SECTIONS])
@@ -980,9 +1085,12 @@ class ClaimNoveltyAgent:
                     trace.append(f"  unresolved: {', '.join(unresolved[:6])}")
                 chosen = len(names)
                 if len(names) < min(_FALSIFY_SECTIONS, len(left)):
-                    names += take([m["name"] for m in sorted(
-                        fitting_unread(), key=lambda m: -m.get("chars", 0)
-                    )][:_FALSIFY_SECTIONS - len(names)])
+                    names += take(
+                        [
+                            m["name"]
+                            for m in sorted(fitting_unread(), key=lambda m: -m.get("chars", 0))
+                        ][: _FALSIFY_SECTIONS - len(names)]
+                    )
                 trace += [f"  - {n}" for n in names]
                 trace.append(f"  requested: {min(_FALSIFY_SECTIONS, len(left))}")
                 trace.append(f"  loaded: {len(names)}")
@@ -990,15 +1098,19 @@ class ClaimNoveltyAgent:
                 trace.append(f"  total chars: {used:,}/{_READ_CAP:,}")
                 trace.append(f"  reason: {(getattr(pick, 'why', '') or '(none given)')}")
                 if len(names) > chosen:
-                    trace.append(f"  FALLBACK: agent named {chosen} usable section(s), "
-                                 f"{len(names) - chosen} filled in by size")
+                    trace.append(
+                        f"  FALLBACK: agent named {chosen} usable section(s), "
+                        f"{len(names) - chosen} filled in by size"
+                    )
                 required = min(_FALSIFY_SECTIONS, len(left))
                 if len(names) >= required:
                     falsification_done = True
                     trace.append(f"turn {turn}: dismissal_falsification_done=True")
                 else:
-                    trace.append(f"turn {turn}: dismissal falsification incomplete "
-                                 f"({len(names)}/{required} complete sections read)")
+                    trace.append(
+                        f"turn {turn}: dismissal falsification incomplete "
+                        f"({len(names)}/{required} complete sections read)"
+                    )
                 continue
 
             decision = "compare"
@@ -1007,16 +1119,29 @@ class ClaimNoveltyAgent:
         else:
             if reentry_requires_read:
                 decision = "insufficient"
-                trace.append(f"BUDGET: {_LOOP_MAX_TURNS} turns exhausted while evidence "
-                             "re-entry still required an actual new read -> INSUFFICIENT")
+                trace.append(
+                    f"BUDGET: {_LOOP_MAX_TURNS} turns exhausted while evidence "
+                    "re-entry still required an actual new read -> INSUFFICIENT"
+                )
             else:
                 decision = decision or "compare"
                 trace.append(f"BUDGET: {_LOOP_MAX_TURNS} turns exhausted -> compare")
-        next_state = {"got": got, "read": read, "used": used,
-                      "falsification_done": falsification_done}
-        return (decision, _fmt_sections_full(got, max_total=_READ_CAP), read, why,
-                pt, ct, trace + ([f"read cap was reached ({used:,}/{_READ_CAP:,} chars)"]
-                                 if cap_hit else []), next_state)
+        next_state = {
+            "got": got,
+            "read": read,
+            "used": used,
+            "falsification_done": falsification_done,
+        }
+        return (
+            decision,
+            _fmt_sections_full(got, max_total=_READ_CAP),
+            read,
+            why,
+            pt,
+            ct,
+            trace + ([f"read cap was reached ({used:,}/{_READ_CAP:,} chars)"] if cap_hit else []),
+            next_state,
+        )
 
     def _paper_loop(self, tb: ClaimToolbox, claim: dict, pid: str, claim_ctx: str):
         """Read, compare and check one paper; re-enter reading after a failed check.
@@ -1031,8 +1156,10 @@ class ClaimNoveltyAgent:
         read_state: Optional[dict] = None
         for turn in range(_LOOP_MAX_COMPARES):
             decision, context, names, why, a, b, tr, read_state = self._examine_paper(
-                tb, claim, pid, claim_ctx, carry_deficit=deficit, state=read_state)
-            pt += a; ct += b
+                tb, claim, pid, claim_ctx, carry_deficit=deficit, state=read_state
+            )
+            pt += a
+            ct += b
             trace += [f"[read {turn}] {t}" for t in tr]
 
             if decision == "dismiss":
@@ -1040,7 +1167,8 @@ class ClaimNoveltyAgent:
                 comp["overlap_degree"] = "superficial"
                 comp["dismissed"] = True
                 comp["brief_note"] = comp["assessment"] = why or (
-                    "Read at section level; the paper's subject is a different contribution.")
+                    "Read at section level; the paper's subject is a different contribution."
+                )
                 trace.append(f"[{turn}] dismissed after {len(names)} sections")
                 return comp, pt, ct, trace
             if decision == "insufficient":
@@ -1062,11 +1190,13 @@ class ClaimNoveltyAgent:
                 )
                 return comp, pt, ct, trace
             comp, a, b = self._section_compare(tb, claim, pid, claim_ctx, context, turn=turn)
-            pt += a; ct += b
+            pt += a
+            ct += b
             self._trace_raw(trace, turn, comp)
 
             comp, a, b = self._map_evidence(tb, claim, pid, comp, context, turn=turn)
-            pt += a; ct += b
+            pt += a
+            ct += b
             self._trace_grounding(trace, turn, comp)
 
             deficit = self._evidence_deficit(comp) or ""
@@ -1081,8 +1211,9 @@ class ClaimNoveltyAgent:
                 comp["paper_state"] = "unresolved_budget"
                 comp["insufficient"] = True
                 comp["unresolved"] = True
-                comp["unresolved_reason"] = ("read_cap_exhausted" if cap_spent
-                                             else "comparison_budget_exhausted")
+                comp["unresolved_reason"] = (
+                    "read_cap_exhausted" if cap_spent else "comparison_budget_exhausted"
+                )
                 comp["refutation_status"] = "cannot_refute"
                 why = "read cap" if cap_spent else f"{_LOOP_MAX_COMPARES} compares"
                 trace.append(
@@ -1119,16 +1250,19 @@ class ClaimNoveltyAgent:
             relation = " ".join(str(p.get("rationale", "")).split())
             submission_quote = " ".join(str(p.get("claim_quote", "")).split())
             paper_quote = " ".join(str(p.get("paper_quote", "")).split())
-            trace.append(f"[{turn}] PAIR {i}: strength={p.get('strength', '')} | "
-                         f"relation={relation}")
+            trace.append(
+                f"[{turn}] PAIR {i}: strength={p.get('strength', '')} | relation={relation}"
+            )
             trace.append(f'[{turn}] PAIR {i} SUBMISSION: "{submission_quote}"')
             trace.append(f'[{turn}] PAIR {i} PAPER: "{paper_quote}"')
         trace.append(f"[{turn}] EVIDENCE CHECK: status={evidence_status}")
-        trace.append(f"[{turn}] EVIDENCE SUPPORTING PAIRS: "
-                     f"{check.get('supporting_pair_indices', [])}")
+        trace.append(
+            f"[{turn}] EVIDENCE SUPPORTING PAIRS: {check.get('supporting_pair_indices', [])}"
+        )
         trace.append(f"[{turn}] EVIDENCE REASON: {check.get('reasoning', '')}")
-        trace.append(f"[{turn}] PROPOSED DEGREE SUPPORTED: "
-                     f"{check.get('proposed_degree_supported')}")
+        trace.append(
+            f"[{turn}] PROPOSED DEGREE SUPPORTED: {check.get('proposed_degree_supported')}"
+        )
         if check.get("unresolved_question"):
             trace.append(f"[{turn}] UNRESOLVED QUESTION: {check['unresolved_question']}")
         semantic_material = raw_degree in {"partial", "substantial", "same"}
@@ -1148,14 +1282,20 @@ class ClaimNoveltyAgent:
         proposal_material = proposed_deg in {"partial", "substantial", "same"}
 
         if diag.get("call_failed"):
-            return ("the evidence map did not complete, so the semantic comparison "
-                    "has not been grounded")
+            return (
+                "the evidence map did not complete, so the semantic comparison "
+                "has not been grounded"
+            )
         if proposal_material and diag.get("ownership_unchecked"):
-            return ("the semantic comparison proposes substantive overlap, but ownership "
-                    "of the candidate evidence could not be verified")
+            return (
+                "the semantic comparison proposes substantive overlap, but ownership "
+                "of the candidate evidence could not be verified"
+            )
         if proposal_material and diag.get("not_owned") and not (comp.get("evidence_pairs") or []):
-            return ("the semantic comparison proposes substantive overlap, but every "
-                    "grounded candidate belongs to cited work rather than this paper")
+            return (
+                "the semantic comparison proposes substantive overlap, but every "
+                "grounded candidate belongs to cited work rather than this paper"
+            )
 
         check = comp.get("evidence_check") or {}
         status = (check.get("status") or "").lower()
@@ -1171,18 +1311,31 @@ class ClaimNoveltyAgent:
         if not status:
             return "the evidence check produced no usable status"
         if status == "material" and not proposal_material:
-            return ("grounded evidence supports substantive contribution overlap that "
-                    "the semantic comparison did not recognize")
+            return (
+                "grounded evidence supports substantive contribution overlap that "
+                "the semantic comparison did not recognize"
+            )
         if status == "nonmaterial" and proposal_material:
-            return ("the semantic comparison proposes substantive overlap, but the "
-                    "grounded evidence currently supports only non-substantive overlap")
+            return (
+                "the semantic comparison proposes substantive overlap, but the "
+                "grounded evidence currently supports only non-substantive overlap"
+            )
         if status == "insufficient" and proposal_material:
-            return ("the semantic comparison proposes substantive overlap, but the "
-                    "available grounded evidence is insufficient to support it")
+            return (
+                "the semantic comparison proposes substantive overlap, but the "
+                "available grounded evidence is insufficient to support it"
+            )
         return None
 
-    def _section_compare(self, tb: ClaimToolbox, claim: dict, pid: str, claim_ctx: str,
-                         paper_context: str = "", turn: int = 0):
+    def _section_compare(
+        self,
+        tb: ClaimToolbox,
+        claim: dict,
+        pid: str,
+        claim_ctx: str,
+        paper_context: str = "",
+        turn: int = 0,
+    ):
         """Semantic comparison of one paper with the claim on the sections read.
 
         Without a selected context the whole parsed paper is used, and without a parsed
@@ -1193,8 +1346,9 @@ class ClaimNoveltyAgent:
         if not paper_text.strip():
             hits = tb.read_paper(pid, query=self._claim_str(claim))
             paper_text = _fmt_passages(
-                hits.get("passages") or ([{"text": hits.get("abstract", "")}]
-                                         if hits.get("abstract") else []))
+                hits.get("passages")
+                or ([{"text": hits.get("abstract", "")}] if hits.get("abstract") else [])
+            )
         parsed, a, b = self._struct(
             _SectionComparison,
             _fill(
@@ -1205,7 +1359,9 @@ class ClaimNoveltyAgent:
                 sections=paper_text,
             ),
             role="compare",
-        ); pt += a; ct += b
+        )
+        pt += a
+        ct += b
         log = getattr(tb, "run_log", None)
         if log is not None:
             prov = tb.paper_provenance(pid)
@@ -1222,17 +1378,23 @@ class ClaimNoveltyAgent:
             ft_status = (getattr(tb, "_fulltext_status", {}) or {}).get(pid, "")
             fallback_reason = ""
             if content_source in ("abstract", "abstract_and_intro"):
-                fallback_reason = (ft_status or prov.get("version_status", "")
-                                   or "no parsed full text available")
+                fallback_reason = (
+                    ft_status or prov.get("version_status", "") or "no parsed full text available"
+                )
             log.round_contexts(
-                pid, turn, call="semantic_compare",
+                pid,
+                turn,
+                call="semantic_compare",
                 submission_context=(tb.submission_basis or {}).get("context_id", ""),
                 paper_context=log.register_context(
-                    "paper", paper_text, paper_id=pid,
+                    "paper",
+                    paper_text,
+                    paper_id=pid,
                     content_source=content_source,
                     fulltext_status=ft_status,
                     fallback_reason=fallback_reason,
-                    sections=list(tb._sections_read.get(pid) or [])),
+                    sections=list(tb._sections_read.get(pid) or []),
+                ),
             )
         if not paper_context:
             tb._sections_read.setdefault(pid, [])
@@ -1243,9 +1405,16 @@ class ClaimNoveltyAgent:
     def _to_comp(parsed) -> dict:
         """A _SectionComparison (or None) as the comparison record."""
         if parsed is None:
-            return {"refutation_status": "unclear", "overlap_degree": "none", "what_is_shared": "",
-                    "submission_delta": "", "brief_note": "", "assessment": "",
-                    "paper_realization": [], "evidence_pairs": []}
+            return {
+                "refutation_status": "unclear",
+                "overlap_degree": "none",
+                "what_is_shared": "",
+                "submission_delta": "",
+                "brief_note": "",
+                "assessment": "",
+                "paper_realization": [],
+                "evidence_pairs": [],
+            }
         return {
             "refutation_status": "unclear",
             "overlap_degree": parsed.overlap_degree,
@@ -1253,8 +1422,10 @@ class ClaimNoveltyAgent:
             "submission_delta": parsed.submission_delta or "",
             "brief_note": "",
             "assessment": parsed.assessment or "",
-            "paper_realization": [{"kind": s.kind or "text", "content": s.content}
-                                  for s in (parsed.paper_realization or [])],
+            "paper_realization": [
+                {"kind": s.kind or "text", "content": s.content}
+                for s in (parsed.paper_realization or [])
+            ],
             "evidence_pairs": [],
         }
 
@@ -1264,10 +1435,13 @@ class ClaimNoveltyAgent:
         if rlog is not None:
             try:
                 rlog.paper_outcome(
-                    pid, comp, tb.paper_provenance(pid),
+                    pid,
+                    comp,
+                    tb.paper_provenance(pid),
                     sections_used=list(tb._sections_read.get(pid) or []),
                     fulltext_fetch_status=comp.get("fulltext_fetch_status")
-                    or (tb._fulltext_status.get(pid) if hasattr(tb, "_fulltext_status") else ""))
+                    or (tb._fulltext_status.get(pid) if hasattr(tb, "_fulltext_status") else ""),
+                )
             except Exception:
                 pass
 
@@ -1281,8 +1455,14 @@ class ClaimNoveltyAgent:
             evidence_pairs=comp["evidence_pairs"],
             extra={
                 k: comp[k]
-                for k in ("map_diag", "comparison_proposal", "evidence_check",
-                          "unresolved_deficit", "paper_state", "insufficient")
+                for k in (
+                    "map_diag",
+                    "comparison_proposal",
+                    "evidence_check",
+                    "unresolved_deficit",
+                    "paper_state",
+                    "insufficient",
+                )
                 if k in comp
             },
             paper_realization=comp.get("paper_realization"),
@@ -1290,8 +1470,15 @@ class ClaimNoveltyAgent:
             fulltext_fetch_status=comp.get("fulltext_fetch_status"),
         )
 
-    def _map_evidence(self, tb: "ClaimToolbox", claim: dict, pid: str, comp: dict,
-                      paper_context: str = "", turn: int = 0):
+    def _map_evidence(
+        self,
+        tb: "ClaimToolbox",
+        claim: dict,
+        pid: str,
+        comp: dict,
+        paper_context: str = "",
+        turn: int = 0,
+    ):
         """Evidence gate: evidence map, verbatim and ownership checks, evidence check.
 
         The model searches the claim-local context and the sections read. Quotes are
@@ -1307,7 +1494,8 @@ class ClaimNoveltyAgent:
             except Exception as e:
                 tb._log("evidence_map", f"{pid}: call failed ({type(e).__name__})")
                 return None
-            pt += a; ct += b
+            pt += a
+            ct += b
             return parsed
 
         basis = getattr(tb, "submission_basis", None) or {}
@@ -1333,11 +1521,15 @@ class ClaimNoveltyAgent:
         if log is not None:
             log.paper_source(pid, tb.paper_provenance(pid))
             log.round_contexts(
-                pid, turn, call="evidence_map",
+                pid,
+                turn,
+                call="evidence_map",
                 submission_context=log.register_context(
-                    "submission", submission_text, paper_id=pid, role="evidence_map"),
+                    "submission", submission_text, paper_id=pid, role="evidence_map"
+                ),
                 paper_context=log.register_context(
-                    "paper", paper_text, paper_id=pid, role="evidence_map"),
+                    "paper", paper_text, paper_id=pid, role="evidence_map"
+                ),
                 verification_submission_sha256=rl_sha(tb._submission_text),
                 verification_paper_sha256=rl_sha(tb._paper_source_text(pid)),
             )
@@ -1394,17 +1586,19 @@ class ClaimNoveltyAgent:
         supporting = check.get("supporting_pair_indices") or []
         comp["refutation_status"] = (
             "can_refute"
-            if (raw_degree in ("substantial", "same")
+            if (
+                raw_degree in ("substantial", "same")
                 and check.get("status") == "material"
                 and bool(supporting)
-                and check.get("proposed_degree_supported") is True)
+                and check.get("proposed_degree_supported") is True
+            )
             else "cannot_refute"
         )
         tb._log(
             "evidence_map",
             f"{pid}: {len(kept)} grounded-owned pairs; "
             f"comparison={raw_degree}, "
-            f"evidence_check={check.get('status', 'insufficient')}"
+            f"evidence_check={check.get('status', 'insufficient')}",
         )
         return comp, pt, ct
 
@@ -1420,19 +1614,29 @@ class ClaimNoveltyAgent:
         compare_s = time.perf_counter() - _c0
         comp["fulltext_fetch_status"] = fts
         self._record(tb, pid, comp)
-        return pt, ct, {"paper_id": pid,
-                        "title": (tb.pool.get(pid, {}) or {}).get("title", "")[:90],
-                        "parse_s": round(parse_s, 1),
-                        "compare_s": round(compare_s, 1),
-                        "total_s": round(parse_s + compare_s, 1),
-                        "fetch_status": fts}
+        return (
+            pt,
+            ct,
+            {
+                "paper_id": pid,
+                "title": (tb.pool.get(pid, {}) or {}).get("title", "")[:90],
+                "parse_s": round(parse_s, 1),
+                "compare_s": round(compare_s, 1),
+                "total_s": round(parse_s + compare_s, 1),
+                "fetch_status": fts,
+            },
+        )
 
     def run(self, claim: dict, progress_cb=None) -> dict:
         """Assess one claim against the whole pool; returns the artifact entry."""
         tb = ClaimToolbox(
-            self.data_dir, self.submission_id, claim, self.embedder,
+            self.data_dir,
+            self.submission_id,
+            claim,
+            self.embedder,
             min_quote_tokens=self.min_quote_tokens,
-            fuzzy_threshold=self.fuzzy_threshold, grobid_server=self.grobid_server,
+            fuzzy_threshold=self.fuzzy_threshold,
+            grobid_server=self.grobid_server,
         )
         self.run_log = tb.run_log = self._new_run_log(claim)
         pt = ct = 0
@@ -1453,36 +1657,40 @@ class ClaimNoveltyAgent:
                 for c in comps:
                     check = c.get("evidence_check") or {}
                     diag = c.get("map_diag") or {}
-                    paper_traces.append({
-                        "paper_id": c.get("paper_id"),
-                        "title": c.get("title", ""),
-                        "overlap_degree": c.get("overlap_degree"),
-                        "refutation_status": c.get("refutation_status"),
-                        "evidence_status": check.get("status"),
-                        "grounded_pairs": len(c.get("evidence_pairs") or []),
-                        "insufficient": bool(c.get("insufficient")),
-                        "trace": list(diag.get("loop") or []),
-                    })
+                    paper_traces.append(
+                        {
+                            "paper_id": c.get("paper_id"),
+                            "title": c.get("title", ""),
+                            "overlap_degree": c.get("overlap_degree"),
+                            "refutation_status": c.get("refutation_status"),
+                            "evidence_status": check.get("status"),
+                            "grounded_pairs": len(c.get("evidence_pairs") or []),
+                            "insufficient": bool(c.get("insufficient")),
+                            "trace": list(diag.get("loop") or []),
+                        }
+                    )
             cur_pt = pt + extra_pt
             cur_ct = ct + extra_ct
             try:
-                progress_cb({
-                    "status": status,
-                    "claim_id": claim["id"],
-                    "step": len(traj),
-                    "max_steps": max(est_total["v"], len(traj)) if est_total["v"] else 0,
-                    "last_action": traj[-1]["detail"] if traj else "starting",
-                    "trajectory": traj,
-                    "paper_traces": paper_traces,
-                    "examined": n_examined,
-                    "comparisons": n_comparisons,
-                    "retrieval_rounds": n_retr,
-                    "cost": {
-                        "prompt_tokens": cur_pt,
-                        "completion_tokens": cur_ct,
-                        "usd": _usd(self.model_name, cur_pt, cur_ct),
-                    },
-                })
+                progress_cb(
+                    {
+                        "status": status,
+                        "claim_id": claim["id"],
+                        "step": len(traj),
+                        "max_steps": max(est_total["v"], len(traj)) if est_total["v"] else 0,
+                        "last_action": traj[-1]["detail"] if traj else "starting",
+                        "trajectory": traj,
+                        "paper_traces": paper_traces,
+                        "examined": n_examined,
+                        "comparisons": n_comparisons,
+                        "retrieval_rounds": n_retr,
+                        "cost": {
+                            "prompt_tokens": cur_pt,
+                            "completion_tokens": cur_ct,
+                            "usd": _usd(self.model_name, cur_pt, cur_ct),
+                        },
+                    }
+                )
             except Exception:
                 pass
 
@@ -1493,7 +1701,8 @@ class ClaimNoveltyAgent:
             if workers <= 1:
                 for pid in pids:
                     a, b, tinfo = self._deep_dive(tb, claim, pid, claim_ctx)
-                    lp += a; lc += b
+                    lp += a
+                    lc += b
                     timings["deep_dive_papers"].append(tinfo)
                     emit(extra_pt=lp, extra_ct=lc)
                 return lp, lc
@@ -1501,14 +1710,17 @@ class ClaimNoveltyAgent:
                 futs = [ex.submit(self._deep_dive, tb, claim, pid, claim_ctx) for pid in pids]
                 for fut in as_completed(futs):
                     a, b, tinfo = fut.result()
-                    lp += a; lc += b
+                    lp += a
+                    lc += b
                     timings["deep_dive_papers"].append(tinfo)
                     emit(extra_pt=lp, extra_ct=lc)
             return lp, lc
 
         emit()
         _t = time.perf_counter()
-        _real, claim_ctx, a, b = self._understand_submission(tb, claim); pt += a; ct += b
+        _real, claim_ctx, a, b = self._understand_submission(tb, claim)
+        pt += a
+        ct += b
         timings["understand_submission"] = round(time.perf_counter() - _t, 1)
         emit()
 
@@ -1518,7 +1730,9 @@ class ClaimNoveltyAgent:
         emit()
 
         _t = time.perf_counter()
-        a, b = dive_all(pool); pt += a; ct += b
+        a, b = dive_all(pool)
+        pt += a
+        ct += b
         timings["deep_dive_total"] = round(time.perf_counter() - _t, 1)
 
         # A new search only when the pool is empty.
@@ -1528,7 +1742,8 @@ class ClaimNoveltyAgent:
             emit()
             if new:
                 a, b = dive_all([x["paper_id"] for x in new if x["paper_id"] in tb.pool])
-                pt += a; ct += b
+                pt += a
+                ct += b
                 emit()
             timings["reentry"] = round(time.perf_counter() - _t, 1)
 
@@ -1552,13 +1767,18 @@ class ClaimNoveltyAgent:
         verdict = "challenged" if refuters else "not_challenged"
 
         timings["total"] = round(time.perf_counter() - run_t0, 1)
-        _named = sum(v for k, v in timings.items()
-                     if k not in ("deep_dive_papers", "total") and isinstance(v, (int, float)))
+        _named = sum(
+            v
+            for k, v in timings.items()
+            if k not in ("deep_dive_papers", "total") and isinstance(v, (int, float))
+        )
         timings["other"] = round(max(0.0, timings["total"] - _named), 1)
         cache_by_role = {
-            role: dict(st) | {
+            role: dict(st)
+            | {
                 "hit_rate": round(st["cached_tokens"] / st["prompt_tokens"], 3)
-                            if st["prompt_tokens"] else 0.0,
+                if st["prompt_tokens"]
+                else 0.0,
             }
             for role, st in self._cache_stats.items()
         }
@@ -1566,42 +1786,59 @@ class ClaimNoveltyAgent:
         cache_total_hit = sum(st["cached_tokens"] for st in self._cache_stats.values())
         cache_by_role_str = ", ".join(
             f"{r}={s['cached_tokens']:,}/{s['prompt_tokens']:,}"
-            for r, s in self._cache_stats.items())
+            for r, s in self._cache_stats.items()
+        )
         cache_rate = round(cache_total_hit / cache_total_pt, 3) if cache_total_pt else 0.0
-        tb._log("cache", f"{cache_total_hit:,}/{cache_total_pt:,} prompt tokens served "
-                         f"from cache ({cache_rate:.1%}) by role: {cache_by_role_str}")
+        tb._log(
+            "cache",
+            f"{cache_total_hit:,}/{cache_total_pt:,} prompt tokens served "
+            f"from cache ({cache_rate:.1%}) by role: {cache_by_role_str}",
+        )
 
         entry = tb.artifact_entry()
         outcome = self.run_log.finish(
-            verdict, entry.get("comparisons") or [],
-            stop_reason=verdict, evidence_sufficient=True)
+            verdict, entry.get("comparisons") or [], stop_reason=verdict, evidence_sufficient=True
+        )
         self.run_log.config["cost"] = {
-            "prompt_tokens": pt, "completion_tokens": ct,
+            "prompt_tokens": pt,
+            "completion_tokens": ct,
             "usd": _usd(self.model_name, pt, ct),
         }
         log_path = self.run_log.write()
-        tb._log("run_log",
-                f"{self.run_log.run_id}: {outcome['n_compared']} compared, "
-                f"review_complete={outcome['review_complete']}, "
-                f"{len(outcome['open_papers'])} open"
-                + (f" -> {log_path.name}" if log_path else ""))
+        tb._log(
+            "run_log",
+            f"{self.run_log.run_id}: {outcome['n_compared']} compared, "
+            f"review_complete={outcome['review_complete']}, "
+            f"{len(outcome['open_papers'])} open" + (f" -> {log_path.name}" if log_path else ""),
+        )
 
-        entry.update({
-            "submission_basis": tb.submission_basis,
-            "run_log": self.run_log.to_dict(),
-            "agent_verdict": verdict,
-            "agent_rationale": "",
-            "evidence_sufficient": True,
-            "review_complete": not bool(unresolved),
-            "unresolved_count": len(unresolved),
-            "unresolved_papers": unresolved_papers,
-            "stop_reason": verdict,
-            "confidence": None,
-            "timings": timings,
-            "cost": {"prompt_tokens": pt, "completion_tokens": ct, "usd": _usd(self.model_name, pt, ct),
-                     "cache": {"by_role": cache_by_role, "total_prompt_tokens": cache_total_pt,
-                               "total_cached_tokens": cache_total_hit,
-                               "hit_rate": round(cache_total_hit / cache_total_pt, 3) if cache_total_pt else 0.0}},
-        })
+        entry.update(
+            {
+                "submission_basis": tb.submission_basis,
+                "run_log": self.run_log.to_dict(),
+                "agent_verdict": verdict,
+                "agent_rationale": "",
+                "evidence_sufficient": True,
+                "review_complete": not bool(unresolved),
+                "unresolved_count": len(unresolved),
+                "unresolved_papers": unresolved_papers,
+                "stop_reason": verdict,
+                "confidence": None,
+                "timings": timings,
+                "cost": {
+                    "prompt_tokens": pt,
+                    "completion_tokens": ct,
+                    "usd": _usd(self.model_name, pt, ct),
+                    "cache": {
+                        "by_role": cache_by_role,
+                        "total_prompt_tokens": cache_total_pt,
+                        "total_cached_tokens": cache_total_hit,
+                        "hit_rate": round(cache_total_hit / cache_total_pt, 3)
+                        if cache_total_pt
+                        else 0.0,
+                    },
+                },
+            }
+        )
         emit()
         return entry

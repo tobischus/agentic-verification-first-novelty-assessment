@@ -7,7 +7,9 @@ export default function Done({ onBack, onLogout }) {
         <p className="muted">No results or comparisons between systems are shown here.</p>
         <div className="fe-actions">
           <button onClick={onBack}>Back to task list</button>
-          <button className="secondary" onClick={onLogout}>Log out</button>
+          <button className="secondary" onClick={onLogout}>
+            Log out
+          </button>
         </div>
       </div>
     </div>

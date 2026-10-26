@@ -19,18 +19,14 @@ class ResultEntry(BaseModel):
 class StructuredPaperInformation(BaseModel):
     """Structured information extracted from a research paper."""
 
-    methods: List[str] = Field(
-        description="List of methods/approaches proposed in the paper"
-    )
+    methods: List[str] = Field(description="List of methods/approaches proposed in the paper")
     problems: List[str] = Field(description="List of problems the paper addresses")
     datasets: List[str] = Field(description="List of datasets used for evaluation")
     metrics: List[str] = Field(description="List of evaluation metrics used")
     results: List[ResultEntry] = Field(
         description="Key quantitative results with metric name and value"
     )
-    novelty_claims: List[str] = Field(
-        description="Claims about what is novel in this work"
-    )
+    novelty_claims: List[str] = Field(description="Claims about what is novel in this work")
 
 
 class StructuredRepresentationGenerator:
@@ -42,9 +38,7 @@ class StructuredRepresentationGenerator:
         if not api_key:
             raise ValueError("OPENAI_API_KEY environment variable is not set")
 
-        self.llm = ChatOpenAI(
-            model_name=model_name, temperature=temperature, api_key=api_key
-        )
+        self.llm = ChatOpenAI(model_name=model_name, temperature=temperature, api_key=api_key)
 
         self.template = textwrap.dedent(
             """
@@ -68,17 +62,13 @@ class StructuredRepresentationGenerator:
         """
         )
 
-    def extract_paper_information(
-        self, paper_title: str, abstract: str, introduction: str = ""
-    ):
+    def extract_paper_information(self, paper_title: str, abstract: str, introduction: str = ""):
         """Extract structured information from a research paper."""
         prompt = self.template.format(
             title=paper_title, abstract=abstract, introduction=introduction
         )
 
-        result = self.llm.with_structured_output(StructuredPaperInformation).invoke(
-            prompt
-        )
+        result = self.llm.with_structured_output(StructuredPaperInformation).invoke(prompt)
 
         return {"raw": str(result), "parsed": dict(result)}
 
@@ -104,9 +94,7 @@ class StructuredRepresentationGenerator:
         prompts = []
         for paper in related_papers[:10]:
             paper_intro = ""
-            intro_path = (
-                f"{submission_path}/introductions/{paper['paper_id']}_intro.txt"
-            )
+            intro_path = f"{submission_path}/introductions/{paper['paper_id']}_intro.txt"
             if os.path.exists(intro_path):
                 with open(intro_path, "r") as f:
                     paper_intro = f.read()
@@ -146,9 +134,7 @@ class StructuredRepresentationGenerator:
 
         output = {
             "main_paper": {
-                "raw": str(
-                    main_result["raw"]
-                ),
+                "raw": str(main_result["raw"]),
                 "parsed": main_parsed,
             },
             "selected_papers": [],
@@ -157,16 +143,12 @@ class StructuredRepresentationGenerator:
         for r in related_results:
             related_parsed = dict(r["parsed"])
             if "results" in related_parsed:
-                related_parsed["results"] = serialize_result_entries(
-                    related_parsed["results"]
-                )
+                related_parsed["results"] = serialize_result_entries(related_parsed["results"])
 
             output["selected_papers"].append(
                 {
                     "paper_id": r["paper_id"],
-                    "raw": str(
-                        r["raw"]
-                    ),
+                    "raw": str(r["raw"]),
                     "parsed": related_parsed,
                 }
             )
@@ -193,9 +175,7 @@ class StructuredRepresentationGenerator:
 
         submissions = os.listdir(data_dir)
         for submission in submissions:
-            submission_id = (
-                submission.split("_")[0] if "_" in submission else submission
-            )
+            submission_id = submission.split("_")[0] if "_" in submission else submission
 
             submission_paper_path = f"{data_dir}/{submission}/{submission}.json"
             if not os.path.exists(submission_paper_path):
@@ -212,9 +192,7 @@ class StructuredRepresentationGenerator:
             main_paper_title = paper_obj["title"]
             main_paper_abstract = paper_obj["abstract"]
             main_paper_introduction = ""
-            if os.path.exists(
-                f"{data_dir}/{submission}/introductions/{submission}_intro.txt"
-            ):
+            if os.path.exists(f"{data_dir}/{submission}/introductions/{submission}_intro.txt"):
                 main_paper_introduction = open(
                     f"{data_dir}/{submission}/introductions/{submission}_intro.txt", "r"
                 ).read()
@@ -249,9 +227,7 @@ class StructuredRepresentationGenerator:
 
             batch_entries.append(main_paper_entry)
 
-            related_papers_path = (
-                f"{data_dir}/{submission}/related_work_data/ranked_papers.json"
-            )
+            related_papers_path = f"{data_dir}/{submission}/related_work_data/ranked_papers.json"
             if not os.path.exists(related_papers_path):
                 print(f"Skipping {submission}: related papers not found")
                 continue
@@ -268,9 +244,7 @@ class StructuredRepresentationGenerator:
                 paper_id = paper["paper_id"]
                 paper_title = paper["title"]
                 paper_abstract = paper["abstract"]
-                if os.path.exists(
-                    f"{data_dir}/{submission}/introductions/{paper_id}_intro.txt"
-                ):
+                if os.path.exists(f"{data_dir}/{submission}/introductions/{paper_id}_intro.txt"):
                     paper_introduction = open(
                         f"{data_dir}/{submission}/introductions/{paper_id}_intro.txt",
                         "r",
@@ -300,10 +274,10 @@ class StructuredRepresentationGenerator:
                 batch_entries.append(paper_entry)
 
         print(
-            f"Main papers with introductions: {main_papers_with_intro}/{total_main_papers} ({main_papers_with_intro/total_main_papers*100:.1f}%)"
+            f"Main papers with introductions: {main_papers_with_intro}/{total_main_papers} ({main_papers_with_intro / total_main_papers * 100:.1f}%)"
         )
         print(
-            f"Selected papers with introductions: {selected_papers_with_intro}/{total_selected_papers} ({selected_papers_with_intro/total_selected_papers*100:.1f}%)"
+            f"Selected papers with introductions: {selected_papers_with_intro}/{total_selected_papers} ({selected_papers_with_intro / total_selected_papers * 100:.1f}%)"
         )
 
         os.makedirs(output_dir, exist_ok=True)
@@ -390,7 +364,6 @@ class StructuredRepresentationGenerator:
                     else len(grouped_results[submission_id]["selected_papers"])
                 )
 
-
                 grouped_results[submission_id]["selected_papers"][rel_idx] = result_data
 
         stats = {"total_processed": 0, "successful": 0, "failed": 0, "submissions": []}
@@ -451,9 +424,7 @@ class StructuredRepresentationGenerator:
             with open(meta_path, "w") as f:
                 json.dump(current_meta, f, indent=3)
 
-            with open(
-                f"{data_dir}/{submission_id}/structured_representation.json", "w"
-            ) as f:
+            with open(f"{data_dir}/{submission_id}/structured_representation.json", "w") as f:
                 json.dump(
                     {"structured_representation": structured_representation},
                     f,
@@ -464,7 +435,7 @@ class StructuredRepresentationGenerator:
             stats["successful"] += 1
             stats["submissions"].append(submission_id)
 
-        print(f"\nProcessing Summary:")
+        print("\nProcessing Summary:")
         print(f"Total processed: {stats['total_processed']}")
         print(f"Successful: {stats['successful']}")
         print(f"Failed: {stats['failed']}")
@@ -475,21 +446,15 @@ class StructuredRepresentationGenerator:
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Generate structured representations of papers"
-    )
+    parser = argparse.ArgumentParser(description="Generate structured representations of papers")
     parser.add_argument(
         "--data-dir",
         type=str,
         default="../../novelty_assessment/data_iclr_all_topics/iclr_compiled_v2",
         help="Directory containing submission data",
     )
-    parser.add_argument(
-        "--model", type=str, default="gpt-4.1", help="OpenAI model to use"
-    )
-    parser.add_argument(
-        "--prepare", action="store_true", help="Prepare batch inference data"
-    )
+    parser.add_argument("--model", type=str, default="gpt-4.1", help="OpenAI model to use")
+    parser.add_argument("--prepare", action="store_true", help="Prepare batch inference data")
     parser.add_argument("--process", action="store_true", help="Process batch results")
     parser.add_argument(
         "--results-file",

@@ -1,4 +1,5 @@
 """E3 for OpenNovelty: are the passages it shows from prior work real, and is that work prior?"""
+
 from __future__ import annotations
 
 import argparse
@@ -25,6 +26,7 @@ UA = {"User-Agent": "novelty-thesis-e3-audit/1.0 (academic research)"}
 def _s2_key() -> str | None:
     """The Semantic Scholar key from the environment or .env."""
     import os
+
     k = os.getenv("SEMANTIC_SCHOLAR_API_KEY")
     if k:
         return k
@@ -60,8 +62,11 @@ def _s2(path: str):
 def direct_pdf(uri: str) -> str | None:
     """Venue pages whose PDF sits at a fixed, derivable address."""
     if "proceedings.neurips.cc" in uri and "-Abstract" in uri:
-        return re.sub(r"-Abstract(-\w+)?\.html$", lambda m: "-Paper" + (m.group(1) or "") + ".pdf",
-                      uri.replace("/hash/", "/file/"))
+        return re.sub(
+            r"-Abstract(-\w+)?\.html$",
+            lambda m: "-Paper" + (m.group(1) or "") + ".pdf",
+            uri.replace("/hash/", "/file/"),
+        )
     if "aclanthology.org" in uri:
         return uri if uri.endswith(".pdf") else uri.rstrip("/") + ".pdf"
     if "openaccess.thecvf.com" in uri and uri.endswith(".html"):
@@ -100,12 +105,18 @@ def pdf_text_with_links(path: Path) -> str:
     doc = fitz.open(path)
     parts = []
     for page in doc:
-        links = [l for l in page.get_links() if l.get("uri")]
+        links = [lk for lk in page.get_links() if lk.get("uri")]
         prev_uri, prev_line = None, None
         for w in page.get_text("words"):
             r = fitz.Rect(w[:4])
-            uri = next((l["uri"] for l in links
-                        if (r & fitz.Rect(l["from"])).get_area() > 0.5 * r.get_area()), None)
+            uri = next(
+                (
+                    lk["uri"]
+                    for lk in links
+                    if (r & fitz.Rect(lk["from"])).get_area() > 0.5 * r.get_area()
+                ),
+                None,
+            )
             if prev_line is not None and (w[5], w[6]) != prev_line:
                 parts.append("\n")
             if prev_uri and uri != prev_uri:
@@ -119,8 +130,11 @@ def pdf_text_with_links(path: Path) -> str:
 
 
 _CAND = re.compile(r"(?m)^(\d+)\.\s+((?:(?!URL:)[^\n]*\n){1,3}?)\s*URL:\s*View paper\s*<<([^>]+)>>")
-_EVID = re.compile(r"Evidence\s+(\d+)\s*-\s*Rationale:(.*?)-\s*Original:(.*?)-\s*Candidate:(.*?)"
-                   r"(?=Evidence\s+\d+\s*-\s*Rationale:|\n\s*\d+\.\s+\S|\Z)", re.S)
+_EVID = re.compile(
+    r"Evidence\s+(\d+)\s*-\s*Rationale:(.*?)-\s*Original:(.*?)-\s*Candidate:(.*?)"
+    r"(?=Evidence\s+\d+\s*-\s*Rationale:|\n\s*\d+\.\s+\S|\Z)",
+    re.S,
+)
 
 
 def evidence_items(text: str) -> list:
@@ -128,13 +142,20 @@ def evidence_items(text: str) -> list:
     heads = list(_CAND.finditer(text))
     items = []
     for i, h in enumerate(heads):
-        block = text[h.end(): heads[i + 1].start() if i + 1 < len(heads) else len(text)]
+        block = text[h.end() : heads[i + 1].start() if i + 1 < len(heads) else len(text)]
         title = " ".join(h.group(2).split())
         for e in _EVID.finditer(block):
             orig = " ".join(e.group(3).split())
             cand = re.split(r"\s+Appendix:", " ".join(e.group(4).split()))[0]
-            items.append({"candidate_no": int(h.group(1)), "title": title, "uri": h.group(3),
-                          "original": orig, "candidate": cand})
+            items.append(
+                {
+                    "candidate_no": int(h.group(1)),
+                    "title": title,
+                    "uri": h.group(3),
+                    "original": orig,
+                    "candidate": cand,
+                }
+            )
     return items
 
 
@@ -150,8 +171,11 @@ def _get(url: str, binary=False, tries=3):
 
 
 def arxiv_id(uri: str) -> str | None:
-    m = re.search(r"arxiv\.org/(?:abs|pdf)/([0-9]{4}\.[0-9]{4,5})|10\.48550/arxiv\.([0-9]{4}\.[0-9]{4,5})",
-                  uri, re.I)
+    m = re.search(
+        r"arxiv\.org/(?:abs|pdf)/([0-9]{4}\.[0-9]{4,5})|10\.48550/arxiv\.([0-9]{4}\.[0-9]{4,5})",
+        uri,
+        re.I,
+    )
     return (m.group(1) or m.group(2)) if m else None
 
 
@@ -218,7 +242,9 @@ def main(cache: Path):
         sub_dir = al.ROOT / "data" / paper
         sub_meta = json.loads((sub_dir / f"{paper}.json").read_text(encoding="utf-8"))
         sub_date = sub_meta.get("publication_date") or "9999"
-        inp = next(p for p in (FE / "inputs").glob(f"*/{paper}") if (p / "opennovelty.pdf").exists())
+        inp = next(
+            p for p in (FE / "inputs").glob(f"*/{paper}") if (p / "opennovelty.pdf").exists()
+        )
         sub_sq = squash((inp / "submission.txt").read_text(encoding="utf-8", errors="ignore"))
         sub_title = squash(sub_meta.get("title") or "")[:60]
         for it in evidence_items(pdf_text_with_links(inp / "opennovelty.pdf")):
@@ -228,41 +254,66 @@ def main(cache: Path):
                 if m["pdf_url"] not in text_cache:
                     text_cache[m["pdf_url"]] = fulltext(m["pdf_url"], cache)
                 text, sha = text_cache[m["pdf_url"]]
-            titles = {squash(t)[:60] for t in (m.get("arxiv_title"), m.get("s2_title"), it["title"]) if t}
+            titles = {
+                squash(t)[:60] for t in (m.get("arxiv_title"), m.get("s2_title"), it["title"]) if t
+            }
             is_self = bool(sub_title) and sub_title in titles
-            rows.append({
-                "paper": paper, **it, "resolved_via": m.get("how"), "arxiv": m.get("arxiv"),
-                "pdf_url": m.get("pdf_url"), "pdf_sha256": sha,
-                "candidate_date": m.get("date"), "submission_date": sub_date,
-                "candidate_is_submission": is_self,
-                "candidate_before_submission": (None if not m.get("date") or is_self
-                                                else m["date"] < sub_date),
-                "candidate_quote": find(it["candidate"], squash(text)) if text else "not_auditable",
-                "original_quote": find(it["original"], sub_sq),
-            })
-            print(f"{paper[:28]:28} #{it['candidate_no']:<2} {rows[-1]['candidate_quote']:13} "
-                  f"orig={rows[-1]['original_quote']:9} date={m.get('date')} self={is_self} "
-                  f"{it['title'][:50]}")
+            rows.append(
+                {
+                    "paper": paper,
+                    **it,
+                    "resolved_via": m.get("how"),
+                    "arxiv": m.get("arxiv"),
+                    "pdf_url": m.get("pdf_url"),
+                    "pdf_sha256": sha,
+                    "candidate_date": m.get("date"),
+                    "submission_date": sub_date,
+                    "candidate_is_submission": is_self,
+                    "candidate_before_submission": (
+                        None if not m.get("date") or is_self else m["date"] < sub_date
+                    ),
+                    "candidate_quote": find(it["candidate"], squash(text))
+                    if text
+                    else "not_auditable",
+                    "original_quote": find(it["original"], sub_sq),
+                }
+            )
+            print(
+                f"{paper[:28]:28} #{it['candidate_no']:<2} {rows[-1]['candidate_quote']:13} "
+                f"orig={rows[-1]['original_quote']:9} date={m.get('date')} self={is_self} "
+                f"{it['title'][:50]}"
+            )
 
     def share(key, val, among=None):
         pool = [r for r in rows if among is None or among(r)]
         return {"n": len(pool), "count": sum(r[key] == val for r in pool)}
+
     summary = {
         "post_hoc": "added 2026-10-01 after E1 and E3 (8c); descriptive, no test",
         "evidence_items": len(rows),
         "papers_with_evidence": len({r["paper"] for r in rows}),
-        "candidate_quote": {k: sum(r["candidate_quote"] == k for r in rows)
-                            for k in ("exact", "near", "not_found", "not_auditable", "too_short")},
-        "original_quote": {k: sum(r["original_quote"] == k for r in rows)
-                           for k in ("exact", "near", "not_found", "too_short")},
+        "candidate_quote": {
+            k: sum(r["candidate_quote"] == k for r in rows)
+            for k in ("exact", "near", "not_found", "not_auditable", "too_short")
+        },
+        "original_quote": {
+            k: sum(r["original_quote"] == k for r in rows)
+            for k in ("exact", "near", "not_found", "too_short")
+        },
         "candidate_is_submission": sum(r["candidate_is_submission"] for r in rows),
-        "candidate_not_before_submission": sum(r["candidate_before_submission"] is False for r in rows),
-        "candidate_undated": sum(r["candidate_before_submission"] is None and not r["candidate_is_submission"]
-                                 for r in rows),
+        "candidate_not_before_submission": sum(
+            r["candidate_before_submission"] is False for r in rows
+        ),
+        "candidate_undated": sum(
+            r["candidate_before_submission"] is None and not r["candidate_is_submission"]
+            for r in rows
+        ),
     }
     meta_file.write_text(json.dumps(meta_cache, indent=1), encoding="utf-8")
-    OUT.write_text(json.dumps({"summary": summary, "items": rows}, ensure_ascii=False, indent=1),
-                   encoding="utf-8")
+    OUT.write_text(
+        json.dumps({"summary": summary, "items": rows}, ensure_ascii=False, indent=1),
+        encoding="utf-8",
+    )
     print(json.dumps(summary, indent=1))
     print("written:", OUT)
 

@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from "react";
-import { api } from "../api";
-import SplitView from "../pdf/SplitView.jsx";
-import PdfViewer, { colorFor } from "../pdf/PdfViewer.jsx";
-import { DEGREE_LABEL } from "../verdict";
-import { claimOfPassages } from "./assessmentStyle.js";
+import { useEffect, useRef, useState } from 'react'
+import { api } from '../api'
+import SplitView from '../pdf/SplitView.jsx'
+import PdfViewer, { colorFor } from '../pdf/PdfViewer.jsx'
+import { DEGREE_LABEL } from '../verdict'
+import { claimOfPassages } from './assessmentStyle.js'
 import {
   DIM,
   claimColor,
@@ -11,194 +11,187 @@ import {
   detailRefs,
   quotedTexts,
   renderExport,
-} from "./exportRender.jsx";
+} from './exportRender.jsx'
 
-const ID_PREFIX = "rv";
-const EMPTY_INDEX = { submission: [], papers: {}, refs: {}, claim_anchors: {} };
+const ID_PREFIX = 'rv'
+const EMPTY_INDEX = { submission: [], papers: {}, refs: {}, claim_anchors: {} }
 
-const traceImportant = (s = "") =>
-  s.includes("mandatory initial read") ||
-  s.includes("read_more") ||
-  s.includes("dismissal_falsification") ||
-  s.includes("dismissed after") ||
-  s.includes("SEMANTIC DEGREE:") ||
-  s.includes("GROUNDED OWNED PAIRS:") ||
-  s.includes("EVIDENCE CHECK:") ||
-  s.includes("MATERIAL AGREEMENT:") ||
-  s.includes("evidence gate REFUSED") ||
-  s.includes("evidence gate passed") ||
-  s.includes("INSUFFICIENT");
+const traceImportant = (s = '') =>
+  s.includes('mandatory initial read') ||
+  s.includes('read_more') ||
+  s.includes('dismissal_falsification') ||
+  s.includes('dismissed after') ||
+  s.includes('SEMANTIC DEGREE:') ||
+  s.includes('GROUNDED OWNED PAIRS:') ||
+  s.includes('EVIDENCE CHECK:') ||
+  s.includes('MATERIAL AGREEMENT:') ||
+  s.includes('evidence gate REFUSED') ||
+  s.includes('evidence gate passed') ||
+  s.includes('INSUFFICIENT')
 
-const prettyTrace = (s = "") =>
+const prettyTrace = (s = '') =>
   s
-    .replace(/^\[read \d+\]\s*/, "")
-    .replace(/^\[\d+\]\s*/, "")
-    .replace("SEMANTIC DEGREE:", "Semantic comparison:")
-    .replace("GROUNDED OWNED PAIRS:", "Grounded + owned pairs:")
-    .replace("EVIDENCE CHECK: status=", "Evidence check:")
-    .replace("compared, evidence gate passed", "✓ Evidence gate passed")
-    .replace(
-      "evidence gate REFUSED -> read again:",
-      "↻ Evidence gate refused → read again:",
-    );
+    .replace(/^\[read \d+\]\s*/, '')
+    .replace(/^\[\d+\]\s*/, '')
+    .replace('SEMANTIC DEGREE:', 'Semantic comparison:')
+    .replace('GROUNDED OWNED PAIRS:', 'Grounded + owned pairs:')
+    .replace('EVIDENCE CHECK: status=', 'Evidence check:')
+    .replace('compared, evidence gate passed', '✓ Evidence gate passed')
+    .replace('evidence gate REFUSED -> read again:', '↻ Evidence gate refused → read again:')
 
 export default function ReviewWalkthrough({ submissionId, active, autoStart, onFinish }) {
-  const [list, setList] = useState(null);
-  const [err, setErr] = useState("");
-  const [started, setStarted] = useState(false);
-  const [ci, setCi] = useState(0);
-  const [cache, setCache] = useState({});
-  const [loading, setLoading] = useState(false);
-  const [live, setLive] = useState(null);
-  const [report, setReport] = useState(null);
-  const [assessing, setAssessing] = useState(false);
-  const [finishing, setFinishing] = useState(false);
-  const [reader, setReader] = useState({ paperId: null, focusId: null });
-  const pollRef = useRef(null);
-  const trajRef = useRef(null);
-  const startRef = useRef(null);
-  const autoStarted = useRef(false);
+  const [list, setList] = useState(null)
+  const [err, setErr] = useState('')
+  const [started, setStarted] = useState(false)
+  const [ci, setCi] = useState(0)
+  const [cache, setCache] = useState({})
+  const [loading, setLoading] = useState(false)
+  const [live, setLive] = useState(null)
+  const [report, setReport] = useState(null)
+  const [assessing, setAssessing] = useState(false)
+  const [finishing, setFinishing] = useState(false)
+  const [reader, setReader] = useState({ paperId: null, focusId: null })
+  const pollRef = useRef(null)
+  const trajRef = useRef(null)
+  const startRef = useRef(null)
+  const autoStarted = useRef(false)
   useEffect(() => {
-    if (!list || started || autoStarted.current || !active || !startRef.current) return;
+    if (!list || started || autoStarted.current || !active || !startRef.current) return
     if (autoStart || list.claims[0]?.computed) {
-      autoStarted.current = true;
-      startRef.current();
+      autoStarted.current = true
+      startRef.current()
     }
-  }, [list, started, active, autoStart]);
+  }, [list, started, active, autoStart])
 
   useEffect(() => {
     api
       .reviewClaims(submissionId)
       .then(setList)
-      .catch((e) => setErr(String(e)));
-    return () => clearTimeout(pollRef.current);
-  }, [submissionId]);
+      .catch((e) => setErr(String(e)))
+    return () => clearTimeout(pollRef.current)
+  }, [submissionId])
 
   useEffect(() => {
-    setReader({ paperId: null, focusId: null });
-  }, [ci]);
+    setReader({ paperId: null, focusId: null })
+  }, [ci])
 
-  const trajLen = live?.trajectory?.length || 0;
-  const paperTraceLen = (live?.paper_traces || []).reduce(
-    (n, p) => n + (p.trace || []).length,
-    0,
-  );
+  const trajLen = live?.trajectory?.length || 0
+  const paperTraceLen = (live?.paper_traces || []).reduce((n, p) => n + (p.trace || []).length, 0)
 
   useEffect(() => {
     if (trajRef.current) {
-      trajRef.current.scrollTop = trajRef.current.scrollHeight;
+      trajRef.current.scrollTop = trajRef.current.scrollHeight
     }
-  }, [trajLen, paperTraceLen]);
+  }, [trajLen, paperTraceLen])
 
-  if (err) return <div className="error">{err}</div>;
-  if (!list) return <div className="panel">Loading review…</div>;
+  if (err) return <div className="error">{err}</div>
+  if (!list) return <div className="panel">Loading review…</div>
 
-  const claims = list.claims;
-  const n = claims.length;
+  const claims = list.claims
+  const n = claims.length
 
   const pollLive = (id) =>
     new Promise((resolve, reject) => {
-      let fails = 0;
+      let fails = 0
       const tick = async () => {
-        let d = null;
+        let d = null
         try {
-          d = await api.claimLive(submissionId, id);
-          fails = 0;
+          d = await api.claimLive(submissionId, id)
+          fails = 0
         } catch (e) {
           if (++fails >= 5) {
-            reject(e);
-            return;
+            reject(e)
+            return
           }
         }
         if (d) {
-          setLive(d);
-          if (d.status === "done" && d.review) {
-            resolve(d);
-            return;
+          setLive(d)
+          if (d.status === 'done' && d.review) {
+            resolve(d)
+            return
           }
-          if (d.status === "error") {
-            reject(new Error(d.error || "agent error"));
-            return;
+          if (d.status === 'error') {
+            reject(new Error(d.error || 'agent error'))
+            return
           }
         }
-        pollRef.current = setTimeout(tick, 1200);
-      };
-      pollRef.current = setTimeout(tick, 400);
-    });
+        pollRef.current = setTimeout(tick, 1200)
+      }
+      pollRef.current = setTimeout(tick, 400)
+    })
 
   const refreshReport = async (cid) => {
-    setAssessing(true);
+    setAssessing(true)
     try {
       try {
-        await api.ensureClaimAssessment(submissionId, cid);
-      } catch {
-      }
+        await api.ensureClaimAssessment(submissionId, cid)
+      } catch {}
       const [text, index] = await Promise.all([
         api.reviewExport(submissionId),
         api.quoteIndex(submissionId),
-      ]);
-      setReport({ text, index });
+      ])
+      setReport({ text, index })
     } catch (e) {
-      setErr(String(e));
+      setErr(String(e))
     } finally {
-      setAssessing(false);
+      setAssessing(false)
     }
-  };
+  }
 
   const loadClaim = async (idx) => {
-    setCi(idx);
-    setStarted(true);
-    window.scrollTo(0, 0);
-    const id = claims[idx].claim_id;
+    setCi(idx)
+    setStarted(true)
+    window.scrollTo(0, 0)
+    const id = claims[idx].claim_id
     if (cache[id]) {
-      setLive(null);
-      await refreshReport(id);
-      return;
+      setLive(null)
+      await refreshReport(id)
+      return
     }
-    setLoading(true);
-    setLive({ status: "running", step: 0, trajectory: [], cost: { usd: 0 } });
-    let ok = false;
+    setLoading(true)
+    setLive({ status: 'running', step: 0, trajectory: [], cost: { usd: 0 } })
+    let ok = false
     try {
-      const resp = await api.computeClaim(submissionId, id);
-      const d = resp.status === "done" ? resp : await pollLive(id);
-      if (d.review) setCache((c) => ({ ...c, [id]: d.review }));
-      ok = true;
+      const resp = await api.computeClaim(submissionId, id)
+      const d = resp.status === 'done' ? resp : await pollLive(id)
+      if (d.review) setCache((c) => ({ ...c, [id]: d.review }))
+      ok = true
     } catch (e) {
-      setErr(String(e));
+      setErr(String(e))
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-    if (ok) await refreshReport(id);
-  };
+    if (ok) await refreshReport(id)
+  }
 
   const finish = async () => {
-    setFinishing(true);
+    setFinishing(true)
     try {
-      await api.finalizeReview(submissionId);
+      await api.finalizeReview(submissionId)
     } catch (e) {
-      setFinishing(false);
-      setErr(String(e));
-      return;
+      setFinishing(false)
+      setErr(String(e))
+      return
     }
-    setFinishing(false);
-    if (onFinish) onFinish();
-  };
+    setFinishing(false)
+    if (onFinish) onFinish()
+  }
 
-  const claim = started ? claims[ci] : null;
-  const data = claim ? cache[claim.claim_id] : null;
+  const claim = started ? claims[ci] : null
+  const data = claim ? cache[claim.claim_id] : null
 
   const goNext = async () => {
-    if (ci < n - 1) await loadClaim(ci + 1);
-    else await finish();
-  };
+    if (ci < n - 1) await loadClaim(ci + 1)
+    else await finish()
+  }
   const goPrev = async () => {
-    if (ci > 0) await loadClaim(ci - 1);
-  };
+    if (ci > 0) await loadClaim(ci - 1)
+  }
 
-  startRef.current = () => loadClaim(0);
+  startRef.current = () => loadClaim(0)
 
   if (!started) {
-    const pending = autoStart || claims[0]?.computed;
+    const pending = autoStart || claims[0]?.computed
     return (
       <div className="panel review-start">
         <div className="eyebrow">Review</div>
@@ -213,36 +206,36 @@ export default function ReviewWalkthrough({ submissionId, active, autoStart, onF
         ) : (
           <>
             <p className="muted lede">
-              For each claim, an agent reads the candidate papers and compares them with the
-              claim. An overlap counts only with quotes verified verbatim in both papers.
+              For each claim, an agent reads the candidate papers and compares them with the claim.
+              An overlap counts only with quotes verified verbatim in both papers.
             </p>
             <button disabled={loading} onClick={() => loadClaim(0)}>
-              {loading ? "Starting…" : "Start the review"}
+              {loading ? 'Starting…' : 'Start the review'}
             </button>
           </>
         )}
       </div>
-    );
+    )
   }
 
   const livePanel = () => {
-    const lv = live || {};
-    const traj = lv.trajectory || [];
-    const step = lv.step || 0;
-    const maxs = lv.max_steps || 0;
-    const paperTraces = lv.paper_traces || [];
+    const lv = live || {}
+    const traj = lv.trajectory || []
+    const step = lv.step || 0
+    const maxs = lv.max_steps || 0
+    const paperTraces = lv.paper_traces || []
     return (
       <div className="rv-block">
         <div className="live-head">
           <div className="spinner" />
           <div className="live-title">
             <strong>Reviewing claim {ci + 1}…</strong>
-            <div className="muted">{lv.last_action || "starting up"}</div>
+            <div className="muted">{lv.last_action || 'starting up'}</div>
           </div>
           <div className="live-metrics">
             <span className="lm">
               Step {step}
-              {maxs ? `/${maxs}` : ""}
+              {maxs ? `/${maxs}` : ''}
             </span>
             <span className="lm">{lv.examined ?? 0} examined</span>
             <span className="lm">{lv.comparisons ?? 0} compared</span>
@@ -262,15 +255,11 @@ export default function ReviewWalkthrough({ submissionId, active, autoStart, onF
           </div>
         )}
         <div className="paper-traces" ref={trajRef}>
-          {paperTraces.length === 0 && (
-            <div className="muted">Reading prior work…</div>
-          )}
+          {paperTraces.length === 0 && <div className="muted">Reading prior work…</div>}
 
           {paperTraces.map((p) => (
             <div
-              className={
-                "paper-trace-card" + (p.insufficient ? " insufficient" : "")
-              }
+              className={'paper-trace-card' + (p.insufficient ? ' insufficient' : '')}
               key={p.paper_id}
             >
               <div className="pt-head">
@@ -285,9 +274,7 @@ export default function ReviewWalkthrough({ submissionId, active, autoStart, onF
 
               <div className="pt-summary">
                 <span>{p.grounded_pairs} grounded + owned pair(s)</span>
-                {p.evidence_status && (
-                  <span>evidence: {p.evidence_status}</span>
-                )}
+                {p.evidence_status && <span>evidence: {p.evidence_status}</span>}
                 {p.insufficient && <span>⚠ insufficient</span>}
               </div>
 
@@ -318,32 +305,31 @@ export default function ReviewWalkthrough({ submissionId, active, autoStart, onF
           </details>
         </div>
       </div>
-    );
-  };
+    )
+  }
 
-  const claimNo = ci + 1;
-  const text = report?.text || "";
-  const index = report?.index || EMPTY_INDEX;
-  const section = claimSection(text, claimNo);
-  const ready = !!data && !loading && !assessing && !!section;
+  const claimNo = ci + 1
+  const text = report?.text || ''
+  const index = report?.index || EMPTY_INDEX
+  const section = claimSection(text, claimNo)
+  const ready = !!data && !loading && !assessing && !!section
 
-  const claimOf = claimOfPassages(text, index);
-  const shown = quotedTexts(section);
-  const anchor = index.claim_anchors?.[String(claimNo)];
-  const refToPaper = {};
+  const claimOf = claimOfPassages(text, index)
+  const shown = quotedTexts(section)
+  const anchor = index.claim_anchors?.[String(claimNo)]
+  const refToPaper = {}
   Object.entries(index.refs || {}).forEach(([pid, ref]) => {
-    refToPaper[ref] = pid;
-  });
+    refToPaper[ref] = pid
+  })
   const claimPapers = detailRefs(section)
     .map((r) => refToPaper[r])
-    .filter((pid) => pid && index.papers?.[pid]);
-  const paperColor = {};
+    .filter((pid) => pid && index.papers?.[pid])
+  const paperColor = {}
   Object.keys(index.papers || {}).forEach((pid, i) => {
-    paperColor[pid] = colorFor(i + 1);
-  });
-  const shade = (id, color) =>
-    reader.focusId && id !== reader.focusId ? color + DIM : color;
-  const readerPaper = reader.paperId ? index.papers?.[reader.paperId] : null;
+    paperColor[pid] = colorFor(i + 1)
+  })
+  const shade = (id, color) => (reader.focusId && id !== reader.focusId ? color + DIM : color)
+  const readerPaper = reader.paperId ? index.papers?.[reader.paperId] : null
   const highlights = readerPaper
     ? readerPaper.quotes
         .filter((q) => shown.has(q.text))
@@ -357,25 +343,19 @@ export default function ReviewWalkthrough({ submissionId, active, autoStart, onF
         .map((q) => ({
           id: q.id,
           text: q.text,
-          color: shade(
-            q.id,
-            claimOf.has(q.id) ? claimColor(claimOf.get(q.id)) : colorFor(0),
-          ),
-        }));
-  const onPick = (target) =>
-    setReader({ paperId: target.paperId, focusId: target.id });
+          color: shade(q.id, claimOf.has(q.id) ? claimColor(claimOf.get(q.id)) : colorFor(0)),
+        }))
+  const onPick = (target) => setReader({ paperId: target.paperId, focusId: target.id })
   const readerUrl = reader.paperId
     ? api.paperPdfUrl(submissionId, reader.paperId)
-    : api.pdfUrl(submissionId);
+    : api.pdfUrl(submissionId)
 
   const viewer = (
     <div className="pdfpane">
       <div className="pdfpicker">
         <select
-          value={reader.paperId || ""}
-          onChange={(e) =>
-            setReader({ paperId: e.target.value || null, focusId: null })
-          }
+          value={reader.paperId || ''}
+          onChange={(e) => setReader({ paperId: e.target.value || null, focusId: null })}
         >
           <option value="">The submission</option>
           {claimPapers.map((pid) => (
@@ -385,17 +365,12 @@ export default function ReviewWalkthrough({ submissionId, active, autoStart, onF
           ))}
         </select>
       </div>
-      <PdfViewer
-        key={readerUrl}
-        url={readerUrl}
-        highlights={highlights}
-        focusId={reader.focusId}
-      />
+      <PdfViewer key={readerUrl} url={readerUrl} highlights={highlights} focusId={reader.focusId} />
     </div>
-  );
+  )
 
   const pending = () => {
-    if (loading) return livePanel();
+    if (loading) return livePanel()
     if (assessing || !data)
       return (
         <div className="rv-block">
@@ -403,20 +378,18 @@ export default function ReviewWalkthrough({ submissionId, active, autoStart, onF
             <div className="spinner" />
             <div className="live-title">
               <strong>Preparing the report for claim {claimNo}…</strong>
-              <div className="muted">
-                the claim-level assessment, as the final report prints it
-              </div>
+              <div className="muted">the claim-level assessment, as the final report prints it</div>
             </div>
           </div>
         </div>
-      );
+      )
     return (
       <div className="error">
-        Claim {claimNo} is missing from the report. Reload the tab or run the review
-        for this claim again.
+        Claim {claimNo} is missing from the report. Reload the tab or run the review for this claim
+        again.
       </div>
-    );
-  };
+    )
+  }
 
   const panel = (
     <div className="panel review-wt">
@@ -431,12 +404,7 @@ export default function ReviewWalkthrough({ submissionId, active, autoStart, onF
         <div className="review-head-right">
           <div className="claim-dots">
             {claims.map((_, i) => (
-              <span
-                key={i}
-                className={
-                  "cdot" + (i < ci ? " done" : i === ci ? " current" : "")
-                }
-              />
+              <span key={i} className={'cdot' + (i < ci ? ' done' : i === ci ? ' current' : '')} />
             ))}
           </div>
         </div>
@@ -452,25 +420,21 @@ export default function ReviewWalkthrough({ submissionId, active, autoStart, onF
             })}
           </div>
           <div className="review-actions split">
-            <button
-              className="secondary"
-              disabled={finishing || ci === 0}
-              onClick={goPrev}
-            >
+            <button className="secondary" disabled={finishing || ci === 0} onClick={goPrev}>
               Previous claim
             </button>
             <button disabled={finishing} onClick={goNext}>
               {ci < n - 1
-                ? "Confirm and next claim"
+                ? 'Confirm and next claim'
                 : finishing
-                  ? "Writing the novelty summary…"
-                  : "Confirm and finish"}
+                  ? 'Writing the novelty summary…'
+                  : 'Confirm and finish'}
             </button>
           </div>
           {finishing && (
             <p className="muted rv-finishing">
-              Bringing every claim-level assessment up to date and writing the
-              paper-level novelty summary…
+              Bringing every claim-level assessment up to date and writing the paper-level novelty
+              summary…
             </p>
           )}
         </>
@@ -484,7 +448,7 @@ export default function ReviewWalkthrough({ submissionId, active, autoStart, onF
         </>
       )}
     </div>
-  );
+  )
 
-  return <SplitView storageKey="review" left={panel} right={viewer} />;
+  return <SplitView storageKey="review" left={panel} right={viewer} />
 }

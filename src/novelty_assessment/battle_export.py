@@ -1,4 +1,5 @@
 """Deterministic Markdown report built from the stored artifacts."""
+
 import argparse
 import json
 import re
@@ -12,11 +13,13 @@ EXPORT_LAYOUT_VERSION = "reviewer-v4.4"
 
 _LQ, _RQ = "“", "”"
 
+
 def _load(path: Path):
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return None
+
 
 def _authors_from_tei(sub: Path, sid: str) -> str:
     """Author list of the submission, read from the GROBID header."""
@@ -36,8 +39,10 @@ def _authors_from_tei(sub: Path, sid: str) -> str:
             names.append(name)
     return ", ".join(names)
 
+
 def _quote(text: str) -> str:
     return f"{_LQ}{' '.join((text or '').split())}{_RQ}"
+
 
 def _segments(segs, out: List[str]) -> None:
     """Verified spans in quotation marks, the system's prose plain, and rejected quotes labelled as such."""
@@ -52,10 +57,13 @@ def _segments(segs, out: List[str]) -> None:
             out.append(content)
         out.append("")
 
+
 _EC_PHRASE = {
-    "material": "material evidence", "nonmaterial": "nonmaterial",
+    "material": "material evidence",
+    "nonmaterial": "nonmaterial",
     "insufficient": "insufficient evidence",
 }
+
 
 def _claim_verdict(comparisons: list, recorded: str):
     """(verdict, is_derived). Artifact B's verdict, else derived from the comparisons."""
@@ -64,16 +72,24 @@ def _claim_verdict(comparisons: list, recorded: str):
     derived = "challenged" if any(vd.challenges(c) for c in comparisons or []) else "not_challenged"
     return derived, True
 
-def _claim_assessment(comparisons: list, recorded_verdict: str, recorded_rationale: str,
-                      stored: dict = None, stale: bool = False) -> List[str]:
+
+def _claim_assessment(
+    comparisons: list,
+    recorded_verdict: str,
+    recorded_rationale: str,
+    stored: dict = None,
+    stale: bool = False,
+) -> List[str]:
     """The claim explanation as paragraphs: the verdict line, then the stored explanation."""
     verdict, derived = _claim_verdict(comparisons, recorded_verdict)
     paragraphs = [f"**Assessment:** {vd.verdict_label(verdict)}."]
     text = str((stored or {}).get("text") or "").strip()
     if text and not derived:
         if stale:
-            paragraphs.append("**Out of date:** the comparisons below have changed since this "
-                              "assessment was written. It has not been regenerated.")
+            paragraphs.append(
+                "**Out of date:** the comparisons below have changed since this "
+                "assessment was written. It has not been regenerated."
+            )
         paragraphs.append(text)
     elif recorded_rationale and not derived:
         paragraphs.append(recorded_rationale.strip())
@@ -86,16 +102,20 @@ def _claim_assessment(comparisons: list, recorded_verdict: str, recorded_rationa
 
 
 def _degree_counts(details: list) -> str:
-    """"13 (partial overlap)" or "13 (12 partial overlap, 1 superficial)": the claim row's count of detailed comparisons with the overlap levels behind it, strongest first, levels that do not occur left out."""
+    """Count of detailed comparisons with their overlap levels, strongest first, e.g. 13 (12 partial overlap, 1 superficial)."""
     counts: dict = {}
     for c in details:
         d = vd.degree(c) or "not compared"
         counts[d] = counts.get(d, 0) + 1
     ordered = sorted(counts.items(), key=lambda kv: vd.degree_rank(kv[0]))
-    label = lambda d: vd.overlap_label(d) or d
+
+    def label(d):
+        return vd.overlap_label(d) or d
+
     if len(ordered) == 1:
         return f"{len(details)} ({label(ordered[0][0])})"
     return f"{len(details)} (" + ", ".join(f"{n} {label(d)}" for d, n in ordered) + ")"
+
 
 def main():
     ap = argparse.ArgumentParser(description="Render the final assessment as plain text")
@@ -103,8 +123,11 @@ def main():
     ap.add_argument("--submission-id", required=True)
     ap.add_argument("--out", default=None, help="write here instead of stdout")
     ap.add_argument("--variant", default="", help="export the {variant}-suffixed artifacts")
-    ap.add_argument("--check-sources", action="store_true",
-                    help="diagnose version metadata in existing artifacts; no model calls")
+    ap.add_argument(
+        "--check-sources",
+        action="store_true",
+        help="diagnose version metadata in existing artifacts; no model calls",
+    )
     args = ap.parse_args()
     if args.check_sources:
         print(check_sources(args.data_dir, args.submission_id, args.variant))
@@ -121,8 +144,7 @@ def main():
 
 def _cite(authors, year=None) -> str:
     if isinstance(authors, list):
-        authors = ", ".join(a.get("name", "") if isinstance(a, dict) else str(a)
-                            for a in authors)
+        authors = ", ".join(a.get("name", "") if isinstance(a, dict) else str(a) for a in authors)
     names = [n.strip() for n in str(authors or "").split(",") if n.strip()]
     name = (names[0].split()[-1] + " et al." if len(names) > 1 else names[0]) if names else ""
     return " · ".join(str(x) for x in (name, year) if x)
@@ -150,9 +172,19 @@ def _ref(c: dict, refs: dict) -> str:
 
 def _snapshot(entry: dict, c: dict) -> dict:
     """This claim's embedded run record, never the current manifest."""
-    result = {k: c[k] for k in ("pinned_version", "pinned_version_date", "pinned_url",
-                               "version_status", "final_state", "unresolved_reason",
-                               "unresolved_deficit") if c.get(k) is not None}
+    result = {
+        k: c[k]
+        for k in (
+            "pinned_version",
+            "pinned_version_date",
+            "pinned_url",
+            "version_status",
+            "final_state",
+            "unresolved_reason",
+            "unresolved_deficit",
+        )
+        if c.get(k) is not None
+    }
     log = entry.get("run_log")
     prior = log.get("prior_work") if isinstance(log, dict) else None
     for p in prior if isinstance(prior, list) else []:
@@ -184,10 +216,10 @@ def _related_cell(entry) -> str:
         return "not assessed"
     degree, status = entry[0], entry[1]
     confirmed = entry[2] if len(entry) > 2 else None
-    cell = (f"{vd.overlap_label(degree) or degree or 'not compared'} · "
-            + _EC_PHRASE.get(status, "no evidence check"))
-    if (status == "material" and confirmed is False
-            and (degree or "").lower() in vd.OVERLAP_DEGREES):
+    cell = f"{vd.overlap_label(degree) or degree or 'not compared'} · " + _EC_PHRASE.get(
+        status, "no evidence check"
+    )
+    if status == "material" and confirmed is False and (degree or "").lower() in vd.OVERLAP_DEGREES:
         cell += "; proposed degree not confirmed"
     return cell
 
@@ -207,10 +239,13 @@ def _linked(label: str, claim_index: int, ref: str, linkable: bool) -> str:
 
 
 _LEGEND = [
-    "# How to read the assessments", "",
+    "# How to read the assessments",
+    "",
     "Each comparison carries two separate assessments: the overlap level proposed by the "
-    "comparison, and the evidence check of the quoted passages.", "",
-    "**Overlap level**", "",
+    "comparison, and the evidence check of the quoted passages.",
+    "",
+    "**Overlap level**",
+    "",
     "- **same contribution:** the prior work already delivers essentially the claimed "
     "contribution.",
     "- **substantial overlap:** the prior work already delivers the central contribution or "
@@ -219,16 +254,19 @@ _LEGEND = [
     "contribution; the submission keeps a distinct central contribution.",
     "- **superficial:** a real relationship -- topic, tools, evaluation setting or similar -- "
     "but no substantive part of the contribution is shared.",
-    "- **none:** the prior work does not deliver any meaningful part of the claimed "
-    "contribution.", "",
-    "**Evidence check**", "",
+    "- **none:** the prior work does not deliver any meaningful part of the claimed contribution.",
+    "",
+    "**Evidence check**",
+    "",
     "- **material evidence:** the passages establish a meaningful shared element. Whether "
-    "they also support the proposed overlap level is stated separately (\"proposed degree "
-    "not confirmed\" in the table below, an open point in the comparison).",
+    'they also support the proposed overlap level is stated separately ("proposed degree '
+    'not confirmed" in the table below, an open point in the comparison).',
     "- **nonmaterial:** the examined passages do not establish a meaningful shared element.",
     "- **insufficient evidence:** the check was inconclusive.",
-    "- **no evidence check:** none was recorded.", "",
-    "Missing support does not establish that there is no overlap.", "",
+    "- **no evidence check:** none was recorded.",
+    "",
+    "Missing support does not establish that there is no overlap.",
+    "",
 ]
 
 _HINT = {
@@ -249,18 +287,25 @@ def _open_points(c: dict) -> list:
         keys.append("insufficient")
     if _conflict(c):
         keys.append("conflict")
-    elif (status == "material" and vd.degree(c) in vd.OVERLAP_DEGREES
-          and (c.get("evidence_check") or {}).get("proposed_degree_supported") is False):
+    elif (
+        status == "material"
+        and vd.degree(c) in vd.OVERLAP_DEGREES
+        and (c.get("evidence_check") or {}).get("proposed_degree_supported") is False
+    ):
         keys.append("notsupported")
     return keys
 
 
 def _missing_check_reason(c: dict, snapshot: dict) -> str:
-    if (snapshot.get("final_state") == "dismissed" or c.get("dismissed")
-            or (c.get("map_diag") or {}).get("dismissed")):
+    if (
+        snapshot.get("final_state") == "dismissed"
+        or c.get("dismissed")
+        or (c.get("map_diag") or {}).get("dismissed")
+    ):
         return "dismissed before the evidence check"
-    if (snapshot.get("final_state") == "technical_error"
-            or (c.get("map_diag") or {}).get("call_failed")):
+    if snapshot.get("final_state") == "technical_error" or (c.get("map_diag") or {}).get(
+        "call_failed"
+    ):
         return "technical error recorded"
     return "reason not recorded"
 
@@ -290,16 +335,21 @@ def _evidence_check_block(c: dict, out: List[str], snapshot: dict = None) -> Non
     pairs = c.get("evidence_pairs") or []
     check = c.get("evidence_check") or {}
     status = _status(c)
-    supporting = {int(i) for i in check.get("supporting_pair_indices", []) or []
-                  if str(i).isdigit()}
+    supporting = {
+        int(i) for i in check.get("supporting_pair_indices", []) or [] if str(i).isdigit()
+    }
     out += ["**Status:** " + _EC_PHRASE.get(status, "no evidence check recorded") + ".", ""]
     if status == "material":
         indices = ", ".join(str(i) for i in sorted(supporting)) or "none recorded"
         out += [f"**Supporting pairs:** {indices}.", ""]
         missing = sorted(supporting - set(range(1, len(pairs) + 1)))
         if missing:
-            out += ["**Record inconsistency:** supporting indices without a stored pair: "
-                    + ", ".join(map(str, missing)) + ".", ""]
+            out += [
+                "**Record inconsistency:** supporting indices without a stored pair: "
+                + ", ".join(map(str, missing))
+                + ".",
+                "",
+            ]
     elif status in ("nonmaterial", "insufficient") and pairs:
         out += ["**Supporting pairs:** none.", ""]
     pds = check.get("proposed_degree_supported")
@@ -308,8 +358,10 @@ def _evidence_check_block(c: dict, out: List[str], snapshot: dict = None) -> Non
     if check.get("reasoning"):
         out += [check["reasoning"].strip(), ""]
     questions = []
-    for q in (check.get("unresolved_question"),
-              c.get("unresolved_deficit") or snapshot.get("unresolved_deficit")):
+    for q in (
+        check.get("unresolved_question"),
+        c.get("unresolved_deficit") or snapshot.get("unresolved_deficit"),
+    ):
         q = " ".join(str(q or "").split())
         if q and q not in questions:
             questions.append(q)
@@ -327,8 +379,9 @@ def _evidence_pair_list(c: dict, out: List[str]) -> None:
     pairs = c.get("evidence_pairs") or []
     check = c.get("evidence_check") or {}
     status = _status(c)
-    supporting = {int(i) for i in check.get("supporting_pair_indices", []) or []
-                  if str(i).isdigit()}
+    supporting = {
+        int(i) for i in check.get("supporting_pair_indices", []) or [] if str(i).isdigit()
+    }
 
     first_seen: dict = {}
     for i, p in enumerate(pairs, 1):
@@ -351,35 +404,47 @@ def _evidence_pair_list(c: dict, out: List[str]) -> None:
         if p.get("rationale"):
             out.extend(["**Proposed correspondence:** " + p["rationale"].strip(), ""])
 
-    used = [(i, p) for i, p in enumerate(pairs, 1)
-            if status == "material" and i in supporting]
-    unused = [(i, p) for i, p in enumerate(pairs, 1)
-              if not (status == "material" and i in supporting)]
+    used = [(i, p) for i, p in enumerate(pairs, 1) if status == "material" and i in supporting]
+    unused = [
+        (i, p) for i, p in enumerate(pairs, 1) if not (status == "material" and i in supporting)
+    ]
 
-    out += ["##### Evidence pairs", "",
-            "Each pair links a submission passage to a prior-work passage. "
-            "The label records how the evidence check used it.", ""]
+    out += [
+        "##### Evidence pairs",
+        "",
+        "Each pair links a submission passage to a prior-work passage. "
+        "The label records how the evidence check used it.",
+        "",
+    ]
     for i, p in used:
         render(i, p)
     if not pairs:
         out += ["No evidence pairs recorded.", ""]
     elif not used:
-        out += [f"No pair was used to support overlap; all {len(unused)} recorded "
-                "candidate(s) are listed below, each with its own label.", ""]
+        out += [
+            f"No pair was used to support overlap; all {len(unused)} recorded "
+            "candidate(s) are listed below, each with its own label.",
+            "",
+        ]
     if unused:
         out += [f"##### Pairs not used to support overlap ({len(unused)})", ""]
         for i, p in unused:
             render(i, p)
 
 
-def _comparison_detail(c: dict, entry: dict, refs: dict, pool: dict,
-                       out: List[str]) -> None:
+def _comparison_detail(c: dict, entry: dict, refs: dict, pool: dict, out: List[str]) -> None:
     """One comparison: what is read first, then two blocks the renderers fold."""
     snapshot = _snapshot(entry, c)
     pm = pool.get(_pid(c), {})
     pairs = c.get("evidence_pairs") or []
-    out += ["---", "", f"### {_ref(c, refs)} — {c.get('title') or 'Untitled prior work'}", "",
-            f"**Source used:** {_document_label(snapshot)}", ""]
+    out += [
+        "---",
+        "",
+        f"### {_ref(c, refs)} — {c.get('title') or 'Untitled prior work'}",
+        "",
+        f"**Source used:** {_document_label(snapshot)}",
+        "",
+    ]
     cite = _cite(c.get("authors") or pm.get("authors"), c.get("year") or pm.get("year"))
     if cite:
         out += [cite, ""]
@@ -392,8 +457,10 @@ def _comparison_detail(c: dict, entry: dict, refs: dict, pool: dict,
 
     noun = "pair" if len(pairs) == 1 else "pairs"
     out += [f"#### Full comparison and quoted passages · {len(pairs)} {noun}", ""]
-    for label, key in (("Shared contribution", "what_is_shared"),
-                       ("Reported difference", "submission_delta")):
+    for label, key in (
+        ("Shared contribution", "what_is_shared"),
+        ("Reported difference", "submission_delta"),
+    ):
         if c.get(key):
             out += [f"**{label}:** {c[key].strip()}", ""]
     if c.get("paper_realization"):
@@ -405,8 +472,7 @@ def _comparison_detail(c: dict, entry: dict, refs: dict, pool: dict,
     _evidence_check_block(c, out, snapshot)
 
 
-def _paper_summary(b: dict, a: dict, order: list, claims: list, refs: dict,
-                   out: List[str]) -> None:
+def _paper_summary(b: dict, a: dict, order: list, claims: list, refs: dict, out: List[str]) -> None:
     """The stored paper-level summary, rendered."""
     summary = (b or {}).get("paper_summary") or {}
     concern = str(summary.get("main_novelty_concern") or "").strip()
@@ -416,14 +482,18 @@ def _paper_summary(b: dict, a: dict, order: list, claims: list, refs: dict,
     out += ["## Novelty summary", ""]
     try:
         import paper_synthesis
-        names = {c["id"]: c.get("claim_name") or c.get("name") or ""
-                 for c in claims if c.get("id")}
+
+        names = {c["id"]: c.get("claim_name") or c.get("name") or "" for c in claims if c.get("id")}
         a_ids = {e.get("claim_id") for e in (a or {}).get("claims", []) or []}
         findings = paper_synthesis.build_findings(
-            a, b, [cid for cid in order if cid in a_ids], names, refs)
+            a, b, [cid for cid in order if cid in a_ids], names, refs
+        )
         if paper_synthesis.is_stale(summary, findings):
-            out += ["**Out of date:** the claim results below have changed since this "
-                    "summary was written. It has not been regenerated.", ""]
+            out += [
+                "**Out of date:** the claim results below have changed since this "
+                "summary was written. It has not been regenerated.",
+                "",
+            ]
     except Exception:
         pass
     if concern:
@@ -453,9 +523,18 @@ def build(data_dir: str, submission_id: str, variant: str = "") -> str:
         for c in entry.get("comparisons", []) or []:
             pid = _pid(c)
             pm = pool.get(pid, {})
-            row = by_paper.setdefault(pid, {"title": c.get("title") or pid,
-                "cite": _cite(c.get("authors") or pm.get("authors"), c.get("year") or pm.get("year")),
-                "claims": {}, "detail": {}, "versions": {}})
+            row = by_paper.setdefault(
+                pid,
+                {
+                    "title": c.get("title") or pid,
+                    "cite": _cite(
+                        c.get("authors") or pm.get("authors"), c.get("year") or pm.get("year")
+                    ),
+                    "claims": {},
+                    "detail": {},
+                    "versions": {},
+                },
+            )
             row["claims"][cid] = (vd.degree(c), _status(c), vd.degree_confirmed(c))
             row["detail"][cid] = _has_detail(c)
             row["versions"][cid] = _document_label(_snapshot(entry, c))
@@ -476,18 +555,38 @@ def build(data_dir: str, submission_id: str, variant: str = "") -> str:
 
     cols = [(cid, f"Claim {i + 1}", i + 1) for i, cid in enumerate(order) if cid in a_by]
     if by_paper:
-        out += ["---", "", "# Related work examined", "",
-                "| Source | Paper | Version used · date | " + " | ".join(label for _, label, _n in cols) + " |",
-                "|" + "---|" * (3 + len(cols))]
+        out += [
+            "---",
+            "",
+            "# Related work examined",
+            "",
+            "| Source | Paper | Version used · date | "
+            + " | ".join(label for _, label, _n in cols)
+            + " |",
+            "|" + "---|" * (3 + len(cols)),
+        ]
         for pid in paper_order:
             row = by_paper[pid]
             documents = list(dict.fromkeys(row["versions"].values()))
-            version = documents[0] if len(documents) == 1 else "; ".join(
-                f"{label}: {row['versions'][cid]}" for cid, label, _n in cols if cid in row["versions"])
+            version = (
+                documents[0]
+                if len(documents) == 1
+                else "; ".join(
+                    f"{label}: {row['versions'][cid]}"
+                    for cid, label, _n in cols
+                    if cid in row["versions"]
+                )
+            )
             name = " — ".join(x for x in (row["title"], row["cite"]) if x)
-            assessments = [_linked(_related_cell(row["claims"].get(cid)), n, refs[pid],
-                                   bool(row["detail"].get(cid)))
-                           for cid, _label, n in cols]
+            assessments = [
+                _linked(
+                    _related_cell(row["claims"].get(cid)),
+                    n,
+                    refs[pid],
+                    bool(row["detail"].get(cid)),
+                )
+                for cid, _label, n in cols
+            ]
             cells = [refs[pid], name, version] + assessments
             out.append("| " + " | ".join(_cell(x) for x in cells) + " |")
         out += [""]
@@ -496,12 +595,22 @@ def build(data_dir: str, submission_id: str, variant: str = "") -> str:
     for i, cid in enumerate(order, 1):
         entry = a_by.get(cid)
         doc_claim = claims_by.get(cid) or {}
-        claim_text = ((entry or {}).get("claim_text") or doc_claim.get("claim_text")
-                      or (entry or {}).get("claim_name") or "").strip()
+        claim_text = (
+            (entry or {}).get("claim_text")
+            or doc_claim.get("claim_text")
+            or (entry or {}).get("claim_name")
+            or ""
+        ).strip()
         out += ["---", "", f"# Claim {i} — Review", "", claim_text, ""]
         if entry is None:
-            out += ["**Detailed comparisons:** none recorded", "",
-                    "## Claim-level assessment", "", "No review is recorded for this claim.", ""]
+            out += [
+                "**Detailed comparisons:** none recorded",
+                "",
+                "## Claim-level assessment",
+                "",
+                "No review is recorded for this claim.",
+                "",
+            ]
             continue
         recorded = b_by.get(cid) or {}
         comparisons = entry.get("comparisons") or []
@@ -510,8 +619,10 @@ def build(data_dir: str, submission_id: str, variant: str = "") -> str:
         verdict, _derived = _claim_verdict(comparisons, recorded.get("verdict"))
 
         out += [f"**Verdict:** {vd.verdict_label(verdict)}.", ""]
-        out += [f"**Detailed comparisons:** "
-                f"{_degree_counts(details) if details else 'none recorded'}", ""]
+        out += [
+            f"**Detailed comparisons:** {_degree_counts(details) if details else 'none recorded'}",
+            "",
+        ]
 
         out += ["## Claim-level assessment", ""]
         stored = recorded.get("claim_assessment") or {}
@@ -519,18 +630,27 @@ def build(data_dir: str, submission_id: str, variant: str = "") -> str:
         if stored:
             try:
                 import claim_assessment
-                stale = claim_assessment.is_stale(stored, claim_assessment.build_claim_findings(
-                    entry, i, claim_text, recorded.get("verdict") or verdict, refs))
+
+                stale = claim_assessment.is_stale(
+                    stored,
+                    claim_assessment.build_claim_findings(
+                        entry, i, claim_text, recorded.get("verdict") or verdict, refs
+                    ),
+                )
             except Exception:
                 pass
-        for paragraph in _claim_assessment(comparisons, recorded.get("verdict"),
-                                           recorded.get("rationale"), stored, stale):
+        for paragraph in _claim_assessment(
+            comparisons, recorded.get("verdict"), recorded.get("rationale"), stored, stale
+        ):
             out += [paragraph, ""]
         out += ["## Detailed comparisons", ""]
         if not details:
-            out += ["No overlapping comparison or assessment/evidence conflict recorded. "
-                    "Every processed comparison for this claim is listed under \"Related "
-                    "work examined\".", ""]
+            out += [
+                "No overlapping comparison or assessment/evidence conflict recorded. "
+                'Every processed comparison for this claim is listed under "Related '
+                'work examined".',
+                "",
+            ]
         for c in details:
             _comparison_detail(c, entry, refs, pool, out)
 
@@ -599,8 +719,7 @@ def quote_index(data_dir: str, submission_id: str, variant: str = "") -> dict:
             by_paper_titles.setdefault(_pid(c), c.get("title") or _pid(c))
     refs = source_refs.assign_from_titles(by_paper_titles)
 
-    return {"submission": sub_list, "papers": papers, "refs": refs,
-            "claim_anchors": claim_anchors}
+    return {"submission": sub_list, "papers": papers, "refs": refs, "claim_anchors": claim_anchors}
 
 
 def check_sources(data_dir: str, submission_id: str, variant: str = "") -> str:
@@ -613,9 +732,12 @@ def check_sources(data_dir: str, submission_id: str, variant: str = "") -> str:
     manifest = _load(manifest_path) or {}
     if not isinstance(manifest, dict):
         manifest = {}
-    lines = [f"Artifact: {artifact_path}",
-             f"Current versions.json: {manifest_path.exists()} ({len(manifest)} entries)",
-             "NOTE: current manifest values below are diagnostic only; not evidence of what an old run read.", ""]
+    lines = [
+        f"Artifact: {artifact_path}",
+        f"Current versions.json: {manifest_path.exists()} ({len(manifest)} entries)",
+        "NOTE: current manifest values below are diagnostic only; not evidence of what an old run read.",
+        "",
+    ]
     for entry in a.get("claims", []) or []:
         comps = entry.get("comparisons") or []
         log = entry.get("run_log")
@@ -623,9 +745,11 @@ def check_sources(data_dir: str, submission_id: str, variant: str = "") -> str:
         prior = raw_prior if isinstance(raw_prior, list) else []
         prior_by = {_pid(p): p for p in prior if isinstance(p, dict)}
         run_id = log.get("run_id") if isinstance(log, dict) else None
-        lines += [f"Claim {entry.get('claim_id')}: {len(comps)} comparisons",
-                  f"  run_log type: {type(log).__name__}; run_id: {run_id or 'not recorded'}",
-                  f"  prior_work type: {type(raw_prior).__name__}; records: {len(prior)}"]
+        lines += [
+            f"Claim {entry.get('claim_id')}: {len(comps)} comparisons",
+            f"  run_log type: {type(log).__name__}; run_id: {run_id or 'not recorded'}",
+            f"  prior_work type: {type(raw_prior).__name__}; records: {len(prior)}",
+        ]
         matched = complete = current_complete = 0
         incomplete_examples = []
         for c in comps:
@@ -651,16 +775,20 @@ def check_sources(data_dir: str, submission_id: str, variant: str = "") -> str:
                     f"      run record matched: {p is not None}; pinned_version={version!r}; pinned_version_date={day!r}",
                     f"      current manifest (UNBOUND): version={current.get('version')!r}; version_date={current.get('version_date')!r}",
                 ]
-        lines += [f"  ID matches in embedded log: {matched}/{len(comps)}",
-                  f"  Exportable version + date: {complete}/{len(comps)}",
-                  f"  Version + date in current manifest: {current_complete}/{len(comps)}"]
+        lines += [
+            f"  ID matches in embedded log: {matched}/{len(comps)}",
+            f"  Exportable version + date: {complete}/{len(comps)}",
+            f"  Version + date in current manifest: {current_complete}/{len(comps)}",
+        ]
         lines += incomplete_examples
         lines.append("")
     log_dir = sub / "run_logs"
     files = sorted(log_dir.glob("*.json")) if log_dir.is_dir() else []
-    lines += [f"Standalone log files: {len(files)} in {log_dir}",
-              "Standalone logs are not automatically attached: they must be linked to this exact run.",
-              "No files changed. No downloads. No model calls."]
+    lines += [
+        f"Standalone log files: {len(files)} in {log_dir}",
+        "Standalone logs are not automatically attached: they must be linked to this exact run.",
+        "No files changed. No downloads. No model calls.",
+    ]
     return "\n".join(lines)
 
 

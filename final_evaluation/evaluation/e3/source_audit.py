@@ -1,4 +1,5 @@
 """E3, automatic part: do the quotes a report shows stand in the sources it names?"""
+
 from __future__ import annotations
 
 import hashlib
@@ -19,6 +20,7 @@ MIN_GAP_DAYS = 90
 def _gap_days(version_date: str, sub_date: str):
     """Days from the pinned version to the submission, or None unless both are full dates."""
     from datetime import date
+
     try:
         v = date.fromisoformat((version_date or "")[:10])
         s = date.fromisoformat((sub_date or "")[:10])
@@ -49,8 +51,9 @@ def submission_text(sub_dir: Path, paper: str) -> str:
     """The submission's verification text, joined as in tools.py."""
     meta = json.loads((sub_dir / f"{paper}.json").read_text(encoding="utf-8"))
     ft = json.loads((sub_dir / f"{paper}_fulltext.json").read_text(encoding="utf-8"))
-    return "\n\n".join([s.get("text", "") for s in ft.get("sections", [])]
-                       + [meta.get("abstract", "")])
+    return "\n\n".join(
+        [s.get("text", "") for s in ft.get("sections", [])] + [meta.get("abstract", "")]
+    )
 
 
 def paper_text(sub_dir: Path, pw: dict) -> str | None:
@@ -64,14 +67,17 @@ def paper_text(sub_dir: Path, pw: dict) -> str | None:
     return f.read_text(encoding="utf-8")
 
 
-def audit_variant(artifact_a: dict, sub_dir: Path, paper: str, sub_date: str, vd,
-                  sub_norm: str, sub_sha: str) -> tuple[Counter, list]:
+def audit_variant(
+    artifact_a: dict, sub_dir: Path, paper: str, sub_date: str, vd, sub_norm: str, sub_sha: str
+) -> tuple[Counter, list]:
     """Counts for one flow on one paper, and the quotes that were not found."""
     c, misses, cache = Counter(), [], {}
     for claim in artifact_a.get("claims") or []:
         rl = claim.get("run_log") or {}
         c["claims"] += 1
-        c["submission_hash_ok"] += (rl.get("submission_selection") or {}).get("source_sha256") == sub_sha
+        c["submission_hash_ok"] += (rl.get("submission_selection") or {}).get(
+            "source_sha256"
+        ) == sub_sha
         pws = {pw.get("paper_id"): pw for pw in rl.get("prior_work") or []}
         for comp in claim.get("comparisons") or []:
             pw = pws.get(comp.get("paper_id"), {})
@@ -103,15 +109,23 @@ def audit_variant(artifact_a: dict, sub_dir: Path, paper: str, sub_date: str, vd
                 c["pairs_source_before_submission"] += bool(dated) and dated < sub_date
                 c["pairs_source_gap_known"] += gap is not None
                 c["pairs_source_gap_90"] += gap is not None and gap >= MIN_GAP_DAYS
-                for side, quote, src in (("submission", pr.get("claim_quote", ""), sub_norm),
-                                         ("prior_work", pr.get("paper_quote", ""), cache[key])):
+                for side, quote, src in (
+                    ("submission", pr.get("claim_quote", ""), sub_norm),
+                    ("prior_work", pr.get("paper_quote", ""), cache[key]),
+                ):
                     kind, score = classify(quote, src)
                     c[f"{side}_{kind}"] += 1
                     if kind == "not_found":
-                        misses.append({"paper": paper, "claim_id": claim.get("claim_id"),
-                                       "prior_paper": comp.get("paper_id"), "side": side,
-                                       "similarity": round(score, 1),
-                                       "quote": " ".join(quote.split())[:200]})
+                        misses.append(
+                            {
+                                "paper": paper,
+                                "claim_id": claim.get("claim_id"),
+                                "prior_paper": comp.get("paper_id"),
+                                "side": side,
+                                "similarity": round(score, 1),
+                                "quote": " ".join(quote.split())[:200],
+                            }
+                        )
     return c, misses
 
 
@@ -138,11 +152,13 @@ def rates(c: Counter) -> dict:
         "quotes_not_auditable": shown_quotes - audited,
         "share_exact": _rate(exact, audited),
         "share_exact_or_near": _rate(exact + near, audited),
-        "sources_dated_before_submission": _rate(c["pairs_source_before_submission"],
-                                                 c["pairs_source_dated"]),
+        "sources_dated_before_submission": _rate(
+            c["pairs_source_before_submission"], c["pairs_source_dated"]
+        ),
         "pairs_source_undated": c["pairs_shown"] - c["pairs_source_dated"],
-        "sources_dated_90_days_before_submission": _rate(c["pairs_source_gap_90"],
-                                                          c["pairs_source_gap_known"]),
+        "sources_dated_90_days_before_submission": _rate(
+            c["pairs_source_gap_90"], c["pairs_source_gap_known"]
+        ),
         "pairs_source_gap_known": c["pairs_source_gap_known"],
     }
 
@@ -161,10 +177,14 @@ def analyze(config: Path = al.E1_CONFIG) -> dict:
         per_paper[paper] = {}
         for v in al.VARIANTS:
             prov = entry["systems"][v]["provenance"]
-            art = json.loads(al._checked(prov["artifact_a_path"], prov["artifact_a_sha256"])
-                             .read_text(encoding="utf-8"))
-            c, miss = audit_variant(art, sub_dir, paper, meta.get("publication_date") or "9999",
-                                    vd, sub_norm, sub_sha)
+            art = json.loads(
+                al._checked(prov["artifact_a_path"], prov["artifact_a_sha256"]).read_text(
+                    encoding="utf-8"
+                )
+            )
+            c, miss = audit_variant(
+                art, sub_dir, paper, meta.get("publication_date") or "9999", vd, sub_norm, sub_sha
+            )
             totals[v] += c
             misses[v] += miss
             per_paper[paper][v] = {"counts": dict(c), **rates(c)}
@@ -177,11 +197,18 @@ def analyze(config: Path = al.E1_CONFIG) -> dict:
         "post_hoc": "added 2026-09-27; descriptive, no test (PROTOCOL 8c)",
         "papers": len(per_paper),
         "near_threshold": NEAR,
-        "variants": {v: {"counts": dict(totals[v]), **rates(totals[v]),
-                         "per_paper": {k: spread(v, k) for k in
-                                       ("grounding_rate", "verifiability_rate", "share_exact_or_near")},
-                         "not_found": misses[v]}
-                     for v in al.VARIANTS},
+        "variants": {
+            v: {
+                "counts": dict(totals[v]),
+                **rates(totals[v]),
+                "per_paper": {
+                    k: spread(v, k)
+                    for k in ("grounding_rate", "verifiability_rate", "share_exact_or_near")
+                },
+                "not_found": misses[v],
+            }
+            for v in al.VARIANTS
+        },
         "per_paper": per_paper,
     }
 
@@ -200,26 +227,40 @@ def print_report(res: dict) -> None:
         ("verifiability rate (proposed pairs found on both sides)", "verifiability_rate"),
         ("ownership rate (found pairs owned by the prior paper)", "ownership_rate"),
         ("shown quotes: exact in the hash-pinned source", "share_exact"),
-        (f"shown quotes: exact or near-verbatim (>= {res['near_threshold']:.0f})", "share_exact_or_near"),
-        ("shown pairs with a dated source: dated before the submission", "sources_dated_before_submission"),
+        (
+            f"shown quotes: exact or near-verbatim (>= {res['near_threshold']:.0f})",
+            "share_exact_or_near",
+        ),
+        (
+            "shown pairs with a dated source: dated before the submission",
+            "sources_dated_before_submission",
+        ),
     ]
     print(f"{'':58s} {'agent':>9s} {'linear':>9s}")
     for label, key in rows:
-        print(f"{label:58s} {_pct(res['variants']['agent'][key]):>9s} "
-              f"{_pct(res['variants']['linear'][key]):>9s}")
+        print(
+            f"{label:58s} {_pct(res['variants']['agent'][key]):>9s} "
+            f"{_pct(res['variants']['linear'][key]):>9s}"
+        )
     print()
     for v in al.VARIANTS:
         r = res["variants"][v]
         c = r["counts"]
-        print(f"{v}: {r['quotes_shown']} quotes shown ({c.get('pairs_shown', 0)} pairs) -- "
-              f"{r['quotes_exact']} exact, {r['quotes_near']} near-verbatim, "
-              f"{r['quotes_not_found']} not found, {r['quotes_not_auditable']} not auditable "
-              f"(no hash-recorded source text); submission hash matched on "
-              f"{c.get('submission_hash_ok', 0)}/{c.get('claims', 0)} claims")
+        print(
+            f"{v}: {r['quotes_shown']} quotes shown ({c.get('pairs_shown', 0)} pairs) -- "
+            f"{r['quotes_exact']} exact, {r['quotes_near']} near-verbatim, "
+            f"{r['quotes_not_found']} not found, {r['quotes_not_auditable']} not auditable "
+            f"(no hash-recorded source text); submission hash matched on "
+            f"{c.get('submission_hash_ok', 0)}/{c.get('claims', 0)} claims"
+        )
         pp = r["per_paper"]
-        print(f"  per paper: grounding min {_pct(pp['grounding_rate']['min'])} / median "
-              f"{_pct(pp['grounding_rate']['median'])}; verifiability min "
-              f"{_pct(pp['verifiability_rate']['min'])} / median {_pct(pp['verifiability_rate']['median'])}")
+        print(
+            f"  per paper: grounding min {_pct(pp['grounding_rate']['min'])} / median "
+            f"{_pct(pp['grounding_rate']['median'])}; verifiability min "
+            f"{_pct(pp['verifiability_rate']['min'])} / median {_pct(pp['verifiability_rate']['median'])}"
+        )
         for m in r["not_found"][:EXAMPLES]:
-            print(f"  not found: {m['paper']} {m['claim_id']} {m['side']} ({m['similarity']}): "
-                  f"{m['quote'][:110]}")
+            print(
+                f"  not found: {m['paper']} {m['claim_id']} {m['side']} ({m['similarity']}): "
+                f"{m['quote'][:110]}"
+            )

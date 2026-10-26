@@ -5,6 +5,7 @@ runs the comparison per claim in a background thread and serves the report.
 
 Run: PYTHONUTF8=1 python src/novelty_assessment/api.py  (serves on :8099)
 """
+
 import hashlib
 import json
 import os
@@ -33,9 +34,7 @@ CONCLUSION_MODEL = os.getenv("NOVELTY_CONCLUSION_MODEL", AGENT_MODEL)
 GROBID_SERVER = os.getenv("GROBID_SERVER", "http://localhost:8070")
 
 app = FastAPI(title="Verification-First Novelty Assessment API")
-app.add_middleware(
-    CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
-)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 _running = set()
 _lock = threading.Lock()
@@ -64,8 +63,9 @@ def _start_run(sid: str, pdf: Optional[str] = None) -> bool:
 
     def _target():
         try:
-            NoveltyPipeline(DATA_DIR, sid, pdf_path=pdf, hitl=True,
-                            grobid_server=GROBID_SERVER).run()
+            NoveltyPipeline(
+                DATA_DIR, sid, pdf_path=pdf, hitl=True, grobid_server=GROBID_SERVER
+            ).run()
         finally:
             with _lock:
                 _running.discard(sid)
@@ -135,10 +135,16 @@ def edit_claims(sid: str, ops: ClaimOps):
         if o.op == "accept":
             ce.accept_claim(doc, o.claim_id)
         elif o.op == "edit":
-            fields = {k: v for k, v in {
-                "name": o.name, "claim_text": o.claim_text,
-                "description": o.description, "source": o.source,
-            }.items() if v is not None}
+            fields = {
+                k: v
+                for k, v in {
+                    "name": o.name,
+                    "claim_text": o.claim_text,
+                    "description": o.description,
+                    "source": o.source,
+                }.items()
+                if v is not None
+            }
             ce.edit_claim(doc, o.claim_id, **fields)
         elif o.op == "delete":
             ce.delete_claim(doc, o.claim_id)
@@ -167,8 +173,10 @@ def set_date(sid: str, d: DateEdit):
     meta = _load_json(meta_path)
     if meta is None:
         raise HTTPException(404, "submission metadata not ready")
-    for doc, path in ((meta, meta_path),
-                      (_load_json(sub / f"{sid}_claims.json"), sub / f"{sid}_claims.json")):
+    for doc, path in (
+        (meta, meta_path),
+        (_load_json(sub / f"{sid}_claims.json"), sub / f"{sid}_claims.json"),
+    ):
         if doc is None:
             continue
         doc["publication_date"] = val
@@ -222,8 +230,11 @@ def submission_pdf(sid: str):
     path = _submission_pdf_path(sid)
     if path is None:
         raise HTTPException(404, "no PDF stored for this submission")
-    return FileResponse(path, media_type="application/pdf",
-                        headers={"Content-Disposition": f'inline; filename="{sid}.pdf"'})
+    return FileResponse(
+        path,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{sid}.pdf"'},
+    )
 
 
 @app.get("/submissions/{sid}/papers/{paper_id}/pdf")
@@ -231,8 +242,11 @@ def paper_pdf(sid: str, paper_id: str):
     path = _pdf_path(sid, paper_id)
     if not path.exists():
         raise HTTPException(404, "no PDF stored for this paper")
-    return FileResponse(path, media_type="application/pdf",
-                        headers={"Content-Disposition": f'inline; filename="{paper_id}.pdf"'})
+    return FileResponse(
+        path,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{paper_id}.pdf"'},
+    )
 
 
 class PaperEdit(BaseModel):
@@ -270,6 +284,7 @@ def _embed_model():
     global _EMB_MODEL
     if _EMB_MODEL is None:
         from sentence_transformers import SentenceTransformer
+
         _EMB_MODEL = SentenceTransformer("allenai/specter2_base")
     return _EMB_MODEL
 
@@ -285,6 +300,7 @@ def _compute_relevance(sid: str, abstract: str):
         return None
     try:
         from sklearn.metrics.pairwise import cosine_similarity
+
         e = _embed_model().encode([src, abstract], convert_to_numpy=True)
         sim = float(cosine_similarity([e[0]], [e[1]])[0][0])
         return round(max(0.0, min(1.0, sim)), 4)
@@ -295,7 +311,9 @@ def _compute_relevance(sid: str, abstract: str):
 def _paper_from_s2(d: dict) -> dict:
     authors = ", ".join(a.get("name", "") for a in (d.get("authors") or []))
     ext = d.get("externalIds") or {}
-    pid = d.get("paperId") or ("ext_" + (ext.get("DOI") or ext.get("ArXiv") or d.get("title", ""))[:48])
+    pid = d.get("paperId") or (
+        "ext_" + (ext.get("DOI") or ext.get("ArXiv") or d.get("title", ""))[:48]
+    )
     return {
         "paper_id": pid,
         "title": d.get("title") or "",
@@ -326,11 +344,18 @@ def _resolve_paper_query(query: str):
         elif "arxiv.org/abs/" in ql or re.match(r"^\d{4}\.\d{4,5}(v\d+)?$", q):
             idexpr = "arXiv:" + q.split("abs/")[-1].strip()
         if idexpr:
-            r = requests.get(f"{base}/{idexpr}", params={"fields": fields}, headers=headers, timeout=20)
+            r = requests.get(
+                f"{base}/{idexpr}", params={"fields": fields}, headers=headers, timeout=20
+            )
             if r.status_code == 200 and r.json():
                 return _paper_from_s2(r.json())
             return None
-        r = requests.get(f"{base}/search/match", params={"query": q, "fields": fields}, headers=headers, timeout=20)
+        r = requests.get(
+            f"{base}/search/match",
+            params={"query": q, "fields": fields},
+            headers=headers,
+            timeout=20,
+        )
         if r.status_code == 200:
             items = (r.json() or {}).get("data") or []
             if items:
@@ -355,7 +380,9 @@ def _resolve_paper_pdf(sid: str, raw: bytes, filename: str):
         tei = GrobidClient(GROBID_SERVER).pdf_to_tei(str(pdf_path))
         root = etree.fromstring(tei.encode("utf-8"))
         ns = {"t": "http://www.tei-c.org/ns/1.0"}
-        title = (root.findtext(".//t:teiHeader//t:titleStmt/t:title", default="", namespaces=ns) or "").strip()
+        title = (
+            root.findtext(".//t:teiHeader//t:titleStmt/t:title", default="", namespaces=ns) or ""
+        ).strip()
         abs_el = root.find(".//t:teiHeader//t:profileDesc//t:abstract", namespaces=ns)
         abstract = " ".join(abs_el.itertext()).strip() if abs_el is not None else ""
     except Exception:
@@ -372,14 +399,23 @@ def _resolve_paper_pdf(sid: str, raw: bytes, filename: str):
             return enriched
     return {
         "paper_id": "pdf_" + hashlib.sha1(raw).hexdigest()[:12],
-        "title": title, "abstract": abstract, "year": "", "venue": "", "authors": "",
-        "citation_count": 0, "cited_paper": False, "novel": None,
-        "relevance": None, "added_by": "reviewer",
+        "title": title,
+        "abstract": abstract,
+        "year": "",
+        "venue": "",
+        "authors": "",
+        "citation_count": 0,
+        "cited_paper": False,
+        "novel": None,
+        "relevance": None,
+        "added_by": "reviewer",
     }
 
 
 @app.post("/submissions/{sid}/papers/add")
-async def add_related_paper(sid: str, query: Optional[str] = Form(None), file: UploadFile = File(None)):
+async def add_related_paper(
+    sid: str, query: Optional[str] = Form(None), file: UploadFile = File(None)
+):
     """Prior-work checkpoint: add a paper by DOI, arXiv id, title or PDF."""
     path = _sub_dir(sid) / "related_work_data" / "ranked_papers.json"
     rp = _load_json(path)
@@ -448,68 +484,87 @@ def _assemble_claim(entry, meta):
         pid = p.get("paper_id")
         c = comp_by.get(pid, {})
         sim = p.get("similarity")
-        explore.append({
-            "paper_id": pid, "title": p.get("title", ""),
-            "authors": p.get("authors", ""), "year": p.get("year", ""), "venue": p.get("venue", ""),
-            "relevance": sim, "band": _relevance_band(sim),
-            "provenance": p.get("source"), "cited_by_submission": p.get("cited_by_submission", False),
-            "examined": bool(p.get("examined")), "compared": bool(p.get("compared")),
-            "challenges": vd.challenges(c),
-            "overlap_degree": c.get("overlap_degree"),
-            "note": c.get("relevance_reason") or c.get("brief_note", ""),
-            "source": _source_label(c.get("content_source")) if c
-                      else ("Full text" if p.get("has_fulltext") else "Abstract + intro"),
-        })
+        explore.append(
+            {
+                "paper_id": pid,
+                "title": p.get("title", ""),
+                "authors": p.get("authors", ""),
+                "year": p.get("year", ""),
+                "venue": p.get("venue", ""),
+                "relevance": sim,
+                "band": _relevance_band(sim),
+                "provenance": p.get("source"),
+                "cited_by_submission": p.get("cited_by_submission", False),
+                "examined": bool(p.get("examined")),
+                "compared": bool(p.get("compared")),
+                "challenges": vd.challenges(c),
+                "overlap_degree": c.get("overlap_degree"),
+                "note": c.get("relevance_reason") or c.get("brief_note", ""),
+                "source": _source_label(c.get("content_source"))
+                if c
+                else ("Full text" if p.get("has_fulltext") else "Abstract + intro"),
+            }
+        )
     verify = []
     for c in comps:
         pairs = c.get("evidence_pairs") or []
         # 1-based indices, as referenced by the evidence check's supporting_pair_indices.
         verified_indexed = [
-            (i, p) for i, p in enumerate(pairs, 1)
+            (i, p)
+            for i, p in enumerate(pairs, 1)
             if p.get("claim_quote_verified") and p.get("paper_quote_verified")
         ]
         _m = meta.get(c.get("paper_id"), {})
         check = c.get("evidence_check") or {}
-        verify.append({
-            "paper_id": c.get("paper_id"), "title": c.get("title"),
-            "authors": c.get("authors") or _m.get("authors", ""),
-            "year": c.get("year") or _m.get("year", ""),
-            "challenges": vd.challenges(c),
-            "status": c.get("refutation_status"), "analysis": c.get("brief_note", ""),
-            "source": _source_label(c.get("content_source")),
-            "depth": c.get("depth"),
-            "sections_used": c.get("sections_used", []),
-            "fulltext_fetch_status": c.get("fulltext_fetch_status"),
-            "overlap_degree": c.get("overlap_degree"),
-            "is_overlap": vd.is_overlap(c),
-            "overlap_rank": vd.degree_rank(vd.degree(c)),
-            "overlap_dimensions": c.get("overlap_dimensions", []),
-            "what_is_shared": c.get("what_is_shared", ""),
-            "submission_delta": c.get("submission_delta", ""),
-            "paper_realization": c.get("paper_realization", []),
-            "assessment": c.get("assessment", ""),
-            "evidence": [
-                {"pair_index": i, "claim_quote": p.get("claim_quote"),
-                 "paper_quote": p.get("paper_quote"), "rationale": p.get("rationale")}
-                for i, p in verified_indexed
-            ],
-            "verified": bool(verified_indexed),
-            "decision_trace": list((c.get("map_diag") or {}).get("loop") or []),
-            "evidence_status": check.get("status"),
-            "supporting_pair_indices": check.get("supporting_pair_indices", []),
-            "evidence_reasoning": check.get("reasoning", ""),
-            "grounded_pairs": len(verified_indexed),
-            "insufficient": bool(c.get("insufficient")),
-            "unresolved": bool(c.get("unresolved") or c.get("insufficient")),
-            "unresolved_reason": c.get("unresolved_reason", ""),
-            "unresolved_deficit": c.get("unresolved_deficit", ""),
-            "paper_state": c.get("paper_state", ""),
-        })
+        verify.append(
+            {
+                "paper_id": c.get("paper_id"),
+                "title": c.get("title"),
+                "authors": c.get("authors") or _m.get("authors", ""),
+                "year": c.get("year") or _m.get("year", ""),
+                "challenges": vd.challenges(c),
+                "status": c.get("refutation_status"),
+                "analysis": c.get("brief_note", ""),
+                "source": _source_label(c.get("content_source")),
+                "depth": c.get("depth"),
+                "sections_used": c.get("sections_used", []),
+                "fulltext_fetch_status": c.get("fulltext_fetch_status"),
+                "overlap_degree": c.get("overlap_degree"),
+                "is_overlap": vd.is_overlap(c),
+                "overlap_rank": vd.degree_rank(vd.degree(c)),
+                "overlap_dimensions": c.get("overlap_dimensions", []),
+                "what_is_shared": c.get("what_is_shared", ""),
+                "submission_delta": c.get("submission_delta", ""),
+                "paper_realization": c.get("paper_realization", []),
+                "assessment": c.get("assessment", ""),
+                "evidence": [
+                    {
+                        "pair_index": i,
+                        "claim_quote": p.get("claim_quote"),
+                        "paper_quote": p.get("paper_quote"),
+                        "rationale": p.get("rationale"),
+                    }
+                    for i, p in verified_indexed
+                ],
+                "verified": bool(verified_indexed),
+                "decision_trace": list((c.get("map_diag") or {}).get("loop") or []),
+                "evidence_status": check.get("status"),
+                "supporting_pair_indices": check.get("supporting_pair_indices", []),
+                "evidence_reasoning": check.get("reasoning", ""),
+                "grounded_pairs": len(verified_indexed),
+                "insufficient": bool(c.get("insufficient")),
+                "unresolved": bool(c.get("unresolved") or c.get("insufficient")),
+                "unresolved_reason": c.get("unresolved_reason", ""),
+                "unresolved_deficit": c.get("unresolved_deficit", ""),
+                "paper_state": c.get("paper_state", ""),
+            }
+        )
     return {
         "claim_id": entry.get("claim_id"),
         "claim_text": entry.get("claim_text") or entry.get("claim_name", ""),
         "claim_realization": entry.get("claim_realization", []),
-        "explore": explore, "verify": verify,
+        "explore": explore,
+        "verify": verify,
         "timings": entry.get("timings"),
         "agent": {
             "verdict": entry.get("agent_verdict"),
@@ -535,12 +590,20 @@ def review_claims(sid: str):
     a = _load_json(_sub_dir(sid) / f"{sid}_artifact_a.json") or {"claims": []}
     computed = {e.get("claim_id") for e in a.get("claims", [])}
     claims = [
-        {"claim_id": c["id"], "claim_text": c.get("claim_text") or c.get("name", ""),
-         "computed": c["id"] in computed}
-        for c in claims_doc.get("claims", []) if c.get("status") != "rejected"
+        {
+            "claim_id": c["id"],
+            "claim_text": c.get("claim_text") or c.get("name", ""),
+            "computed": c["id"] in computed,
+        }
+        for c in claims_doc.get("claims", [])
+        if c.get("status") != "rejected"
     ]
-    return {"submission_id": sid, "n_reference_papers": len(ranked),
-            "clusters": _clusters_of(ranked), "claims": claims}
+    return {
+        "submission_id": sid,
+        "n_reference_papers": len(ranked),
+        "clusters": _clusters_of(ranked),
+        "claims": claims,
+    }
 
 
 _claim_running = set()
@@ -554,7 +617,9 @@ def _live_path(sid: str, cid: str) -> Path:
 
 def _write_live(sid: str, cid: str, payload: dict):
     try:
-        _live_path(sid, cid).write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        _live_path(sid, cid).write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
     except Exception:
         pass
 
@@ -573,10 +638,16 @@ def _assembled_for(sid: str, cid: str):
 def _ensure_claim_assessments(sid: str, only: Optional[str] = None) -> List[str]:
     """Write the claim explanations (first report stage) where missing or stale."""
     import claim_assessment as ca
+
     contexts, b_path, b, refs = ca.contexts_for(DATA_DIR, sid)
     stored = {v.get("claim_id"): v.get("claim_assessment") for v in b.get("per_claim", [])}
-    todo = [x for x in contexts if (only is None or x[0] == only)
-            and x[0] in stored and (not stored[x[0]] or ca.is_stale(stored[x[0]], x[4]))]
+    todo = [
+        x
+        for x in contexts
+        if (only is None or x[0] == only)
+        and x[0] in stored
+        and (not stored[x[0]] or ca.is_stale(stored[x[0]], x[4]))
+    ]
     if not todo:
         return []
     assessor = ca.ClaimAssessor(model_name=CONCLUSION_MODEL)
@@ -597,18 +668,37 @@ def _claim_worker(sid: str, cid: str):
     try:
         sub = _sub_dir(sid)
         claims_doc = _load_json(sub / f"{sid}_claims.json") or {"claims": []}
-        claim = next((c for c in claims_doc.get("claims", [])
-                      if c["id"] == cid and c.get("status") != "rejected"), None)
+        claim = next(
+            (
+                c
+                for c in claims_doc.get("claims", [])
+                if c["id"] == cid and c.get("status") != "rejected"
+            ),
+            None,
+        )
         if claim is None:
             _write_live(sid, cid, {"status": "error", "claim_id": cid, "error": "claim not found"})
             return
-        _write_live(sid, cid, {"status": "running", "claim_id": cid, "step": 0,
-                               "max_steps": 0, "trajectory": [],
-                               "cost": {"prompt_tokens": 0, "completion_tokens": 0, "usd": 0.0}})
+        _write_live(
+            sid,
+            cid,
+            {
+                "status": "running",
+                "claim_id": cid,
+                "step": 0,
+                "max_steps": 0,
+                "trajectory": [],
+                "cost": {"prompt_tokens": 0, "completion_tokens": 0, "usd": 0.0},
+            },
+        )
 
         from agent.claim_agent import ClaimNoveltyAgent
+
         agent = ClaimNoveltyAgent(
-            DATA_DIR, sid, embedder=_embed_model(), model_name=AGENT_MODEL,
+            DATA_DIR,
+            sid,
+            embedder=_embed_model(),
+            model_name=AGENT_MODEL,
             grobid_server=GROBID_SERVER,
             max_retrievals=int(os.getenv("NOVELTY_AGENT_MAX_RETRIEVALS", "1")),
         )
@@ -616,46 +706,72 @@ def _claim_worker(sid: str, cid: str):
 
         with _artifact_lock:
             a_path = sub / f"{sid}_artifact_a.json"
-            a = _load_json(a_path) or {"submission_id": sid, "agentic": True,
-                                       "n_related_pool": 0, "claims": []}
+            a = _load_json(a_path) or {
+                "submission_id": sid,
+                "agentic": True,
+                "n_related_pool": 0,
+                "claims": [],
+            }
             a["claims"] = [e for e in a["claims"] if e.get("claim_id") != cid] + [entry]
-            a["n_related_pool"] = (sum(entry.get("pool_sources", {}).values())
-                                   or a.get("n_related_pool", 0))
+            a["n_related_pool"] = sum(entry.get("pool_sources", {}).values()) or a.get(
+                "n_related_pool", 0
+            )
             a_path.write_text(json.dumps(a, ensure_ascii=False, indent=2), encoding="utf-8")
 
             b_path = sub / f"{sid}_artifact_b.json"
-            b_doc = _load_json(b_path) or {"submission_id": sid,
-                                           "generated_from": f"{sid}_artifact_a.json",
-                                           "per_claim": [], "overall_assessment": ""}
+            b_doc = _load_json(b_path) or {
+                "submission_id": sid,
+                "generated_from": f"{sid}_artifact_a.json",
+                "per_claim": [],
+                "overall_assessment": "",
+            }
             b_doc["per_claim"] = [v for v in b_doc.get("per_claim", []) if v.get("claim_id") != cid]
-            b_doc["per_claim"].append({
-                "claim_id": entry["claim_id"],
-                "claim_name": entry.get("claim_name", ""),
-                "verdict": entry.get("agent_verdict"),
-                "rationale": "",
-                "challenging_papers": [],
-            })
+            b_doc["per_claim"].append(
+                {
+                    "claim_id": entry["claim_id"],
+                    "claim_name": entry.get("claim_name", ""),
+                    "verdict": entry.get("agent_verdict"),
+                    "rationale": "",
+                    "challenging_papers": [],
+                }
+            )
             b_path.write_text(json.dumps(b_doc, ensure_ascii=False, indent=2), encoding="utf-8")
 
-        _write_live(sid, cid, {"status": "running", "claim_id": cid,
-                               "step": len(entry.get("trajectory", []) or []),
-                               "max_steps": 0,
-                               "trajectory": entry.get("trajectory", []),
-                               "cost": entry.get("cost", {}),
-                               "last_action": "writing the claim-level assessment"})
+        _write_live(
+            sid,
+            cid,
+            {
+                "status": "running",
+                "claim_id": cid,
+                "step": len(entry.get("trajectory", []) or []),
+                "max_steps": 0,
+                "trajectory": entry.get("trajectory", []),
+                "cost": entry.get("cost", {}),
+                "last_action": "writing the claim-level assessment",
+            },
+        )
         try:
             _ensure_claim_assessments(sid, only=cid)
         except Exception as e:
             print(f"[{sid}] claim assessment for {cid} skipped: {repr(e)[:160]}")
 
-        _write_live(sid, cid, {
-            "status": "done", "claim_id": cid,
-            "step": len(entry.get("trajectory", []) or []), "max_steps": 0,
-            "trajectory": entry.get("trajectory", []), "cost": entry.get("cost", {}),
-            "verdict": entry.get("agent_verdict"), "evidence_sufficient": entry.get("evidence_sufficient"),
-            "stop_reason": entry.get("stop_reason"), "retrieval_rounds": entry.get("retrieval_rounds", 0),
-            "review": _assembled_for(sid, cid),
-        })
+        _write_live(
+            sid,
+            cid,
+            {
+                "status": "done",
+                "claim_id": cid,
+                "step": len(entry.get("trajectory", []) or []),
+                "max_steps": 0,
+                "trajectory": entry.get("trajectory", []),
+                "cost": entry.get("cost", {}),
+                "verdict": entry.get("agent_verdict"),
+                "evidence_sufficient": entry.get("evidence_sufficient"),
+                "stop_reason": entry.get("stop_reason"),
+                "retrieval_rounds": entry.get("retrieval_rounds", 0),
+                "review": _assembled_for(sid, cid),
+            },
+        )
     except Exception as e:
         _write_live(sid, cid, {"status": "error", "claim_id": cid, "error": repr(e)[:300]})
     finally:
@@ -705,6 +821,7 @@ def finalize_review(sid: str):
     except Exception as e:
         raise HTTPException(502, f"claim assessment failed: {repr(e)[:200]}")
     import paper_synthesis
+
     summary_written = False
     try:
         findings, _b_path, b = paper_synthesis.context_for(DATA_DIR, sid)
@@ -715,8 +832,7 @@ def finalize_review(sid: str):
             summary_written = True
     except Exception as e:
         raise HTTPException(502, f"novelty summary failed: {repr(e)[:200]}")
-    return {"status": "done", "claims_regenerated": regenerated,
-            "summary_written": summary_written}
+    return {"status": "done", "claims_regenerated": regenerated, "summary_written": summary_written}
 
 
 @app.get("/submissions/{sid}/review/claim/{claim_id}/live")
@@ -734,6 +850,7 @@ def claim_live(sid: str, claim_id: str):
 def export_assessment(sid: str):
     """The report as text, rendered from the artifacts by a template."""
     from battle_export import build
+
     try:
         return build(DATA_DIR, sid)
     except FileNotFoundError:
@@ -744,6 +861,7 @@ def export_assessment(sid: str):
 def export_quote_index(sid: str):
     """For each verified quote of the report, the document and position it is found in."""
     from battle_export import quote_index
+
     return quote_index(DATA_DIR, sid)
 
 

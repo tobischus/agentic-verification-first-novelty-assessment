@@ -3,6 +3,7 @@
 Documents are split into paragraph chunks with their section names. The index serves
 section menus and section text, and a hybrid BM25 and embedding search.
 """
+
 import re
 import threading
 from typing import List
@@ -55,7 +56,9 @@ def chunks_from_grobid_text(text: str, doc_id: str) -> List[dict]:
     def flush():
         if buf:
             for para in paragraphs("\n\n".join(buf)):
-                chunks.append({"passage_id": f"{doc_id}:{len(chunks)}", "section": current, "text": para})
+                chunks.append(
+                    {"passage_id": f"{doc_id}:{len(chunks)}", "section": current, "text": para}
+                )
             buf.clear()
 
     for line in (text or "").splitlines():
@@ -175,8 +178,11 @@ class PassageIndex:
                     agg[sec][0] = c["text"]
                 agg[sec][1] += len(c["text"])
         return [
-            {"name": name, "preview": " ".join(agg[name][0].split())[:max_preview],
-             "chars": agg[name][1]}
+            {
+                "name": name,
+                "preview": " ".join(agg[name][0].split())[:max_preview],
+                "chars": agg[name][1],
+            }
             for name in order
         ]
 
@@ -191,9 +197,9 @@ class PassageIndex:
             return False
         return w == s if exact else (w == s or w in s or s in w)
 
-
-    def get_sections(self, names: List[str], max_total: int = 40000,
-                     exact: bool = False) -> List[dict]:
+    def get_sections(
+        self, names: List[str], max_total: int = 40000, exact: bool = False
+    ) -> List[dict]:
         """Complete text of the requested sections in document order, up to `max_total`.
 
         A section that does not fit is skipped rather than truncated.

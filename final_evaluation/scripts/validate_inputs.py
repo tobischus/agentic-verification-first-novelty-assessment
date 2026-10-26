@@ -1,4 +1,5 @@
 """Check the imported study inputs before they are seeded into a study."""
+
 from __future__ import annotations
 
 import hashlib
@@ -29,13 +30,19 @@ def _check_file_entry(entry: dict | None, findings: list, where: str) -> None:
         return
     actual = _sha256_file(p)
     if actual != entry["sha256"]:
-        findings.append({"level": "error", "where": where,
-                         "msg": f"hash mismatch for {entry['path']}: manifest={entry['sha256']} "
-                                f"actual={actual}"})
+        findings.append(
+            {
+                "level": "error",
+                "where": where,
+                "msg": f"hash mismatch for {entry['path']}: manifest={entry['sha256']} "
+                f"actual={actual}",
+            }
+        )
 
 
-def _check_anchor_resolution(paper: str, system: str, text_path: Path, qidx_path: Path | None,
-                             findings: list) -> dict:
+def _check_anchor_resolution(
+    paper: str, system: str, text_path: Path, qidx_path: Path | None, findings: list
+) -> dict:
     """For agent and linear: every blockquote in the rendered text must resolve in the quote index."""
     if qidx_path is None or not qidx_path.is_file():
         return {"resolvable": None, "total": None}
@@ -54,10 +61,15 @@ def _check_anchor_resolution(paper: str, system: str, text_path: Path, qidx_path
             if inner in sub_texts or inner in pap_texts:
                 resolved += 1
     if total and resolved / total < 0.8:
-        findings.append({"level": "warning", "where": f"{paper}/{system}",
-                         "msg": f"only {resolved}/{total} blockquotes resolve against the quote "
-                                "index -- technical link resolution is not evidence of semantic "
-                                "correctness, but this ratio is low enough to look manually."})
+        findings.append(
+            {
+                "level": "warning",
+                "where": f"{paper}/{system}",
+                "msg": f"only {resolved}/{total} blockquotes resolve against the quote "
+                "index -- technical link resolution is not evidence of semantic "
+                "correctness, but this ratio is low enough to look manually.",
+            }
+        )
     return {"resolvable": resolved, "total": total}
 
 
@@ -68,8 +80,13 @@ def run(study: str, config_path: str = "final_evaluation/config/main.yaml") -> d
     result = {"study": study, "papers": {}, "findings": findings}
 
     if not manifest_path.is_file():
-        findings.append({"level": "error", "where": "manifest",
-                         "msg": f"{manifest_path} not found -- run import-inputs first"})
+        findings.append(
+            {
+                "level": "error",
+                "where": "manifest",
+                "msg": f"{manifest_path} not found -- run import-inputs first",
+            }
+        )
         return result
 
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -82,7 +99,9 @@ def run(study: str, config_path: str = "final_evaluation/config/main.yaml") -> d
         entry = manifest.get("papers", {}).get(paper)
         pres = {"systems_present": [], "systems_missing": [], "anchors": {}, "e1_e2": {}}
         if entry is None:
-            findings.append({"level": "error", "where": paper, "msg": "paper missing from manifest"})
+            findings.append(
+                {"level": "error", "where": paper, "msg": "paper missing from manifest"}
+            )
             result["papers"][paper] = pres
             continue
 
@@ -90,16 +109,26 @@ def run(study: str, config_path: str = "final_evaluation/config/main.yaml") -> d
         _check_file_entry(sub.get("pdf_file"), findings, f"{paper}/submission")
         _check_file_entry(sub.get("text_file"), findings, f"{paper}/submission")
         if "pdf_file" not in sub:
-            findings.append({"level": "error", "where": f"{paper}/submission",
-                             "msg": "submission PDF not imported"})
+            findings.append(
+                {
+                    "level": "error",
+                    "where": f"{paper}/submission",
+                    "msg": "submission PDF not imported",
+                }
+            )
 
         systems = entry.get("systems", {})
         for sys_id in sorted(expected_systems):
             r = systems.get(sys_id)
             if r is None or r.get("blocker"):
                 pres["systems_missing"].append(sys_id)
-                findings.append({"level": "error", "where": f"{paper}/{sys_id}",
-                                 "msg": r.get("blocker", "not imported") if r else "not imported"})
+                findings.append(
+                    {
+                        "level": "error",
+                        "where": f"{paper}/{sys_id}",
+                        "msg": r.get("blocker", "not imported") if r else "not imported",
+                    }
+                )
                 continue
             pres["systems_present"].append(sys_id)
             _check_file_entry(r.get("text_file"), findings, f"{paper}/{sys_id}")
@@ -108,30 +137,49 @@ def run(study: str, config_path: str = "final_evaluation/config/main.yaml") -> d
 
             if sys_id in ("agent", "linear") and r.get("text_file") and r.get("quote_index_file"):
                 pres["anchors"][sys_id] = _check_anchor_resolution(
-                    paper, sys_id, FE_ROOT / r["text_file"]["path"],
-                    FE_ROOT / r["quote_index_file"]["path"], findings)
+                    paper,
+                    sys_id,
+                    FE_ROOT / r["text_file"]["path"],
+                    FE_ROOT / r["quote_index_file"]["path"],
+                    findings,
+                )
 
             if r["view_type"] == "markdown":
                 pres["e1_e2"][sys_id] = "equivalent_same_file"
             elif sys_id == "opennovelty":
                 e1 = r.get("e1", {})
                 if e1.get("blocker"):
-                    findings.append({"level": "error", "where": f"{paper}/{sys_id}",
-                                     "msg": f"E1 text extraction failed: {e1['blocker']}"})
+                    findings.append(
+                        {
+                            "level": "error",
+                            "where": f"{paper}/{sys_id}",
+                            "msg": f"E1 text extraction failed: {e1['blocker']}",
+                        }
+                    )
                     pres["e1_e2"][sys_id] = "e1_missing"
                 else:
                     pres["e1_e2"][sys_id] = "needs_manual_check"
-                    findings.append({"level": "warning", "where": f"{paper}/{sys_id}",
-                                     "msg": "E1 text is a PDF text-extraction of the native report; "
-                                            "NOT verified to state the same relationships as the "
-                                            "taxonomy-tree graphic. Confirm manually before relying "
-                                            "on E1 scores for this system."})
+                    findings.append(
+                        {
+                            "level": "warning",
+                            "where": f"{paper}/{sys_id}",
+                            "msg": "E1 text is a PDF text-extraction of the native report; "
+                            "NOT verified to state the same relationships as the "
+                            "taxonomy-tree graphic. Confirm manually before relying "
+                            "on E1 scores for this system.",
+                        }
+                    )
             else:
                 pres["e1_e2"][sys_id] = "not_applicable"
 
         if len(pres["systems_present"]) < 5:
-            findings.append({"level": "error", "where": paper,
-                             "msg": f"only {len(pres['systems_present'])}/5 systems present"})
+            findings.append(
+                {
+                    "level": "error",
+                    "where": paper,
+                    "msg": f"only {len(pres['systems_present'])}/5 systems present",
+                }
+            )
         result["papers"][paper] = pres
 
     n_errors = sum(1 for f in findings if f["level"] == "error")
@@ -143,8 +191,10 @@ def run(study: str, config_path: str = "final_evaluation/config/main.yaml") -> d
 
 def print_report(result: dict) -> None:
     for paper, pres in result["papers"].items():
-        print(f"{paper}: {len(pres['systems_present'])}/5 systems "
-             f"({', '.join(pres['systems_present'])})")
+        print(
+            f"{paper}: {len(pres['systems_present'])}/5 systems "
+            f"({', '.join(pres['systems_present'])})"
+        )
         if pres["systems_missing"]:
             print(f"  MISSING: {', '.join(pres['systems_missing'])}")
         for sys_id, a in pres.get("anchors", {}).items():
@@ -154,4 +204,8 @@ def print_report(result: dict) -> None:
     print(f"\n{result['n_errors']} error(s), {result['n_warnings']} warning(s)")
     for f in result["findings"]:
         print(f"  [{f['level'].upper()}] {f['where']}: {f['msg']}")
-    print("\nVALID -- ready for init-db/seed-study" if result["ok"] else "\nNOT VALID -- fix errors above")
+    print(
+        "\nVALID -- ready for init-db/seed-study"
+        if result["ok"]
+        else "\nNOT VALID -- fix errors above"
+    )

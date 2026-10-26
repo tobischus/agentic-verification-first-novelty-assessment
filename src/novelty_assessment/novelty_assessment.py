@@ -8,8 +8,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-
-
 novelty_delta_analysis_prompt = """
 # Novelty Delta Analysis for Reviewer Support
 
@@ -120,25 +118,19 @@ Remember that your role is to provide objective analysis that helps reviewers ma
 """
 
 
-
-
 class PaperInformation(BaseModel):
     """Structured information extracted from a research paper."""
 
     paper_id: str
     title: str
-    methods: List[str] = Field(
-        description="List of methods/approaches proposed in the paper"
-    )
+    methods: List[str] = Field(description="List of methods/approaches proposed in the paper")
     problems: List[str] = Field(description="List of problems the paper addresses")
     datasets: List[str] = Field(description="List of datasets used for evaluation")
     metrics: List[str] = Field(description="List of evaluation metrics used")
     results: List[Dict[str, str]] = Field(
         description="Key quantitative results with metric name -> value pairs"
     )
-    novelty_claims: List[str] = Field(
-        description="Claims about what is novel in this work"
-    )
+    novelty_claims: List[str] = Field(description="Claims about what is novel in this work")
     is_submission: bool = False
 
 
@@ -150,13 +142,12 @@ class NoveltyAssessor:
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise ValueError("OPENAI_API_KEY environment variable is not set")
-        
+
         self.llm = ChatOpenAI(
             model_name=model_name,
             temperature=temperature,
             api_key=api_key,
         )
-
 
     @staticmethod
     def get_citation_matches(citation_contexts) -> str:
@@ -172,9 +163,7 @@ class NoveltyAssessor:
         self, data_dir: str, submission_id: str
     ) -> Optional[PaperInformation]:
         """Load the submission paper information from JSON file."""
-        file_path = os.path.join(
-            data_dir, submission_id, f"structured_representation.json"
-        )
+        file_path = os.path.join(data_dir, submission_id, "structured_representation.json")
 
         if not os.path.exists(file_path):
             raise ValueError(f"Submission paper file not found: {file_path}")
@@ -189,9 +178,7 @@ class NoveltyAssessor:
         structured_representation["main_paper"]["parsed"]["paper_id"] = submission_id
         structured_representation["main_paper"]["parsed"]["is_submission"] = True
         structured_representation["main_paper"]["parsed"]["title"] = paper_obj["title"]
-        paper_info = PaperInformation(
-            **structured_representation["main_paper"]["parsed"]
-        )
+        paper_info = PaperInformation(**structured_representation["main_paper"]["parsed"])
 
         return paper_info
 
@@ -199,9 +186,7 @@ class NoveltyAssessor:
         with open(f"{data_dir}/{submission_id}/{submission_id}.json", "r") as f:
             paper_obj = json.load(f)
 
-        with open(
-            f"{data_dir}/{submission_id}/related_work_data/ranked_papers.json", "r"
-        ) as f:
+        with open(f"{data_dir}/{submission_id}/related_work_data/ranked_papers.json", "r") as f:
             ranked_papers = json.load(f)
 
         title_and_sentences = {}
@@ -229,7 +214,6 @@ class NoveltyAssessor:
 
         return citation_contexts
 
-
     def load_landscape_analysis(self, landscape_file: str) -> str:
         """Load the research landscape analysis from file."""
         if not os.path.exists(landscape_file):
@@ -245,32 +229,22 @@ class NoveltyAssessor:
         formatted_text = f"# SUBMISSION PAPER: {submission.title}\n\n"
 
         formatted_text += (
-            f"## METHODS:\n"
-            + "\n".join([f"- {m}" for m in submission.methods])
-            + "\n\n"
+            "## METHODS:\n" + "\n".join([f"- {m}" for m in submission.methods]) + "\n\n"
         )
         formatted_text += (
-            f"## PROBLEMS:\n"
-            + "\n".join([f"- {p}" for p in submission.problems])
-            + "\n\n"
+            "## PROBLEMS:\n" + "\n".join([f"- {p}" for p in submission.problems]) + "\n\n"
         )
         formatted_text += (
-            f"## DATASETS:\n"
-            + "\n".join([f"- {d}" for d in submission.datasets])
-            + "\n\n"
+            "## DATASETS:\n" + "\n".join([f"- {d}" for d in submission.datasets]) + "\n\n"
         )
         formatted_text += (
-            f"## METRICS:\n"
-            + "\n".join([f"- {m}" for m in submission.metrics])
-            + "\n\n"
+            "## METRICS:\n" + "\n".join([f"- {m}" for m in submission.metrics]) + "\n\n"
         )
         formatted_text += (
-            f"## RESULTS:\n"
-            + "\n".join([f"- {json.dumps(r)}" for r in submission.results])
-            + "\n\n"
+            "## RESULTS:\n" + "\n".join([f"- {json.dumps(r)}" for r in submission.results]) + "\n\n"
         )
         formatted_text += (
-            f"## NOVELTY CLAIMS:\n"
+            "## NOVELTY CLAIMS:\n"
             + "\n".join([f"- {c}" for c in submission.novelty_claims])
             + "\n\n"
         )
@@ -332,7 +306,7 @@ class NoveltyAssessor:
             with open(output_path, "w", encoding="utf-8") as f:
                 f.write(assessment.content)
 
-        print(f"Novelty assessment saved to novelty_delta_analysis.txt")
+        print("Novelty assessment saved to novelty_delta_analysis.txt")
 
         from litellm import cost_per_token
 
@@ -375,9 +349,7 @@ class NoveltyAssessor:
         missing_structured_rep = 0
 
         for submission_id in submission_ids:
-            landscape_path = os.path.join(
-                data_dir, submission_id, "ours", landscape_file
-            )
+            landscape_path = os.path.join(data_dir, submission_id, "ours", landscape_file)
             structured_rep_path = os.path.join(
                 data_dir, submission_id, "ours", "structured_representation.json"
             )
@@ -394,9 +366,7 @@ class NoveltyAssessor:
             ) as f:
                 ranked_papers = json.load(f)
 
-            not_cited_papers = [
-                i["title"] for i in ranked_papers if not i["cited_paper"]
-            ]
+            not_cited_papers = [i["title"] for i in ranked_papers if not i["cited_paper"]]
 
             if not os.path.exists(landscape_path):
                 print(f"Missing landscape analysis for {submission_id}")
@@ -440,18 +410,14 @@ class NoveltyAssessor:
             valid_submissions += 1
 
         print(
-            f"Valid submissions for novelty assessment: {valid_submissions}/{total_submissions} ({valid_submissions/total_submissions*100:.1f}%)"
+            f"Valid submissions for novelty assessment: {valid_submissions}/{total_submissions} ({valid_submissions / total_submissions * 100:.1f}%)"
         )
         if missing_landscape > 0:
             print(f"Submissions missing landscape analysis: {missing_landscape}")
         if missing_structured_rep > 0:
-            print(
-                f"Submissions missing structured representation: {missing_structured_rep}"
-            )
+            print(f"Submissions missing structured representation: {missing_structured_rep}")
 
-        output_path = os.path.join(
-            "./openai_inputs", "batch_novelty_assessment_input.jsonl"
-        )
+        output_path = os.path.join("./openai_inputs", "batch_novelty_assessment_input.jsonl")
         with open(output_path, "w", encoding="utf-8") as f:
             for entry in batch_entries:
                 f.write(json.dumps(entry) + "\n")
@@ -587,70 +553,50 @@ class NoveltyAssessor:
 
 if __name__ == "__main__":
     import argparse
-    
+
     parser = argparse.ArgumentParser(description="Assess novelty of research papers")
     parser.add_argument(
         "--data-dir",
         type=str,
         default="../../novelty_assessment/data_iclr_all_topics/iclr_compiled_v2",
-        help="Directory containing submission data"
+        help="Directory containing submission data",
     )
+    parser.add_argument("--model", type=str, default="gpt-4.1", help="OpenAI model to use")
     parser.add_argument(
-        "--model",
-        type=str,
-        default="gpt-4.1",
-        help="OpenAI model to use"
-    )
-    parser.add_argument(
-        "--submission-id",
-        type=str,
-        help="Process single submission (for run_assessment)"
+        "--submission-id", type=str, help="Process single submission (for run_assessment)"
     )
     parser.add_argument(
         "--landscape-file",
         type=str,
         default="research_landscape.txt",
-        help="Path to landscape analysis file"
+        help="Path to landscape analysis file",
     )
     parser.add_argument(
         "--output-file",
         type=str,
         default="novelty_delta_analysis.txt",
-        help="Output file for assessment"
+        help="Output file for assessment",
     )
-    parser.add_argument(
-        "--prepare",
-        action="store_true",
-        help="Prepare batch inference data"
-    )
-    parser.add_argument(
-        "--process",
-        action="store_true",
-        help="Process batch results"
-    )
+    parser.add_argument("--prepare", action="store_true", help="Prepare batch inference data")
+    parser.add_argument("--process", action="store_true", help="Process batch results")
     parser.add_argument(
         "--results-file",
         type=str,
         default="./openai_outputs/batch_novelty_assessment_output.jsonl",
-        help="Path to batch results file"
+        help="Path to batch results file",
     )
-    
+
     args = parser.parse_args()
-    
+
     assessor = NoveltyAssessor(model_name=args.model)
-    
+
     if args.submission_id:
-        assessor.run_assessment(
-            args.data_dir,
-            args.submission_id
-        )
-    
+        assessor.run_assessment(args.data_dir, args.submission_id)
+
     if args.prepare:
         assessor.prepare_batch_inference_data(args.data_dir)
-    
+
     if args.process:
         assessor.process_batch_results(
-            args.data_dir,
-            args.results_file,
-            "novelty_delta_analysis.txt"
+            args.data_dir, args.results_file, "novelty_delta_analysis.txt"
         )

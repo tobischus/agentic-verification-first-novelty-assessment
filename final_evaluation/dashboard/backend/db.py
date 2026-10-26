@@ -1,4 +1,5 @@
 """Engine, session factory, and a small portable migration runner."""
+
 from __future__ import annotations
 
 import importlib
@@ -28,10 +29,12 @@ def make_session_factory(engine) -> sessionmaker:
 
 
 def _ensure_migration_table(conn) -> None:
-    conn.execute(text(
-        "CREATE TABLE IF NOT EXISTS schema_migrations ("
-        "id VARCHAR(64) PRIMARY KEY, applied_at VARCHAR(40) NOT NULL)"
-    ))
+    conn.execute(
+        text(
+            "CREATE TABLE IF NOT EXISTS schema_migrations ("
+            "id VARCHAR(64) PRIMARY KEY, applied_at VARCHAR(40) NOT NULL)"
+        )
+    )
 
 
 def _applied(conn) -> set:
@@ -68,5 +71,3 @@ def run_migrations(engine) -> list:
             )
             applied_now.append(mig_id)
     return applied_now
-
-
