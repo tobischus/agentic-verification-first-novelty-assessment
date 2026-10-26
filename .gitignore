@@ -167,3 +167,7 @@ emnlp_23_sen*.csv
 /.snapshots/
 
 /related_work
+
+# Reproduction outputs and the unpacked data archive
+/out/
+/SHA256SUMS.txt

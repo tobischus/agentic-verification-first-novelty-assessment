@@ -63,6 +63,7 @@ The analyses of Chapter 6 run offline from the data archive (`DATA.md`). Unpack 
 into the repository root and run:
 
 ```bash
+mkdir out
 python -m final_evaluation.cli analyze-e1 --out out/e1_analysis.json
 python -m final_evaluation.cli sensitivity-e1 --out out/e1_sensitivity.json
 python -m final_evaluation.cli agent-linear --out out/agent_linear.json
