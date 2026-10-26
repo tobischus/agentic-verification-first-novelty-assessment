@@ -1,249 +1,79 @@
-<!-- <p  align="center">
-  <img src='logo.png' width='200'>
-</p> -->
+# Towards Verification-First Agentic Novelty Assessment of Scientific Papers
 
-# Beyond "Not Novel Enough": Enriching Scholarly Critique with LLM-Assisted Feedback
+Code of the master's thesis of the same title. The system extracts the claimed
+contributions of a submission, retrieves prior work, and lets an agent compare each claim
+with each prior paper. Every overlap it reports is backed by quotes that are verified
+against the source texts. The linear baseline runs the same steps in a fixed order.
 
-<!-- [![Arxiv](https://img.shields.io/badge/Arxiv-YYMM.NNNNN-red?style=flat-square&logo=arxiv&logoColor=white)](https://put-here-your-paper.com) -->
-<!-- [![License](https://img.shields.io/github/license/UKPLab/arxiv2025-assessing-paper-novelty)](https://opensource.org/licenses/Apache-2.0) -->
-<!-- [![Python Versions](https://img.shields.io/badge/Python-3.9-blue.svg?style=flat&logo=python&logoColor=white)](https://www.python.org/) -->
-<!-- [![CI](https://github.com/UKPLab/arxiv2025-assessing-paper-novelty/actions/workflows/main.yml/badge.svg)](https://github.com/UKPLab/arxiv2025-assessing-paper-novelty/actions/workflows/main.yml) -->
+The repository builds on the code of Afzal et al., *Beyond "Not Novel Enough": Enriching
+Scholarly Critique with LLM-Assisted Feedback* (UKP Lab, TU Darmstadt). Their pipeline
+(`src/novelty_assessment/pipeline.py` and the modules it calls) serves as a baseline, and
+their retrieval stage (`src/retrieval/`) is reused with changes. The original code is
+licensed under Apache 2.0 (`LICENSE`, `NOTICE.txt`).
 
-Novelty assessment is a central yet understudied aspect of peer review, particularly in high-volume fields like NLP where reviewer capacity is strained. We present a structured approach for automated novelty evaluation that models expert reviewer behavior through three stages: content extraction from submissions, retrieval and synthesis of related work, and structured comparison for evidence-based assessment. Informed by a large-scale analysis of human-written novelty reviews, our method captures key patterns such as independent claim verification and contextual reasoning. Evaluated on 182 ICLR 2025 submissions with human-annotated reviewer novelty assessments, it achieves 86.5% alignment with human reasoning and 75.3% agreement on novelty conclusions, substantially outperforming existing LLM-based baselines. The method produces detailed, literature-aware analyses, improves consistency over ad hoc judgments, and demonstrates the potential of structured LLM-assisted approaches to support more rigorous and transparent peer review without displacing human expertise. Data and code are made available.
+## Layout
 
-This repo contains the code and data used to produce the experiments in this paper.
-
-[Link to Data](https://tudatalib.ulb.tu-darmstadt.de/handle/tudatalib/4988)
-
-Contact person: [Osama Mohammed Afzal](mailto:osama.afzal@tu-darmstadt.de)
-
-[UKP Lab](https://www.ukp.tu-darmstadt.de/) | [TU Darmstadt](https://www.tu-darmstadt.de/)
-
-## Getting Started
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install .
-pip install -r requirements.txt
+```
+src/preprocess/           PDF parsing with GROBID, metadata, submission date
+src/retrieval/            prior-work retrieval, Semantic Scholar matching, version pinning
+src/novelty_assessment/   claim extraction, agent and linear baseline, report, API
+  agent/                  claim agent, linear baseline, tools, evidence check, run logs
+eval/                     batch runs of agent, linear and baselines, E1 judge
+final_evaluation/         rating dashboard (E2) and analyses (E1 to E3)
+frontend/                 reviewer UI with the two checkpoints
+docker/                   GROBID configuration
 ```
 
-### Prerequisites
+## Setup
 
-1. **API Keys**: Copy `.env.example` to `.env` and add your API keys:
+Python 3.11 and Node 18 (tested with 3.11.2 and 18.15.0).
 
-   - `OPENAI_API_KEY`: Required for structured extraction and novelty assessment
-   - `SEMANTIC_SCHOLAR_API_KEY`: Optional, improves rate limits for paper retrieval
+```bash
+pip install -r requirements.txt
+git clone https://github.com/sunnweiwei/RankGPT.git    # used at commit 0d62bc3
+cp .env.example .env                                   # set OPENAI_API_KEY
+```
 
-2. **GROBID Setup**: The pipeline requires GROBID for extracting structured metadata from PDFs:
-
-   - **Installation**: Follow the installation instructions at [GROBID repository](https://github.com/kermitt2/grobid)
-   - **Usage**: Process your PDF papers to generate TEI XML files:
-     ```bash
-     # Example GROBID processing (refer to GROBID docs for detailed instructions)
-     curl -X POST -F "input=@paper.pdf" localhost:8070/api/processFulltextDocument
-     ```
-   - **Expected Output**: The pipeline expects GROBID TEI XML files in this structure:
-     ```
-     data/{submission_id}/{submission_id}.grobid.tei.xml
-     ```
-
-3. **OCR Processing**: The pipeline requires OCR processing of PDF papers to extract introductions. You can use either:
-
-   - **Nougat OCR**: Follow installation instructions at [Nougat repository](https://github.com/facebookresearch/nougat)
-   - **MinerU OCR**: Follow installation instructions at [MinerU repository](https://github.com/opendatalab/MinerU)
-
-   The pipeline expects OCR output in these specific directory structures:
-
-   **For Main Paper** (any one of these):
-
-   ```
-   data/{submission_id}/ocr_output/{submission_id}/auto/{submission_id}.md
-   data/{submission_id}/nougat_output/{submission_id}.mmd
-   data/{submission_id}/mineru_output/{submission_id}.md
-   ```
-
-   **For Related Papers** (any one of these):
-
-   ```
-   data/{submission_id}/related_work_data/ocr_output/{paper_id}/auto/{paper_id}.md
-   data/{submission_id}/related_work_data/nougat_output/{paper_id}.mmd
-   ```
-
-   **Generated Introduction Files** (created by pipeline):
-
-   ```
-   data/{submission_id}/ours/{submission_id}_intro.txt              # main paper
-   data/{submission_id}/ours/related_papers/{paper_id}_intro.txt    # related papers
-   ```
+GROBID runs in Docker, see `docker/README.md`.
 
 ## Usage
 
-### Complete Pipeline
+**Reviewer UI.** Start the API (`start-backend.ps1`, or `python src/novelty_assessment/api.py`)
+and the frontend (`cd frontend && npm ci && npm run dev`). Upload a PDF, review the
+claims and the prior-work pool at the two checkpoints, then run the claim review.
 
-The novelty assessment pipeline consists of several stages. For a single submission:
+**Command line.** For a paper in `data/<id>/`:
 
-0. **GROBID Processing**: Process submission PDF with GROBID (external step)
-
-   ```bash
-   # Start GROBID service (refer to GROBID documentation)
-   # Process PDF to generate TEI XML file
-   # Save as: data/{submission_id}/{submission_id}.grobid.tei.xml
-   ```
-
-1. **Preprocess**: Extract metadata from GROBID TEI XML
-
-   ```bash
-   cd src/preprocess
-   python extract_metadata.py --data-dir /path/to/data --submission-id SUBMISSION_ID
-   ```
-
-2. **Enrich Citations**: Add Semantic Scholar data to citations
-
-   ```bash
-   cd src/retrieval
-   python match_papers_to_s2.py --input /path/to/data --submission-id SUBMISSION_ID
-   ```
-
-3. **Retrieve Related Papers**: Find and rank related papers
-
-   ```bash
-   cd src/retrieval
-   python retrieval.py --input /path/to/data --submission-id SUBMISSION_ID
-   ```
-
-4. **Download PDFs**: Download PDFs of ranked papers
-
-   ```bash
-   cd src/retrieval
-   python get_cited_pdfs.py --data-dir /path/to/data --submission-id SUBMISSION_ID
-   ```
-
-5. **OCR Processing**: Process PDFs with Nougat or MinerU (external step)
-
-   ```bash
-   # Process main paper PDF and related paper PDFs with OCR tool of choice
-   # Save outputs in expected directory structure (see Prerequisites)
-   ```
-
-6. **Extract Introductions**: Extract introductions from OCR output
-
-   ```bash
-   cd src/retrieval
-   python extract_introductions.py --data-dir /path/to/data --submission-id SUBMISSION_ID
-   ```
-
-7. **Run Analysis**: Complete novelty assessment pipeline
-   ```bash
-   cd src/novelty_assessment
-   python pipeline.py --data-dir /path/to/data --submission-id SUBMISSION_ID
-   ```
-
-### Individual Components
-
-Each stage can also be run independently using the CLI interfaces provided:
-
-- **`extract_metadata.py`**: Extracts structured metadata (title, abstract, citations, citation contexts) from GROBID TEI XML files
-- **`match_papers_to_s2.py`**: Enriches citations with Semantic Scholar data (abstracts, paper IDs, publication info)
-- **`retrieval.py`**: Generates search keywords, queries Semantic Scholar, ranks papers using SPECTER2 embeddings and RankGPT
-- **`get_cited_pdfs.py`**: Downloads PDFs of ranked papers from ArXiv, ACL Anthology, and Semantic Scholar
-- **`extract_introductions.py`**: Extracts introduction sections from OCR-processed papers using pattern matching
-- **`structured_extraction.py`**: Uses LLMs to extract structured information (methods, problems, datasets, results, novelty claims)
-- **`research_landscape.py`**: Analyzes the research landscape and identifies methodological clusters and relationships
-- **`novelty_assessment.py`**: Performs detailed novelty analysis comparing submission against related work
-- **`generate_summary.py`**: Generates final reviewer guidance summarizing the novelty assessment
-- **`pipeline.py`**: Orchestrates the complete analysis pipeline with dependency checking
-
-### Expected results
-
-After running the complete pipeline, you should expect the following output structure and files:
-
-```
-data/{submission_id}/
-├── {submission_id}.grobid.tei.xml           # Input: GROBID TEI XML file
-├── ours/
-│   ├── {submission_id}.json                 # Extracted metadata (title, abstract, citations)
-│   ├── {submission_id}_intro.txt            # Main paper introduction
-│   ├── related_papers/                      # Related papers introductions
-│   │   ├── {paper_id}_intro.txt
-│   │   └── ...
-│   ├── s2_enriched_{submission_id}.json     # Citations enriched with Semantic Scholar data
-│   ├── related_work_{submission_id}.json    # Retrieved and ranked related papers
-│   ├── structured_extraction_{submission_id}.json  # LLM-extracted structured information
-│   ├── research_landscape_{submission_id}.json     # Research landscape analysis
-│   ├── novelty_assessment_{submission_id}.json     # Detailed novelty assessment
-│   └── summary_{submission_id}.json         # **Final summary for reviewers**
-└── related_work_data/
-    ├── pdfs/                                # Downloaded related paper PDFs
-    └── ocr_output/                          # OCR processed papers
+```bash
+# document processing, claim extraction, retrieval, PDF download
+python src/novelty_assessment/orchestrator.py --data-dir data --submission-id <id> --pdf paper.pdf --no-hitl
+# agent and linear baseline, with the paper-level summary
+python eval/run_pilot.py --submission <id> --variant both
+# baseline of Afzal et al.
+python eval/afzal_adapter.py --data-dir data --submission-id <id>
+python src/novelty_assessment/pipeline.py --data-dir data --submission-id <id> --model gpt-4.1
 ```
 
-**Key Output Files:**
+`eval/run_claim_assessment.py` adds the claim explanations to the reports.
+`eval/run_e1_extra.py` runs all steps for the ten E1-only papers.
 
-1. **`summary_{submission_id}.json`** - The main output containing:
+## Reproducing the evaluation
 
-   - **Executive Summary**: High-level novelty assessment and recommendations
-   - **Detailed Analysis**: Evidence-based comparison with related work
-   - **Reviewer Guidance**: Structured feedback for peer reviewers
-   - **Supporting Evidence**: Citations and specific comparisons
+The analyses of Chapter 6 run offline from the data archive (`DATA.md`). Unpack it
+into the repository root and run:
 
-2. **`novelty_assessment_{submission_id}.json`** - Detailed technical analysis including:
-
-   - Methodological comparisons with related work
-   - Innovation assessment across different dimensions
-   - Evidence-based novelty scoring
-   - Specific technical differentiators
-
-3. **`structured_extraction_{submission_id}.json`** - Structured information extracted from paper:
-   - Methods and approaches used
-   - Problems addressed and datasets
-   - Key results and claims
-   - Novelty assertions by authors
-
-The pipeline produces comprehensive, literature-aware analyses that help reviewers assess novelty systematically rather than making ad hoc judgments. The final summary provides actionable guidance for peer review decisions.
-
-### Key Parameters
-
-The pipeline components accept these main parameters:
-
-- `--data-dir`: Base directory containing submission data (required for all components)
-- `--submission-id`: Unique identifier for the submission being processed (required for pipeline mode)
-- `--input`: Input directory path (used by some retrieval components)
-- `--verbose, -v`: Enable detailed logging output (optional)
-
-## Development
-
-For development work:
-
-1. Install dependencies:
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-2. The codebase is organized into three main stages:
-
-   - `src/preprocess/`: Metadata extraction from GROBID TEI files
-   - `src/retrieval/`: Paper retrieval, PDF download, and introduction extraction
-   - `src/novelty_assessment/`: LLM-based analysis and summary generation
-
-3. Each component includes both CLI interface and pipeline integration methods for flexible usage.
-
-## Cite
-
-Please use the following citation:
-
-```
-@inproceedings{
-afzal2026beyond,
-title={Beyond {\textquotedblleft}Not Novel Enough{\textquotedblright}: Enriching Scholarly Critique with {LLM}-Assisted Feedback},
-author={Osama Mohammed Afzal and Preslav Nakov and Tom Hope and Iryna Gurevych},
-booktitle={19th Conference of the European Chapter of the Association for Computational Linguistics},
-year={2026},
-url={https://openreview.net/forum?id=VNB3bhnHhL}
-}
+```bash
+python -m final_evaluation.cli analyze-e1 --out out/e1_analysis.json
+python -m final_evaluation.cli sensitivity-e1 --out out/e1_sensitivity.json
+python -m final_evaluation.cli agent-linear --out out/agent_linear.json
+python -m final_evaluation.cli source-audit --out out/source_audit.json
+python -m final_evaluation.cli analyze-human --input final_evaluation/results/main/e2/main_study_v2_export.zip --out out/human_analysis.json
+python -m final_evaluation.cli compare-e1 --input final_evaluation/results/main/e2/main_study_v2_export.zip \
+  --e1 final_evaluation/results/main/e1/judge_calls.jsonl --out out/compare_e1.json
+python final_evaluation/scripts/thesis_figures.py
 ```
 
-## Disclaimer
-
-> This repository contains experimental software and is published for the sole purpose of giving additional background details on the respective publication.
+The outputs in `out/` match the stored results in `final_evaluation/results/main/`.
+Without `--out`, the commands overwrite the stored files.
+New runs of the systems or the judge call paid APIs and give different outputs, since the
+models are not deterministic. Each run log records the prompt and schema hashes it used.

@@ -192,7 +192,7 @@ def wait_for_grobid(url: str, seconds: int) -> bool:
     return False
 
 
-def prepare(row: dict, model: str, grobid: str, k: int, wait: int = 0) -> bool:
+def prepare(row: dict, model: str, grobid: str, wait: int = 0) -> bool:
     key, pdf = row["key"], row["pdf"]
     cmd = [
         sys.executable,
@@ -286,7 +286,6 @@ def main() -> int:
     ap.add_argument("--only", default="", help="comma-separated paper_keys")
     ap.add_argument("--model", default="gpt-4.1")
     ap.add_argument("--grobid-server", default="http://localhost:8070")
-    ap.add_argument("--k", type=int, default=10)
     ap.add_argument("--write-sources", default="", help="write a sources.yaml skeleton here")
     ap.add_argument("--papers-dir", default="", help="submission PDFs (default human_study/paper)")
     ap.add_argument(
@@ -335,7 +334,7 @@ def main() -> int:
         if status_of(r["key"])["processed"]:
             print(f"\n=== {r['key']} === already prepared, skipping")
             continue
-        if not prepare(r, args.model, args.grobid_server, args.k):
+        if not prepare(r, args.model, args.grobid_server):
             failed.append(r["key"])
     print()
     print_table(rows)
