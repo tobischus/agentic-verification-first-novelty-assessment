@@ -38,7 +38,7 @@ def _git_head() -> str:
 def _load_battle_export():
     if str(SRC_NOVELTY) not in sys.path:
         sys.path.insert(0, str(SRC_NOVELTY))
-    import battle_export  # noqa
+    import battle_export
 
     return battle_export
 

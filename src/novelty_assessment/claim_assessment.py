@@ -1,11 +1,9 @@
 """Claim explanations: why each claim received its verdict."""
 
-import argparse
 import hashlib
 import json
 import os
 import re
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
@@ -401,32 +399,3 @@ def build(
             v["claim_assessment"] = by_id[v["claim_id"]]
     b_path.write_text(json.dumps(b, ensure_ascii=False, indent=1), encoding="utf-8")
     return results
-
-
-def main():
-    ap = argparse.ArgumentParser(description="Step 5c: claim-level assessment")
-    ap.add_argument("--data-dir", required=True)
-    ap.add_argument("--submission-id", required=True)
-    ap.add_argument("--variant", default="")
-    ap.add_argument("--model", default="gpt-4.1")
-    ap.add_argument(
-        "--check",
-        action="store_true",
-        help="print the findings and staleness per claim; NO model call",
-    )
-    args = ap.parse_args()
-    if args.check:
-        contexts, _p, b, _refs = contexts_for(args.data_dir, args.submission_id, args.variant)
-        stored = {v.get("claim_id"): v.get("claim_assessment") for v in b.get("per_claim", [])}
-        for cid, i, _e, _v, findings in contexts:
-            s = stored.get(cid)
-            state = "none" if not s else ("STALE" if is_stale(s, findings) else "current")
-            print(f"Claim {i} ({cid}): findings {len(findings.split())} words, stored: {state}")
-        return
-    for r in build(args.data_dir, args.submission_id, args.variant, args.model):
-        print(f"- {r['word_count']} words, problems: {r['open_check_problems'] or 'none'}")
-
-
-if __name__ == "__main__":
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-    main()

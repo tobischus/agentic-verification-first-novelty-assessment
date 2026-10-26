@@ -3,7 +3,6 @@ import logging
 import re
 import time
 import os
-import argparse
 from dataclasses import dataclass, field
 from rapidfuzz import fuzz
 from typing import List, Optional, Dict, Any
@@ -327,46 +326,3 @@ def process_for_pipeline(
     except Exception as e:
         logger.error(f"Error processing submission {submission_id}: {e}")
         return False
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Enrich cited papers with Semantic Scholar data - single submission mode only"
-    )
-    parser.add_argument(
-        "--data-dir", type=str, required=True, help="Data directory containing submission data"
-    )
-    parser.add_argument("--submission-id", type=str, required=True, help="Submission ID to process")
-    parser.add_argument(
-        "--api-key",
-        type=str,
-        help="Semantic Scholar API key (or set SEMANTIC_SCHOLAR_API_KEY env var)",
-    )
-    parser.add_argument(
-        "--rate-limit",
-        type=float,
-        default=1.1,
-        help="Rate limit delay in seconds between requests (S2 limit is 1 req/sec; stay above 1.0)",
-    )
-    parser.add_argument("--verbose", "-v", action="store_true", help="Verbose logging")
-
-    args = parser.parse_args()
-
-    if args.verbose:
-        logging.getLogger().setLevel(logging.DEBUG)
-
-    logger.info(f"Processing submission {args.submission_id}")
-    logger.info(f"API key: {args.api_key}")
-    success = process_for_pipeline(
-        data_dir=args.data_dir,
-        submission_id=args.submission_id,
-        api_key=args.api_key,
-        rate_limit_delay=args.rate_limit,
-    )
-
-    if success:
-        logger.info(f"✅ Successfully enriched submission {args.submission_id}")
-        print(f"✅ Successfully processed submission {args.submission_id}")
-    else:
-        logger.error(f"❌ Failed to enrich submission {args.submission_id}")
-        print(f"❌ Failed to process submission {args.submission_id}")

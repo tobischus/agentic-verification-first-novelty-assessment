@@ -40,15 +40,6 @@ def overview(db: Session = Depends(get_db), admin: models.Participant = Depends(
     assignments = (
         db.query(models.Assignment).filter(models.Assignment.study_id == admin.study_id).all()
     )
-    issues = (
-        db.query(models.TechnicalIssue)
-        .filter(
-            models.TechnicalIssue.study_id == admin.study_id,
-            models.TechnicalIssue.resolved == False,  # noqa: E712
-        )
-        .all()
-    )  # noqa: E712
-
     by_participant = {}
     for a in assignments:
         d = by_participant.setdefault(
@@ -77,63 +68,11 @@ def overview(db: Session = Depends(get_db), admin: models.Participant = Depends(
             "id": study.id,
             "title": study.title,
             "status": study.status,
-            "is_pilot": study.is_pilot,
         }
         if study
         else None,
         "participants": people,
-        "open_technical_issues": len(issues),
     }
-
-
-@router.get("/technical-issues")
-def technical_issues(
-    db: Session = Depends(get_db), admin: models.Participant = Depends(current_admin)
-):
-    rows = (
-        db.query(models.TechnicalIssue)
-        .filter(models.TechnicalIssue.study_id == admin.study_id)
-        .order_by(models.TechnicalIssue.created_at.desc())
-        .all()
-    )
-    return {
-        "issues": [
-            {
-                "id": r.id,
-                "participant_id": r.participant_id,
-                "assignment_id": r.assignment_id,
-                "message": r.message,
-                "created_at": r.created_at.isoformat(),
-                "resolved": r.resolved,
-            }
-            for r in rows
-        ]
-    }
-
-
-class ResolveIssueBody(BaseModel):
-    issue_id: str
-
-
-@router.post("/technical-issues/resolve", dependencies=[Depends(require_csrf)])
-def resolve_issue(
-    body: ResolveIssueBody,
-    db: Session = Depends(get_db),
-    admin: models.Participant = Depends(current_admin),
-):
-    row = (
-        db.query(models.TechnicalIssue)
-        .filter(
-            models.TechnicalIssue.id == body.issue_id,
-            models.TechnicalIssue.study_id == admin.study_id,
-        )
-        .first()
-    )
-    if row is None:
-        raise HTTPException(404, "issue not found")
-    row.resolved = True
-    db.commit()
-    return {"ok": True}
 
 
 class ResetCodeBody(BaseModel):
@@ -264,9 +203,6 @@ def _build_export(db: Session, study_id: str) -> bytes:
         .join(models.Assignment, models.Assignment.id == models.FinalResponse.assignment_id)
         .filter(models.Assignment.study_id == study_id)
     }
-    issues = (
-        db.query(models.TechnicalIssue).filter(models.TechnicalIssue.study_id == study_id).all()
-    )
     familiarity = (
         db.query(models.PaperFamiliarity).filter(models.PaperFamiliarity.study_id == study_id).all()
     )
@@ -473,29 +409,6 @@ def _build_export(db: Session, study_id: str) -> bytes:
             z.writestr("protocol.md", protocol_path.read_text(encoding="utf-8"))
         except Exception:
             pass
-
-        out = io.StringIO()
-        w = csv.writer(out)
-        w.writerow(
-            ["issue_id", "participant_code", "assignment_id", "message", "created_at", "resolved"]
-        )
-        for i in issues:
-            pcode = (
-                participants.get(i.participant_id).code_display
-                if i.participant_id in participants
-                else ""
-            )
-            w.writerow(
-                [
-                    i.id,
-                    pcode,
-                    i.assignment_id or "",
-                    _csv_safe(i.message),
-                    i.created_at.isoformat(),
-                    i.resolved,
-                ]
-            )
-        z.writestr("technical_issues.csv", out.getvalue())
 
         out = io.StringIO()
         w = csv.writer(out)

@@ -38,7 +38,7 @@ def _participant_may_access(db: Session, participant: models.Participant, asset_
     return False
 
 
-def _serve(request, asset: models.Asset):
+def _serve(asset: models.Asset):
     backend = storage.backend_from_env()
     if asset.kind in ("markdown", "json"):
         resolved = backend.resolve(asset.storage_key, asset.content_type)
@@ -58,7 +58,6 @@ def _serve(request, asset: models.Asset):
 @router.get("/{asset_id}")
 def get_asset(
     asset_id: str,
-    request=None,
     db: Session = Depends(get_db),
     participant: models.Participant = Depends(current_participant),
 ):
@@ -68,6 +67,6 @@ def get_asset(
     if participant.role != "admin" and not _participant_may_access(db, participant, asset_id):
         raise HTTPException(403, "not authorized for this asset")
     try:
-        return _serve(request, asset)
+        return _serve(asset)
     except FileNotFoundError:
         raise HTTPException(404, "asset file missing on this server")

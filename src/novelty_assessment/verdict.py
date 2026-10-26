@@ -1,7 +1,5 @@
 """Turns a comparison into a judgement."""
 
-DEGREES = ("same", "substantial", "partial", "superficial", "none")
-
 OVERLAP_DEGREES = ("same", "substantial", "partial")
 
 DEGREE_RANK = {"same": 0, "substantial": 1, "partial": 2, "superficial": 3, "none": 4}

@@ -1,4 +1,3 @@
-import argparse
 import json
 import logging
 import os
@@ -146,8 +145,6 @@ class RankingResults:
 
 class APIError(Exception):
     """Custom exception for API-related errors."""
-
-    pass
 
 
 class PaperRankingSystem:
@@ -954,38 +951,3 @@ def process_for_pipeline(data_dir: str, submission_id: str) -> bool:
     except Exception as e:
         ranking_system.logger.error(f"Error processing {submission_id}: {e}")
         return False
-
-
-def main():
-    parser = argparse.ArgumentParser(
-        description="Paper retrieval and ranking system - single submission mode only"
-    )
-    parser.add_argument(
-        "--data-dir", type=str, required=True, help="Data directory containing submission data"
-    )
-    parser.add_argument("--submission-id", type=str, required=True, help="Submission ID to process")
-    parser.add_argument(
-        "--keyword-model", type=str, default="gpt-4o", help="Model for keyword generation"
-    )
-    parser.add_argument(
-        "--ranking-model", type=str, default="gpt-3.5-turbo", help="Model for paper ranking"
-    )
-    parser.add_argument(
-        "--embedding-model",
-        type=str,
-        default="allenai/specter2_base",
-        help="Embedding model for similarity",
-    )
-    parser.add_argument("--verbose", "-v", action="store_true", help="Verbose logging")
-
-    args = parser.parse_args()
-
-    success = process_for_pipeline(args.data_dir, args.submission_id)
-    if success:
-        print(f"✅ Successfully processed submission {args.submission_id}")
-    else:
-        print(f"❌ Failed to process submission {args.submission_id}")
-
-
-if __name__ == "__main__":
-    main()

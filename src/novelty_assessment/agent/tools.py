@@ -27,7 +27,7 @@ from .passages import (
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "retrieval"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import paper_versions as pv  # noqa: E402
+import paper_versions as pv
 
 # How deeply a paper was examined, recorded per comparison.
 _DEPTH_RANK = {

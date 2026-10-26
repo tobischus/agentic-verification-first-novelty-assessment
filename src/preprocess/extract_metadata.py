@@ -1,9 +1,7 @@
 """Enhanced GROBID TEI XML Parser Extracts title, abstract, cited papers, and citation contexts from GROBID-parsed PDFs. Based on efficient lxml parsing approach."""
 
-import argparse
 import json
 import logging
-import sys
 from pathlib import Path
 from typing import List, Optional
 from dataclasses import dataclass, asdict
@@ -286,57 +284,3 @@ class EnhancedGrobidParser:
         """Process a single TEI file and save in the expected pipeline directory structure."""
         output_path = Path(data_dir) / submission_id / f"{submission_id}.json"
         return self.process_single_tei_file(tei_file_path, str(output_path))
-
-
-def main():
-    parser = argparse.ArgumentParser(
-        description="Enhanced GROBID TEI XML Parser - single submission mode only"
-    )
-    parser.add_argument("--data-dir", type=str, required=True, help="Base data directory")
-    parser.add_argument("--submission-id", type=str, required=True, help="Submission ID to process")
-    parser.add_argument(
-        "--tei-file",
-        type=str,
-        help="TEI XML file path (default: data_dir/submission_id/submission_id_fulltext.tei.xml)",
-    )
-    parser.add_argument("--verbose", "-v", action="store_true", help="Verbose logging")
-
-    args = parser.parse_args()
-
-    if not args.tei_file:
-        args.tei_file = str(
-            Path(args.data_dir) / args.submission_id / f"{args.submission_id}_fulltext.tei.xml"
-        )
-
-    log_level = logging.DEBUG if args.verbose else logging.INFO
-    logging.basicConfig(level=log_level, format="%(asctime)s %(levelname)s %(message)s")
-
-    grobid_parser = EnhancedGrobidParser()
-
-    try:
-        parsed_paper = grobid_parser.process_for_pipeline(
-            args.tei_file, args.data_dir, args.submission_id
-        )
-
-        logging.info("📊 Processing summary:")
-        logging.info(f"   Submission ID: {args.submission_id}")
-        logging.info(f"   Input: {args.tei_file}")
-        logging.info(f"   Output: {args.data_dir}/{args.submission_id}/{args.submission_id}.json")
-        logging.info(f"   Title: {parsed_paper.title}")
-        logging.info(
-            f"   Abstract: {len(parsed_paper.abstract) if parsed_paper.abstract else 0} chars"
-        )
-        logging.info(f"   Cited papers: {len(parsed_paper.cited_papers)}")
-        logging.info(f"   Citation contexts: {len(parsed_paper.citation_contexts)}")
-
-        logging.info("✅ Processing completed successfully")
-        print(f"✅ Successfully processed submission {args.submission_id}")
-
-    except Exception as e:
-        logging.error(f"❌ Error during processing: {e}")
-        print(f"❌ Failed to process submission {args.submission_id}: {e}")
-        sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()

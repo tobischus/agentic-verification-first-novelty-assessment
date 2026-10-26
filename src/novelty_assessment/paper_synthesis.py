@@ -1,10 +1,8 @@
 """Paper-level novelty summary."""
 
-import argparse
 import hashlib
 import json
 import os
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
@@ -414,54 +412,3 @@ def build(
     artifact_b["paper_summary"] = summary
     b_path.write_text(json.dumps(artifact_b, ensure_ascii=False, indent=1), encoding="utf-8")
     return summary
-
-
-def main():
-    ap = argparse.ArgumentParser(description="Step 5b: paper-level novelty summary")
-    ap.add_argument("--data-dir", required=True)
-    ap.add_argument("--submission-id", required=True)
-    ap.add_argument("--variant", default="", help="read/write the {variant}-suffixed artifacts")
-    ap.add_argument("--model", default="gpt-4.1")
-    ap.add_argument(
-        "--check",
-        action="store_true",
-        help="build and print the context, report staleness; NO model call",
-    )
-    ap.add_argument("--print-context", action="store_true", help="with --check, print it in full")
-    args = ap.parse_args()
-
-    if args.check:
-        findings, _b_path, artifact_b = context_for(args.data_dir, args.submission_id, args.variant)
-        stored = artifact_b.get("paper_summary")
-        print(f"findings: {len(findings.split())} words, fingerprint {fingerprint(findings)[:12]}")
-        if not stored:
-            print("stored summary: none")
-        elif is_stale(stored, findings):
-            print(
-                f"stored summary: STALE (was {str(stored.get('inputs_fingerprint'))[:12]}, "
-                f"generated {stored.get('generated_at')})"
-            )
-        else:
-            print(
-                f"stored summary: current ({stored.get('word_count')} words, "
-                f"{stored.get('prompt_version')}, {stored.get('generated_at')})"
-            )
-        if args.print_context:
-            print("\n" + findings)
-        return
-
-    summary = build(args.data_dir, args.submission_id, args.variant, args.model)
-    print(
-        f"[{args.variant or 'default'}] {summary['word_count']} words "
-        f"(budget {WORDS_LO}-{WORDS_HI})"
-    )
-    print("\nMain novelty concern:\n" + summary["main_novelty_concern"])
-    print("\nRemaining contribution:\n" + summary["remaining_contribution"])
-    u = summary.get("usage") or {}
-    if u.get("prompt_tokens"):
-        print(f"\ntokens: {u['prompt_tokens']} in / {u.get('completion_tokens')} out")
-
-
-if __name__ == "__main__":
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-    main()

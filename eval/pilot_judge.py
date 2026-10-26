@@ -292,7 +292,7 @@ def run_call(
                 try:
                     msg = llm.invoke(messages, **invoke_kw)
                     break
-                except Exception as e:  # noqa: BLE001
+                except Exception as e:
                     if not (wait_on_429 and _is_capacity_429(e) and waits < len(FLEX_WAITS)):
                         raise
                     print(

@@ -4,7 +4,6 @@ One call with the full text of the submission returns the claims, each with a ve
 anchor. For each claim, a second call explains what the submission delivers for it.
 """
 
-import argparse
 import json
 import os
 import sys
@@ -374,27 +373,3 @@ def add_claim(
         }
     )
     return doc
-
-
-def main():
-    ap = argparse.ArgumentParser(description="Claim extraction")
-    ap.add_argument("--data-dir", required=True)
-    ap.add_argument("--submission-id", required=True)
-    ap.add_argument("--model", default=DEFAULT_EXTRACTION_MODEL)
-    ap.add_argument("--reasoning-effort", default="high")
-    ap.add_argument("--out-name", default=None)
-    args = ap.parse_args()
-
-    doc = ClaimExtractor(model_name=args.model, reasoning_effort=args.reasoning_effort).extract(
-        args.data_dir, args.submission_id, out_name=args.out_name
-    )
-    print(f"Title: {doc.get('title')}  |  date (cutoff): {doc.get('publication_date')}")
-    print(f"\nClaims ({len(doc['claims'])}):")
-    for c in doc["claims"]:
-        print(f"  [{c['id']}] {c['claim_text']}")
-        v = "verified" if c.get("evidence_verified") else "UNVERIFIED"
-        print(f"        evidence ({v}): {(c.get('evidence_quote') or '')[:160]}")
-
-
-if __name__ == "__main__":
-    main()

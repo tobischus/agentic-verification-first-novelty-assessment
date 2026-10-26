@@ -1,6 +1,5 @@
 """Deterministic Markdown report built from the stored artifacts."""
 
-import argparse
 import json
 import re
 from pathlib import Path
@@ -9,7 +8,6 @@ from typing import List
 import source_refs
 import verdict as vd
 
-EXPORT_LAYOUT_VERSION = "reviewer-v4.4"
 
 _LQ, _RQ = "“", "”"
 
@@ -115,31 +113,6 @@ def _degree_counts(details: list) -> str:
     if len(ordered) == 1:
         return f"{len(details)} ({label(ordered[0][0])})"
     return f"{len(details)} (" + ", ".join(f"{n} {label(d)}" for d, n in ordered) + ")"
-
-
-def main():
-    ap = argparse.ArgumentParser(description="Render the final assessment as plain text")
-    ap.add_argument("--data-dir", required=True)
-    ap.add_argument("--submission-id", required=True)
-    ap.add_argument("--out", default=None, help="write here instead of stdout")
-    ap.add_argument("--variant", default="", help="export the {variant}-suffixed artifacts")
-    ap.add_argument(
-        "--check-sources",
-        action="store_true",
-        help="diagnose version metadata in existing artifacts; no model calls",
-    )
-    args = ap.parse_args()
-    if args.check_sources:
-        print(check_sources(args.data_dir, args.submission_id, args.variant))
-        return
-    text = build(args.data_dir, args.submission_id, variant=args.variant)
-    if args.out:
-        p = Path(args.out)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(text, encoding="utf-8")
-        print(f"written: {p}  ({len(text)} chars)")
-    else:
-        print(text)
 
 
 def _cite(authors, year=None) -> str:
@@ -720,77 +693,3 @@ def quote_index(data_dir: str, submission_id: str, variant: str = "") -> dict:
     refs = source_refs.assign_from_titles(by_paper_titles)
 
     return {"submission": sub_list, "papers": papers, "refs": refs, "claim_anchors": claim_anchors}
-
-
-def check_sources(data_dir: str, submission_id: str, variant: str = "") -> str:
-    """Read-only diagnosis. Current manifest entries are not historical provenance."""
-    sub = Path(data_dir) / submission_id
-    suffix = f"_{variant}" if variant else ""
-    artifact_path = sub / f"{submission_id}_artifact_a{suffix}.json"
-    a = json.loads(artifact_path.read_text(encoding="utf-8"))
-    manifest_path = sub / "related_work_data" / "versions.json"
-    manifest = _load(manifest_path) or {}
-    if not isinstance(manifest, dict):
-        manifest = {}
-    lines = [
-        f"Artifact: {artifact_path}",
-        f"Current versions.json: {manifest_path.exists()} ({len(manifest)} entries)",
-        "NOTE: current manifest values below are diagnostic only; not evidence of what an old run read.",
-        "",
-    ]
-    for entry in a.get("claims", []) or []:
-        comps = entry.get("comparisons") or []
-        log = entry.get("run_log")
-        raw_prior = log.get("prior_work") if isinstance(log, dict) else None
-        prior = raw_prior if isinstance(raw_prior, list) else []
-        prior_by = {_pid(p): p for p in prior if isinstance(p, dict)}
-        run_id = log.get("run_id") if isinstance(log, dict) else None
-        lines += [
-            f"Claim {entry.get('claim_id')}: {len(comps)} comparisons",
-            f"  run_log type: {type(log).__name__}; run_id: {run_id or 'not recorded'}",
-            f"  prior_work type: {type(raw_prior).__name__}; records: {len(prior)}",
-        ]
-        matched = complete = current_complete = 0
-        incomplete_examples = []
-        for c in comps:
-            pid = _pid(c)
-            p = prior_by.get(pid)
-            if p is not None:
-                matched += 1
-            if isinstance(log, dict) and (raw_prior is None or isinstance(raw_prior, list)):
-                snap = _snapshot(entry, c)
-            else:
-                snap = c
-            version, day = snap.get("pinned_version"), snap.get("pinned_version_date")
-            valid_day = bool(re.match(r"^\d{4}-\d{2}-\d{2}(?:$|[T ])", str(day or "")))
-            ready = bool(version and valid_day)
-            complete += int(ready)
-            current = manifest.get(pid) or {}
-            if not isinstance(current, dict):
-                current = {}
-            current_complete += int(bool(current.get("version") and current.get("version_date")))
-            if not ready and len(incomplete_examples) < 9:
-                incomplete_examples += [
-                    f"    {pid} — {c.get('title') or ''}",
-                    f"      run record matched: {p is not None}; pinned_version={version!r}; pinned_version_date={day!r}",
-                    f"      current manifest (UNBOUND): version={current.get('version')!r}; version_date={current.get('version_date')!r}",
-                ]
-        lines += [
-            f"  ID matches in embedded log: {matched}/{len(comps)}",
-            f"  Exportable version + date: {complete}/{len(comps)}",
-            f"  Version + date in current manifest: {current_complete}/{len(comps)}",
-        ]
-        lines += incomplete_examples
-        lines.append("")
-    log_dir = sub / "run_logs"
-    files = sorted(log_dir.glob("*.json")) if log_dir.is_dir() else []
-    lines += [
-        f"Standalone log files: {len(files)} in {log_dir}",
-        "Standalone logs are not automatically attached: they must be linked to this exact run.",
-        "No files changed. No downloads. No model calls.",
-    ]
-    return "\n".join(lines)
-
-
-if __name__ == "__main__":
-    main()

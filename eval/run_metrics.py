@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import argparse
-import csv
 import json
 import sys
 from collections import Counter
@@ -12,7 +10,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "src" / "novelty_assessment"))
 
-import verdict as vd  # noqa: E402  -- the single source of the degree/evidence rules
+import verdict as vd  # noqa: E402
 
 VARIANTS = ("agent", "linear")
 
@@ -500,149 +498,3 @@ def report(rec: dict) -> str:
             )
             out += [""]
     return "\n".join(out)
-
-
-def prep_metrics(sub: Path, sid: str) -> dict:
-    """What the four preparation stages cost before either variant ran."""
-    st = _load(sub / f"{sid}_pipeline_state.json") or {}
-    stages, tot = {}, {"seconds": 0.0, "prompt_tokens": 0, "completion_tokens": 0, "usd": 0.0}
-    for name, m in (st.get("metrics") or {}).items():
-        stages[name] = {
-            "seconds": m.get("seconds", 0.0),
-            "prompt_tokens": m.get("prompt_tokens", 0),
-            "completion_tokens": m.get("completion_tokens", 0),
-            "usd": m.get("usd", 0.0),
-            "status": m.get("status", ""),
-        }
-        for k in tot:
-            tot[k] += stages[name].get(k) or 0
-    return {
-        "stages": stages,
-        "totals": {
-            "seconds": round(tot["seconds"], 1),
-            "prompt_tokens": tot["prompt_tokens"],
-            "completion_tokens": tot["completion_tokens"],
-            "usd": round(tot["usd"], 4),
-        },
-        "stages_done": st.get("stages_done") or [],
-        "pdf_path": st.get("pdf_path", ""),
-    }
-
-
-def collect(data_dir: Path, sid: str, variants: tuple) -> dict:
-    sub = data_dir / sid
-    meta = _load(sub / f"{sid}.json") or {}
-    claims_doc = _load(sub / f"{sid}_claims.json") or {}
-    quality = _load(sub / f"{sid}_quality.json") or {}
-    pool = _load(sub / "related_work_data" / "ranked_papers.json") or []
-    from datetime import datetime, timezone
-
-    rec = {
-        "submission": sid,
-        "title": meta.get("title", ""),
-        "publication_date": meta.get("publication_date", ""),
-        "date_source": meta.get("date_source", ""),
-        "n_claims": len(
-            [c for c in claims_doc.get("claims") or [] if c.get("status") != "rejected"]
-        ),
-        "n_related_pool": len(pool),
-        "document": quality.get("counts") or {},
-        "collected_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "prep": prep_metrics(sub, sid),
-        "variants": {},
-    }
-    for v in variants:
-        m = variant_metrics(sub, sid, v)
-        if m:
-            rec["variants"][v] = m
-    if {"agent", "linear"} <= set(rec["variants"]):
-        rec["agreement"] = agreement(rec["variants"]["agent"], rec["variants"]["linear"])
-    rec["paper_total"] = {
-        "usd": round(
-            rec["prep"]["totals"]["usd"]
-            + sum(v["totals"]["total_usd"] for v in rec["variants"].values()),
-            4,
-        ),
-        "seconds": round(
-            rec["prep"]["totals"]["seconds"]
-            + sum(v["totals"]["seconds"] for v in rec["variants"].values()),
-            1,
-        ),
-        "tokens": (
-            rec["prep"]["totals"]["prompt_tokens"]
-            + rec["prep"]["totals"]["completion_tokens"]
-            + sum(v["totals"]["total_tokens"] for v in rec["variants"].values())
-        ),
-    }
-    return rec
-
-
-def write_out(rec: dict, out_dir: Path) -> None:
-    out_dir.mkdir(parents=True, exist_ok=True)
-    sid = rec["submission"]
-    rows = [r for v in rec["variants"].values() for r in v["_rows"]]
-
-    slim = json.loads(json.dumps(rec))
-    for v in slim["variants"].values():
-        v.pop("_rows", None)
-    (out_dir / f"{sid}__metrics.json").write_text(
-        json.dumps(slim, ensure_ascii=False, indent=1), encoding="utf-8"
-    )
-    (out_dir / f"{sid}__metrics.md").write_text(report(rec), encoding="utf-8")
-    if rows:
-        with (out_dir / f"{sid}__comparisons.csv").open(
-            "w", newline="", encoding="utf-8-sig"
-        ) as fh:
-            w = csv.DictWriter(fh, fieldnames=list(rows[0].keys()))
-            w.writeheader()
-            w.writerows(rows)
-    try:
-        where = out_dir.relative_to(REPO).as_posix()
-    except ValueError:
-        where = out_dir.as_posix()
-    print(f"written: {where}/{sid}__metrics.{{json,md}} + __comparisons.csv ({len(rows)} rows)")
-
-
-def main() -> int:
-    ap = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
-    )
-    ap.add_argument("--data-dir", default="data")
-    ap.add_argument("--submission", default="")
-    ap.add_argument(
-        "--all",
-        action="store_true",
-        help="every submission that has at least one artifact_a_<variant>",
-    )
-    ap.add_argument("--variant", default="both", choices=(*VARIANTS, "both"))
-    ap.add_argument("--out", default="eval/out/human_study")
-    ap.add_argument("--quiet", action="store_true", help="write the files, print no report")
-    args = ap.parse_args()
-
-    data_dir = (
-        REPO / args.data_dir if not Path(args.data_dir).is_absolute() else Path(args.data_dir)
-    )
-    variants = VARIANTS if args.variant == "both" else (args.variant,)
-
-    if args.all:
-        sids = sorted({p.parent.name for p in data_dir.glob("*/*_artifact_a_*.json")})
-    elif args.submission:
-        sids = [args.submission]
-    else:
-        ap.error("--submission or --all")
-
-    out_dir = REPO / args.out
-    for sid in sids:
-        rec = collect(data_dir, sid, variants)
-        if not rec["variants"]:
-            print(f"{sid}: no artifacts for {', '.join(variants)} -- skipped")
-            continue
-        write_out(rec, out_dir)
-        if not args.quiet:
-            print()
-            print(report(rec))
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

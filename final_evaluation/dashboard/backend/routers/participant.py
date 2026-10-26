@@ -1,4 +1,4 @@
-"""Participant endpoints: consent, tasks, autosave, submit, familiarity, technical issues and data export."""
+"""Participant endpoints: consent, tasks, reading step, autosave, submit, familiarity and data export."""
 
 from __future__ import annotations
 
@@ -37,8 +37,6 @@ UNCLEAR_REASONS = {
     "Other",
 }
 IDLE_CAP_S = 120
-
-_ACTIVE_LOCK_STATUS = {"submitted"}
 
 
 def _audit(db: Session, study_id: str, actor: str, event_type: str, payload: dict | None = None):
@@ -133,7 +131,6 @@ def logout(
     response: Response,
     db: Session = Depends(get_db),
     participant: models.Participant = Depends(current_participant),
-    fe_session: str | None = None,
 ):
     db.query(models.Session_).filter(
         models.Session_.participant_id == participant.id, models.Session_.revoked_at.is_(None)
@@ -156,7 +153,6 @@ def me(
         "role": participant.role,
         "study_id": participant.study_id,
         "study_title": study.title if study else "",
-        "is_pilot": study.is_pilot if study else True,
         "consented": participant.consent_at is not None,
         "instructions_version": study.instructions_version if study else None,
         "study_contact": get_settings().study_contact,
@@ -238,7 +234,7 @@ def _owns_paper(db: Session, participant: models.Participant, paper_id: str) -> 
     ) is not None
 
 
-def _paper_view(db: Session, paper: models.Paper) -> dict:
+def _paper_view(paper: models.Paper) -> dict:
     return {
         "paper_id": paper.id,
         "title": paper.title,
@@ -247,7 +243,7 @@ def _paper_view(db: Session, paper: models.Paper) -> dict:
     }
 
 
-def _report_view(db: Session, report: models.Report) -> dict:
+def _report_view(report: models.Report) -> dict:
     """A report as participants see it, without system_id."""
     return {
         "report_ref": report.id,
@@ -338,9 +334,9 @@ def get_task(
         "status": a.status,
         "revision": a.revision,
         "is_practice": a.is_practice,
-        "paper": _paper_view(db, paper),
-        "report_a": _report_view(db, rep_a),
-        "report_b": _report_view(db, rep_b),
+        "paper": _paper_view(paper),
+        "report_a": _report_view(rep_a),
+        "report_b": _report_view(rep_b),
         "familiarity": (
             {"familiarity": fam.familiarity, "read_before": fam.read_before} if fam else None
         ),
@@ -409,7 +405,7 @@ def _reading_view(db: Session, participant: models.Participant, paper: models.Pa
     )
     r = _reading(db, participant.id, paper.id)
     return {
-        "paper": _paper_view(db, paper),
+        "paper": _paper_view(paper),
         "reading_required": _reading_required(db, participant),
         "familiarity": (
             {"familiarity": fam.familiarity, "read_before": fam.read_before} if fam else None
@@ -436,16 +432,6 @@ def _owned_paper_or_404(
     if paper is None or not _owns_paper(db, participant, paper_id):
         raise HTTPException(404, "paper not found")
     return paper
-
-
-@router.get("/papers/{paper_id}/reading")
-def get_reading(
-    paper_id: str,
-    db: Session = Depends(get_db),
-    participant: models.Participant = Depends(current_participant),
-):
-    paper = _owned_paper_or_404(db, participant, paper_id)
-    return _reading_view(db, participant, paper)
 
 
 @router.post("/papers/{paper_id}/reading/open", dependencies=[Depends(require_csrf)])
@@ -687,41 +673,6 @@ def submit_task(
         "submitted_at": datetime.now(timezone.utc).isoformat(),
         "already_final": False,
     }
-
-
-class IssueBody(BaseModel):
-    message: str = Field(min_length=1, max_length=4000)
-    assignment_id: str | None = None
-
-
-@router.post("/issues", dependencies=[Depends(require_csrf)])
-def report_issue(
-    body: IssueBody,
-    db: Session = Depends(get_db),
-    participant: models.Participant = Depends(current_participant),
-):
-    if body.assignment_id:
-        owns = (
-            db.query(models.Assignment)
-            .filter(
-                models.Assignment.id == body.assignment_id,
-                models.Assignment.participant_id == participant.id,
-            )
-            .first()
-        )
-        if owns is None:
-            raise HTTPException(404, "task not found")
-    db.add(
-        models.TechnicalIssue(
-            id=models.new_id(),
-            study_id=participant.study_id,
-            participant_id=participant.id,
-            assignment_id=body.assignment_id,
-            message=body.message,
-        )
-    )
-    db.commit()
-    return {"ok": True}
 
 
 @router.get("/export/mine")

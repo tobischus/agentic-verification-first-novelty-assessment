@@ -1,17 +1,6 @@
 <!--
 instructions_version: human_instructions_v2
-Base text is verbatim from the task (Section 8, page 2 "Einweisung und Teilnahme").
-v2 (2026-09-15) makes exactly two changes requested after the first dashboard review,
-and nothing else:
-  - the sentence "Do not favor matching terminology, particular report formats, longer
-    or shorter reports, more positive judgments, or more negative judgments." is
-    replaced by the "Do not prefer terminology, format, length ..." sentence below;
-  - the sentence "Verification labels are system claims, not independent validation."
-    is added.
-Every other sentence is unchanged from v1. Rendered as-is on the Instructions page; the
-hash of THIS file's body is recorded at consent time (see
-dashboard/backend/models.py: Participant.consent_instructions_sha256), so a participant
-who consented to v1 keeps a consent record pointing at v1's hash, not this one.
+Shown on the Instructions page. The hash of the text below is recorded at consent.
 -->
 
 You will compare two reports about the same scientific submission. Evaluate how well

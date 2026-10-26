@@ -1,7 +1,7 @@
 {
   "rubric_version": "novelty_report_judge_v5",
   "source_prompt_sha256": "e266b00b2c744c076afcaf77c3ee616c2ac65f9094deda6f5a33093c381f6eef",
-  "note": "Short questions are the wording the rating form shows (TaskRate.jsx reads them from this file). Full descriptions are copied verbatim from prompts/novelty_report_judge_v5.txt's CRITERIA section (the human rubric must not diverge from the judge rubric). submission_fidelity (wording fixed 2026-09-23, before any main-study response) asks what the submission contributes and where to look, instead of 'contributions, methods, assumptions, and limitations', which novelty reports do not systematically cover; the other four criteria are unchanged from v3. The short question of conclusion_warrant drops 'and their limitations' (2026-09-23, ambiguous whose limitations); the short question is form wording only -- the full description and the judge prompt are unchanged.",
+  "note": "Short questions are shown on the rating form. Full descriptions are copied verbatim from the CRITERIA section of prompts/novelty_report_judge_v5.txt.",
   "criteria": [
     {
       "key": "submission_fidelity",

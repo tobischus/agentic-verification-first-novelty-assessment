@@ -1,6 +1,5 @@
 """Full text of prior papers: version pinning, PDF download and parsing."""
 
-import argparse
 import hashlib
 import json
 import logging
@@ -579,67 +578,3 @@ class FullTextFetcher:
             logger.info(f"[parse] {paper_id}: could not record provenance ({type(e).__name__})")
         logger.info(f"[parse] {paper_id} -> ok ({len(text)} chars)  [{time.time() - t0:.1f}s]")
         return "ok"
-
-    def fetch(self, data_dir: str, submission_id: str, paper_ids=None) -> dict:
-        """Download and parse every target paper."""
-        rwd, pdfs_dir, ft_dir = self._dirs(data_dir, submission_id)
-        by_id = {
-            p["paper_id"]: p
-            for p in json.loads((rwd / "ranked_papers.json").read_text(encoding="utf-8"))
-        }
-        if paper_ids is None:
-            paper_ids = [pid for pid in by_id if not self._has_fulltext(rwd, pid)]
-
-        dl = self.download_pdfs(data_dir, submission_id, paper_ids)
-        have_pdf = [pid for pid, ok in dl.items() if ok]
-        results = {pid: "no_pdf" for pid, ok in dl.items() if not ok}
-
-        try:
-            import progress as _progress
-
-            _progress.start_phase("Parsing full text", len(have_pdf))
-        except Exception:
-            _progress = None
-        for idx, pid in enumerate(have_pdf):
-            if _progress:
-                _progress.report(idx, len(have_pdf))
-            status = self.parse_one(data_dir, submission_id, pid)
-            results[pid] = (
-                f"ok ({(ft_dir / f'{pid}.txt').stat().st_size} chars)" if status == "ok" else status
-            )
-        if _progress:
-            _progress.report(len(have_pdf), len(have_pdf))
-
-        n_ok = sum(1 for v in results.values() if str(v).startswith("ok"))
-        tally = {}
-        for v in results.values():
-            key = str(v).split(":")[0].split(" ")[0]
-            tally[key] = tally.get(key, 0) + 1
-        logger.info(f"DONE: {n_ok}/{len(paper_ids)} full text. breakdown: {tally}")
-        return results
-
-
-def main():
-    ap = argparse.ArgumentParser(
-        description="Phase 2: fetch full text (PDF download + GROBID) for candidates"
-    )
-    ap.add_argument("--data-dir", required=True)
-    ap.add_argument("--submission-id", required=True)
-    ap.add_argument("--server", default="http://localhost:8070")
-    ap.add_argument(
-        "--paper-ids",
-        nargs="*",
-        default=None,
-        help="specific paper ids (default: all pool papers lacking full text)",
-    )
-    args = ap.parse_args()
-
-    results = FullTextFetcher(args.server).fetch(args.data_dir, args.submission_id, args.paper_ids)
-    ok = sum(1 for v in results.values() if v.startswith("ok"))
-    print(f"Full-text fetch: {ok}/{len(results)} succeeded")
-    for pid, status in results.items():
-        print(f"  {status:28} {pid}")
-
-
-if __name__ == "__main__":
-    main()

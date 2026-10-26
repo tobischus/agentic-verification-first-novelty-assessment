@@ -1,6 +1,5 @@
 """GROBID client: PDF to TEI XML, then the pipeline's {id}.json via EnhancedGrobidParser."""
 
-import argparse
 import json
 import logging
 import sys
@@ -391,34 +390,3 @@ class GrobidClient:
         data["title_needs_review"] = source != "grobid"
         json_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         logging.info(f"Resolved title ({source}): {title!r}")
-
-
-def main():
-    ap = argparse.ArgumentParser(description="PDF -> GROBID TEI -> pipeline {id}.json")
-    ap.add_argument("--pdf", required=True, help="Path to the submission PDF")
-    ap.add_argument("--data-dir", required=True, help="Base data directory")
-    ap.add_argument("--submission-id", required=True, help="Submission ID")
-    ap.add_argument("--server", default=DEFAULT_SERVER, help="GROBID server URL")
-    ap.add_argument("--verbose", "-v", action="store_true")
-    args = ap.parse_args()
-
-    logging.basicConfig(
-        level=logging.DEBUG if args.verbose else logging.INFO,
-        format="%(asctime)s %(levelname)s %(message)s",
-    )
-
-    client = GrobidClient(args.server)
-    result = client.process_for_pipeline(args.pdf, args.data_dir, args.submission_id)
-    q = result["quality"]
-    c = q["counts"]
-    status = "ALL PASSED" if q["all_passed"] else "FAILED: " + ", ".join(q["failed_gates"])
-    print(f"OK -> {result['metadata_json']}")
-    print(f"   full text : {c['full_text_chars']} chars in {c['sections']} sections")
-    print(f"   references: {c['cited_papers']} | citation contexts: {c['citation_contexts']}")
-    print(f"   quality gates: {status}")
-    if q["title_needs_review"]:
-        print(f"   NOTE: title via {q['title_source']} -> needs reviewer confirmation")
-
-
-if __name__ == "__main__":
-    main()
