@@ -1,8 +1,9 @@
 # Towards Verification-First Agentic Novelty Assessment of Scientific Papers
 
 Code of the master's thesis. An agent compares each claimed contribution of a submission
-with retrieved prior work and backs every reported overlap with quotes verified in both
-papers. The code builds on Afzal et al., *Beyond "Not Novel Enough"* (Apache 2.0, see
+with retrieved prior work. Confirmed material overlaps are supported by passage pairs that
+pass source-matching and model-based evidence checks, and unresolved comparisons are
+explicitly marked. The code builds on Afzal et al., *Beyond "Not Novel Enough"* (Apache 2.0, see
 `LICENSE` and `NOTICE.txt`).
 
 ## Contents
@@ -34,12 +35,14 @@ python -m final_evaluation.cli compare-e1 --input final_evaluation/results/main/
 python final_evaluation/scripts/thesis_figures.py
 ```
 
-The commands compute E1 (`analyze-e1`, `sensitivity-e1`), agent vs linear baseline
-(`agent-linear`), E3 (`source-audit`) and E2 (`analyze-human`, `compare-e1`). The last
-command redraws the figures in `final_evaluation/results/main/figures/`. The files in
-`out/` are identical to the stored results in `final_evaluation/results/main/`. On Linux,
-two bootstrap shares in `e1_analysis.json` that the thesis does not report differ in the
-third decimal because of floating-point rounding.
+The commands recompute E1 (`analyze-e1`, `sensitivity-e1`), agent vs linear baseline
+(`agent-linear`), E3 (`source-audit`) and E2 (`analyze-human`, `compare-e1`) from the
+archived evaluation data. The last command redraws the figures from the stored analyses in
+`final_evaluation/results/main/` and writes them to its `figures/` subdirectory.
+
+On Windows, the files in `out/` are identical to the stored results. On Linux, two
+bootstrap shares in `e1_analysis.json` differ in the third decimal because of
+floating-point rounding. Neither value is reported in the thesis.
 
 ## Run the system
 
@@ -83,9 +86,12 @@ baseline, and run the baseline of Afzal et al. All results are written to `data/
 ## Run the evaluation
 
 The rules of the evaluation are in `final_evaluation/PROTOCOL.md`. Besides the analyses
-above, `python -m final_evaluation.cli plan-e1 --execute` runs the 400 E1 judge calls
-(billed), and `python -m final_evaluation.evaluation.e3.opennovelty_audit` checks the
-quotes of the OpenNovelty reports against the cited papers (needs network access).
+above, `python -m final_evaluation.evaluation.e3.opennovelty_audit` checks the quotes of
+the OpenNovelty reports against the cited papers (needs network access).
+
+`python -m final_evaluation.cli plan-e1 --execute` runs the missing calls of the 400-call
+E1 plan and skips calls already recorded in its output directory. To run the complete E1
+again, add `--out-dir out/e1_rerun`. New judge calls are billed.
 
 **Baselines.** OpenNovelty's reports are the published PDFs listed in
 `final_evaluation/config/sources.*.yaml`. DeepReviewer 2.0 runs locally:
@@ -140,7 +146,7 @@ the study database is `final_evaluation/dashboard/backend/models.py`.
 | Path | Content |
 |---|---|
 | `data/<paper>/` | Per paper: claims, prior-work pool and texts, results of agent, linear baseline and Afzal et al., one log per claim run |
-| `final_evaluation/inputs/`, `manifests/` | The report and submission texts the judge and the raters read, with hashes |
+| `final_evaluation/inputs/`, `final_evaluation/manifests/` | The report and submission texts the judge and the raters read, with hashes |
 | `final_evaluation/results/main/` | Judge calls, the export of the human study, all analyses and figures |
 | `data/oec_rejected/`, `eval/out/rejected_case/` | The rejected submission of Section 7.4 |
 | `eval/out/` | Metadata of the batch runs |
