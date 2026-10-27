@@ -5,6 +5,14 @@ with retrieved prior work and backs every reported overlap with quotes verified 
 papers. The code builds on Afzal et al., *Beyond "Not Novel Enough"* (Apache 2.0, see
 `LICENSE` and `NOTICE.txt`).
 
+## Contents
+
+1. [Reproduce the results](#reproduce-the-results)
+2. [Run the system](#run-the-system)
+3. [Run the evaluation](#run-the-evaluation)
+4. [Layout](#layout)
+5. [Data archive](#data-archive)
+
 ## Reproduce the results
 
 Needs Python 3.11 and the data archive `thesis_data_archive.tar.xz` (sent separately,
@@ -79,6 +87,19 @@ above, `python -m final_evaluation.cli plan-e1 --execute` runs the 400 E1 judge 
 (billed), and `python -m final_evaluation.evaluation.e3.opennovelty_audit` checks the
 quotes of the OpenNovelty reports against the cited papers (needs network access).
 
+**Baselines.** OpenNovelty's reports are the published PDFs listed in
+`final_evaluation/config/sources.*.yaml`. DeepReviewer 2.0 runs locally:
+
+```bash
+git clone https://github.com/ResearAI/DeepReviewer-v2.git
+git -C DeepReviewer-v2 checkout 1c19a23
+```
+
+Install it into `DeepReviewer-v2/.venv` as its README describes, with `openai>=2.36.0` in its
+`pyproject.toml`, and set `AGENT_MODEL=gpt-4.1-mini`, `PAPER_SEARCH_PROVIDER=deepxiv` and
+`MINERU_MODEL_VERSION=vlm` in its `.env`. `python eval/deepreviewer_run.py --all` then
+reviews the submissions of `final_evaluation/config/main.yaml`.
+
 **Rating dashboard** of the human study, in the environment installed above. It needs the
 original PDFs of the submissions and reports, which are not part of the data archive:
 
@@ -111,7 +132,10 @@ frontend/          reviewer UI
 ## Data archive
 
 The archive unpacks into the repository root. `SHA256SUMS.txt` lists the hash of every
-file. Not included: PDFs, the study database, access codes and API keys.
+file. Not included: PDFs, the study database, access codes and API keys. Files are JSON,
+Markdown and plain text. A `.diff` next to a run log holds the uncommitted code changes at
+run time. The export of the human study is a ZIP of CSV and JSONL files, and the schema of
+the study database is `final_evaluation/dashboard/backend/models.py`.
 
 | Path | Content |
 |---|---|
