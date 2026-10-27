@@ -13,7 +13,7 @@ import verdict as vd
 
 PROMPT_VERSION = "paper_synthesis_v3_consistent_evidence_statements"
 
-PAPER_SYNTHESIS_PROMPT = """You are writing the paper-level novelty summary that opens a novelty report for a peer reviewer.
+_RULES = """You are writing the paper-level novelty summary that opens a novelty report for a peer reviewer.
 
 Everything you need is in FINDINGS below. It is a condensed view of decisions that have
 already been made and are FIXED.
@@ -60,14 +60,18 @@ Summarise the findings. You are not re-reviewing the paper.
    behind them is not, and a long id list is what pushes this summary over its budget.
    Mention an individual partial finding only where it changes what a reviewer would
    conclude.
-10. Keep evidence statements consistent throughout the summary.
+"""
+
+_RULE_10 = """10. Keep evidence statements consistent throughout the summary.
    If a comparison's partial-overlap assessment was confirmed, do not
    later describe that same assessment as unsupported.
 
    When discussing an unsupported assessment, identify the specific
    claim and prior work. Distinguish it from other, confirmed comparisons.
    Do not change the recorded comparison results.
+"""
 
+_OUTPUT = """
 ## OUTPUT
 Two short sections. {lo}-{hi} words IN TOTAL across both fields together -- a hard limit,
 not a target. Count your words and cut before answering; a reviewer reads this first and a
@@ -89,6 +93,12 @@ Write plain prose. No headings, no bullet lists, no markdown inside the two fiel
 # FINDINGS
 {findings}
 """
+
+PAPER_SYNTHESIS_PROMPT = _RULES + _RULE_10 + _OUTPUT
+
+# paper_synthesis_v2_confirmed_vs_material: the same prompt without rule 10. It wrote the
+# summaries of the ten human-study papers except the linear one of astabench.
+PROMPT_V2 = _RULES + _OUTPUT
 
 WORDS_LO, WORDS_HI = 120, 180
 

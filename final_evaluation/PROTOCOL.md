@@ -15,9 +15,9 @@ Rules of the evaluation in Chapter 5 of the thesis. All dates are 2026.
 hash in `manifests/<set>/reports.json`. Sources are listed in `config/sources.*.yaml`.
 Agent and linear reports are rendered from their artifacts without model calls.
 OpenNovelty is shown as its original PDF, DeepReviewer as its `final_report.md`, and
-Afzal et al. as `summary.txt` and `novelty_delta_analysis.txt`. The paper summaries of the
-ten study papers were written with prompt `paper_synthesis_v2` (except the linear one of
-`astabench`), all others with `paper_synthesis_v3`.
+Afzal et al. as `summary.txt` and `novelty_delta_analysis.txt`. Most paper summaries of the
+ten study papers use `PROMPT_V2` in `paper_synthesis.py`, which lacks only consistency rule
+10.
 
 ## 3. Rubric
 
