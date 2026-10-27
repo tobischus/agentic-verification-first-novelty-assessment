@@ -16,8 +16,7 @@ hash in `manifests/<set>/reports.json`. Sources are listed in `config/sources.*.
 Agent and linear reports are rendered from their artifacts without model calls.
 OpenNovelty is shown as its original PDF, DeepReviewer as its `final_report.md`, and
 Afzal et al. as `summary.txt` and `novelty_delta_analysis.txt`. Most paper summaries of the
-ten study papers use `PROMPT_V2` in `paper_synthesis.py`, which lacks only consistency rule
-10.
+ten study papers use `paper_synthesis_v2`, which lacks only consistency rule 10.
 
 ## 3. Rubric
 

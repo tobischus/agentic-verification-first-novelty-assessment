@@ -12,6 +12,7 @@ import verdict as vd
 
 
 PROMPT_VERSION = "paper_synthesis_v3_consistent_evidence_statements"
+PROMPT_VERSION_V2 = "paper_synthesis_v2_confirmed_vs_material"
 
 _RULES = """You are writing the paper-level novelty summary that opens a novelty report for a peer reviewer.
 
@@ -95,10 +96,7 @@ Write plain prose. No headings, no bullet lists, no markdown inside the two fiel
 """
 
 PAPER_SYNTHESIS_PROMPT = _RULES + _RULE_10 + _OUTPUT
-
-# paper_synthesis_v2_confirmed_vs_material: the same prompt without rule 10. It wrote the
-# summaries of the ten human-study papers except the linear one of astabench.
-PROMPT_V2 = _RULES + _OUTPUT
+PAPER_SYNTHESIS_PROMPT_V2 = _RULES + _OUTPUT
 
 WORDS_LO, WORDS_HI = 120, 180
 
